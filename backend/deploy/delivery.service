@@ -1,0 +1,31 @@
+# systemd unit: runs the app as an unprivileged user inside a tight sandbox, restarts it if it ever stops.
+[Unit]
+Description=Delivery platform API
+After=network.target postgresql.service
+
+[Service]
+User=delivery
+Group=delivery
+WorkingDirectory=/opt/delivery
+EnvironmentFile=/etc/delivery/env
+ExecStart=/usr/bin/node dist/main.js
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

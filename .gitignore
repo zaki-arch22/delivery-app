@@ -1,0 +1,9 @@
+# Installed packages and build output (recreated by npm ci / npm run build)
+node_modules/
+dist/
+.expo/
+# Local test passwords and logs (created by scripts/dev-setup.sh). Never commit.
+.local/
+# Real server secrets
+*.env
+!backend/deploy/env.example

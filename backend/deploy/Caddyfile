@@ -1,0 +1,33 @@
+# Caddy (free) gives automatic HTTPS certificates. Replace the domain. The app listens only on 127.0.0.1:3000.
+api.yourdomain.dz {
+    encode gzip
+    reverse_proxy 127.0.0.1:3000 {
+        header_up X-Forwarded-For {remote_host}
+    }
+    request_body {
+        max_size 64KB
+    }
+    log {
+        output file /var/log/caddy/api.log
+        format json
+    }
+}
+
+# The staff console: plain static files, strict security headers. Build it with VITE_API_URL=https://api.yourdomain.dz
+# and add https://staff.yourdomain.dz to STAFF_ORIGINS in the API's env file.
+staff.yourdomain.dz {
+    root * /opt/delivery/staff-console/dist
+    file_server
+    header {
+        Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src https://api.yourdomain.dz; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+        X-Frame-Options DENY
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        Strict-Transport-Security "max-age=63072000; includeSubDomains"
+        Permissions-Policy "geolocation=(), camera=(), microphone=()"
+        -Server
+    }
+    # Optional extra wall (free): only allow the office's internet address(es).
+    # @outside not remote_ip 203.0.113.10
+    # respond @outside 403
+}
