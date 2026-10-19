@@ -39,7 +39,7 @@ When the owner sends the Render address (https://....onrender.com) and google-se
 1. Save the file as mobile/google-services.json (not secret; commit it). Check it has an oauth_client with client_type 3 (web) and one with client_type 1 for dz.delivery.app with certificate_hash fb1552c2e61f2ef53785f15d63b5bfc725fe77b2.
 2. In mobile/eas.json (preview + production env): EXPO_PUBLIC_API_URL = the Render address; EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID = the client_type 3 client id (must equal the Render setting GOOGLE_CLIENT_IDS).
 3. curl the address: /login_methods must say google:true (first call may take ~1 min while it wakes). Open /staff/ (page loads).
-4. bash scripts/test-all.sh, commit, push, then `npx eas-cli@latest build -p android --profile preview --non-interactive --no-wait` in mobile/; send the APK link.
+4. Add over-the-air updates (owner's wish): `npx expo install expo-updates`, `npx eas-cli@latest update:configure` (channel per build profile in eas.json, runtimeVersion policy appVersion), so later changes go out with `npx eas-cli@latest update --channel preview` instead of a new APK. Then bash scripts/test-all.sh, commit, push, then `npx eas-cli@latest build -p android --profile preview --non-interactive --no-wait` in mobile/; send the APK link.
 5. Guide the owner in the staff console: create the first zone (prepare a GeoJSON polygon of central Algiers for him to paste) and open it; set the first price version (the OWNER chooses the numbers: base, per km, extras, min/max %).
 6. Check TRUST_PROXY=1 on Render: rate-limit addresses in security_events must be real client addresses.
 OSRM real data: still blocked (download.geofabrik.de); not possible on Render free anyway.
