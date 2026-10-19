@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prepares a LOCAL TEST database on this computer. It never touches a real (production) database.
-# Run once on a new computer, after installing Node.js 22 and PostgreSQL 16 with PostGIS:
+# Run once on a new computer, after installing Node.js 22, PostgreSQL 16 with PostGIS, and (Ubuntu/Debian) libtbb12 libtbbmalloc2 for the OSRM road-distance tests:
 #   bash scripts/dev-setup.sh
 # It creates:
 #   - database  delivery_test

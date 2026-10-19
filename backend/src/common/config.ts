@@ -10,6 +10,8 @@ export const cfg = {
   locationFreshS: () => n('LOCATION_FRESH_S', 120), // driver location older than this is ignored
   routeFactor: () => n('ROUTE_FACTOR', 1.3),      // fallback only: straight line -> road distance
   fallbackKmh: () => n('FALLBACK_KMH', 20),       // fallback only: city speed
+  routingUrl: () => process.env.ROUTING_URL ?? '', // our own OSRM server (road distances); empty = estimate only
+  routingTimeoutMs: () => n('ROUTING_TIMEOUT_MS', 1500), // slower than this -> estimate, so quotes never hang
 };
 export const cfgN = {
   pushTickMs: () => n('PUSH_TICK_MS', 1000),

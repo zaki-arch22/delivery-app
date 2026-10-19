@@ -19,11 +19,11 @@ Built so far by Claude in a claude.ai chat (October 2026), then moved to Claude 
 ## 3. What exists (all tested)
 | Part | Folder | Technology | Status |
 |---|---|---|---|
-| Backend | `backend/` | NestJS (TypeScript), PostgreSQL 16 + PostGIS, Node 22 | complete for the current scope; 268 tests incl. 73 attacks + 10 database-rule checks |
+| Backend | `backend/` | NestJS (TypeScript), PostgreSQL 16 + PostGIS, Node 22 | complete for the current scope; 280 tests incl. 73 attacks and 12 road-distance tests + 10 database-rule checks |
 | Staff console | `staff-console/` | React 18 + Vite | complete; 13 tests against the real backend; matches the 22 staff functions one-to-one |
 | Mobile app | `mobile/` | React Native + Expo SDK 58 (React Native 0.88) | FOUNDATION ONLY (`src/core`: secure storage, API client, login/profiles, live notifications); 7 tests. No screens yet: `App.tsx` is still Expo's placeholder, and the name in `app.json` is still "mobile" |
 
-- `bash scripts/dev-setup.sh` once (local test database), then `bash scripts/test-all.sh` runs everything (288 tests + database rules). Run it after every change.
+- `bash scripts/dev-setup.sh` once (local test database), then `bash scripts/test-all.sh` runs everything (300 tests + database rules). Run it after every change.
 - The real database ships EMPTY: schema files only, no data.
 
 ## 4. Product decisions (current)
@@ -49,8 +49,11 @@ Built so far by Claude in a claude.ai chat (October 2026), then moved to Claude 
 ## 5. Technical decisions
 - One well-organised backend (a "modular monolith"), not microservices; no Kubernetes. Redis is NOT used yet (rate limits are in memory, live events use PostgreSQL LISTEN/NOTIFY); add it only when running several servers.
 - Money is whole dinars (integers). Rules that protect money live in the database itself (price lock, one job per driver, append-only ledger and history).
-- Distance currently uses a straight-line estimate ×1.3 at 20 km/h, marked as estimated. All routing goes through ONE class (`backend/src/geo/routing.ts`), so a real provider plugs in there.
-- **Map provider: NOT decided.** Google Maps asks for a billing account with a payment card even for its free allowance (not checked whether Algerian cards work). Choosing a free option is the next step.
+- **Maps: free, open, no key, no payment card** (decided). Why: Google Maps needs a billing account with a card; open tools give the same features for a delivery app at no cost and with no lock-in.
+  - *Map display in the app:* MapLibre React Native (open source) with vector tiles from OpenFreeMap's public service (free, no key, no registration, no stated view limits; OpenStreetMap data). The tile style address is a setting, never hard-coded, so we can switch to self-hosted tiles if needed. The OpenStreetMap Foundation's own tile server is NOT used (its policy forbids heavy app use). Credit "© OpenStreetMap contributors" must be shown on the map. MapLibre needs an Expo development build (not Expo Go); Expo's free cloud build covers that.
+  - *Road distance and time:* our own OSRM server (open source) on the API server, using OpenStreetMap roads for the Algiers area (`backend/deploy/osrm.md`). All routing goes through ONE class (`backend/src/geo/routing.ts`, setting `ROUTING_URL`). If OSRM is off, slow (>1.5 s) or finds no road, the quote falls back to the straight-line estimate ×1.3 at 20 km/h and says `distance_estimated: true`. The public OSRM demo server is not used (non-commercial only).
+  - *Addresses:* no address-search service. The person moves the map under a fixed centre pin (or uses "my location") and types street, building, floor and a landmark. Why: free, works with Algiers' informal addresses (landmarks matter more than street numbers), and the free OpenStreetMap search service forbids app-scale use.
+  - *Not yet verified on real data:* this cloud machine's network blocks `download.geofabrik.de` (OpenStreetMap data) and `tiles.openfreemap.org`; OSRM is tested on a made-up test grid only.
 - Push: Firebase Cloud Messaging (free) for Android and iPhone; wired on the server but never tested with a real Firebase key.
 - SMS provider: not chosen (stub in `backend/src/auth/sms.service.ts`). Each login code costs money; get a real price quote before choosing.
 - Mobile: React Native + Expo, chosen over Flutter (Flutter could not be built or tested in the original environment; Expo's free cloud builds iPhone apps without a Mac). Follow `mobile/AGENTS.md` for Expo APIs.
@@ -74,11 +77,12 @@ Deep blue `#1E40AF` (main), navy `#0B2A6B` (dark), pale blue `#E8EEFB` (soft bac
 Legal status of the platform and drivers, data-protection registration (ANPDP), hosting location, insurance, and all money rules beyond COD goods money: delivery-fee accounting, commission, driver payouts, merchant remittances, cancellation, waiting and return fees (returns are priced 0 for now).
 
 ## 9. Next steps, in order
-1. **Free map:** choose a free source for showing maps and pins in the app and for road distances, without a payment card. Check its usage terms.
-2. **Photo upload on the server** for driver documents (today they are text links): type and size checks, private storage, expiring links, attack tests.
-3. **Mobile screens**, starting with the first screen (path choice + language), phone login and profile creation; then the User path, the Driver path, and Settings (language, add the other profile, switch, log out, log out everywhere). Each screen calls only functions in the contract.
+Order changed (Claude's decision): the first phone screens come before photo upload, because they need neither, and each server piece is built right before the screen that uses it.
+1. **Mobile app shell and first screens:** navigation, the three languages (right-to-left Arabic), brand theme, then the first screen (path choice + language), phone login, and first-profile creation. Placeholder app name until the owner chooses one.
+2. **Photo upload on the server** for driver documents (today they are text links): type and size checks, private storage, expiring links, attack tests. Then the driver sign-up screen with photos.
+3. **User path** (new order with the map, price, searching, tracking, my orders, rating, problem), then the **Driver path** (home, offer, active job, failure, earnings, cash), then **Settings** (language, add the other profile, switch, log out, log out everywhere). Each screen calls only functions in the contract.
 4. Phone push inside the app (needs the owner's free Firebase project), driver location while online, an offline queue for driver job steps (the server already accepts repeated steps safely).
-5. Before launch: real SMS provider, real server (test `backend/deploy/`), a traffic-flood filter, a human security test, native-speaker review of texts, app name and logo.
+5. Before launch: real SMS provider, real server (test `backend/deploy/`, including OSRM with real Algiers roads), a traffic-flood filter, a human security test, native-speaker review of texts, app name and logo.
 
 ## 10. Accounts the owner does not have yet
-SMS provider, Firebase project (free), Google Play ($25 once) / Apple ($99 per year) developer accounts, a server, maybe a map key. Build without them. When one is needed, explain how to get it step by step and what it costs.
+SMS provider, Firebase project (free), Google Play ($25 once) / Apple ($99 per year) developer accounts, a server. (No map key is needed.) Build without them. When one is needed, explain how to get it step by step and what it costs.

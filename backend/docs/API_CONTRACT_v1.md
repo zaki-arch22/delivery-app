@@ -27,7 +27,7 @@ add_profile rule: the FIRST profile is created right after login (path choice). 
 ## B. User path (active profile = user)
 | Screen | Function | Request | Answer |
 |---|---|---|---|
-| New order | get_quote | pickup {lat,lng}, dropoff {lat,lng}, size | recommended_da, min_da, max_da, vehicle, distance_m, duration_s, quote_id (valid 5 min); error ZONE_CLOSED if either point is outside an open zone |
+| New order | get_quote | pickup {lat,lng}, dropoff {lat,lng}, size | recommended_da, min_da, max_da, vehicle, distance_m, duration_s, distance_estimated (true = road distance unavailable, straight-line estimate used; the app shows "about"), quote_id (valid 5 min); error ZONE_CLOSED if either point is outside an open zone |
 | Price | create_order | quote_id, offered_da, pickup_address{...}, dropoff_address{...}, recipient_name, recipient_phone, payer, cod_amount_da | order |
 | Tracking | get_order | order id | order + driver summary (name, photo, rating, vehicle) + delivery_code |
 | Tracking | cancel_order | order id, reason | order (only while `searching` or `assigned`) |

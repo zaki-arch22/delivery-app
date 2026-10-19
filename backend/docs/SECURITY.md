@@ -3,7 +3,7 @@
 ## The honest promise
 No system is unhackable. The goal is layers: an attacker has to defeat many independent barriers, every attempt leaves a trace, and a stolen secret never opens everything. Everything below is built, tested, and uses only free software.
 
-## Layers that are built and tested (268 backend tests, 73 of them are attacks)
+## Layers that are built and tested (280 backend tests, 73 of them are attacks)
 **Logins and sessions**
 - Phone code: 6 digits, 5 guesses per code, counted by the database so even 25 simultaneous guesses get only 5; a code works once even if submitted 10 times at the same instant; codes are stored only as keyed hashes (a stolen database cannot reveal them).
 - SMS fraud ("SMS pumping") cannot run up your bill: 5 codes/hour per phone, 20/hour per address, and a hard daily cap, all counted in the database.

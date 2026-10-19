@@ -8,14 +8,18 @@ Branch: `claude/optimistic-cannon-iw9rm9` (repo zaki-arch22/delivery-app). Resum
 - New working rules in CLAUDE.md section 2; START_PROMPT.md removed.
 - Cloud setup: SessionStart hook (`.claude/hooks/session-start.sh`) installs PostGIS, starts PostgreSQL, installs packages, builds the test database. A recurring scheduled task re-wakes this session to continue (see CLAUDE.md section 5).
 
+- Milestone "free map": decision recorded (CLAUDE.md section 5). Server: road distances from our own OSRM (`ROUTING_URL`), safe fallback to the estimate, `distance_estimated` in get_quote; 12 new tests (OSRM up / down / not answering) on a made-up grid; `deploy/osrm.md`. 300 tests green.
+
 ## In progress
 - (none)
 
 ## Next, in order (matches CLAUDE.md section 9)
-1. Free map decision (research, record in CLAUDE.md section 5).
+1. Mobile app shell + first screens (navigation, i18n ar/fr/en with RTL, theme, path choice, phone login, first profile).
+2. Photo upload server function + driver sign-up screen.
+3. User path, driver path, settings.
 
 ## Exact next action
-Research free map/tile + routing options usable without a payment card (terms of use), decide, record in CLAUDE.md.
+Read mobile/AGENTS.md and mobile/src/core, then build the app shell (navigation, i18n, theme) and the first screen.
 
-## Pending questions for the owner (ask together at the end of a milestone)
-- (none)
+## Pending questions / owner actions (ask together at the end of a milestone)
+- Optional, free: allow `download.geofabrik.de` and `tiles.openfreemap.org` in this cloud environment's network settings so maps and road data can be tested with real Algiers data.

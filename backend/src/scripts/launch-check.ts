@@ -13,7 +13,7 @@ type R = { level: 'OK' | 'BLOCKER' | 'WARNING'; text: string };
   // Providers
   add('BLOCKER', 'No SMS provider is connected: nobody can log in (SMS is used only for the login code)');
   env.FIREBASE_SERVICE_ACCOUNT_JSON ? add('OK', 'Firebase key is set (push notifications)') : add('BLOCKER', 'FIREBASE_SERVICE_ACCOUNT_JSON is missing: no phone push notifications');
-  add('WARNING', 'Google Maps is not connected: distances use a straight-line estimate, so prices are approximate');
+  env.ROUTING_URL ? add('OK', 'ROUTING_URL is set (road distances from our own OSRM server; if it is down, prices fall back to an estimate)') : add('WARNING', 'ROUTING_URL is not set: distances use a straight-line estimate, so prices are approximate (set up OSRM: deploy/osrm.md)');
   if (!url) add('BLOCKER', 'DATABASE_URL is missing');
   else {
     const c = new Client({ connectionString: url });

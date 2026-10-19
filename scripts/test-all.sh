@@ -27,7 +27,10 @@ stop_server() {
   if [ -n "$SERVER_PID" ]; then kill -- "-$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null; SERVER_PID=""; fi
   for p in 3398 3399; do for _ in $(seq 1 20); do port_busy "$p" || break; sleep 0.5; done; done
 }
-trap stop_server EXIT
+# A helper process on port 5055 (our own OSRM routing server, or a test stand-in that never answers).
+HELPER_PID=""
+stop_helper() { if [ -n "$HELPER_PID" ]; then kill "$HELPER_PID" 2>/dev/null; wait "$HELPER_PID" 2>/dev/null; HELPER_PID=""; fi; }
+trap 'stop_server; stop_helper' EXIT
 # start_server <port> <logname> [ENV=VALUE ...]   The server always runs as the LIMITED database role.
 start_server() {
   local port="$1" name="$2"; shift 2; stop_server
@@ -61,6 +64,22 @@ wipe; run "backend: accounts and profiles" auth "$B" env $T npx ts-node test/aut
 # 3. Notifications.
 start_server 3399 notify RATE_LIMIT_DISABLED=1 OFFER_TTL_S=3 SEARCH_WINDOW_S=60 WIDEN_AFTER_S=30
 run "backend: notifications" notify "$B" env $T npx ts-node test/notify.e2e.ts
+
+# 3b. Road distances from our own OSRM server, built from the made-up test grid (test/fixtures/test-grid.osm).
+OSRM_BIN="$B/node_modules/@project-osrm/osrm/lib/binding_napi_v8"; OD="$ROOT/.local/osrm"; mkdir -p "$OD"
+if [ ! -f "$OD/grid.osrm.hsgr" ] || [ "$B/test/fixtures/test-grid.osm" -nt "$OD/grid.osrm.hsgr" ]; then
+  cp "$B/test/fixtures/test-grid.osm" "$OD/grid.osm"
+  { "$OSRM_BIN/osrm-extract" -p "$B/node_modules/@project-osrm/osrm/profiles/car.lua" "$OD/grid.osm" && "$OSRM_BIN/osrm-contract" "$OD/grid.osrm"; } >"$LOG/osrm-build.log" 2>&1 || echo "   OSRM test data could not be built, see $LOG/osrm-build.log"
+fi
+"$OSRM_BIN/osrm-routed" --ip 127.0.0.1 -p 5055 "$OD/grid.osrm" >"$LOG/osrm.log" 2>&1 & HELPER_PID=$!
+for _ in $(seq 1 20); do curl -s -m 1 -o /dev/null "http://127.0.0.1:5055/route/v1/driving/3.04,36.74;3.05,36.74" && break; sleep 0.5; done
+start_server 3399 routing RATE_LIMIT_DISABLED=1 ROUTING_URL=http://127.0.0.1:5055 ROUTING_TIMEOUT_MS=1500
+run "backend: road distances (OSRM up)" routing "$B" env $T MODE=osrm npx ts-node test/routing.e2e.ts
+stop_helper; wipe
+run "backend: road distances (OSRM down)" routing-down "$B" env $T MODE=down npx ts-node test/routing.e2e.ts
+node -e "require('net').createServer(()=>{}).listen(5055,'127.0.0.1')" & HELPER_PID=$!; sleep 0.5; wipe
+run "backend: road distances (OSRM not answering)" routing-hang "$B" env $T MODE=hang npx ts-node test/routing.e2e.ts
+stop_helper; wipe
 
 # 4. Staff functions, staff console, mobile foundation (slower timers).
 start_server 3399 staff RATE_LIMIT_DISABLED=1 OFFER_TTL_S=10 SEARCH_WINDOW_S=120 WIDEN_AFTER_S=60
