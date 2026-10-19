@@ -12,6 +12,9 @@ export function errorMessage(e: unknown): { key: Key; vars?: Record<string, numb
     case 'CODE_WRONG': return { key: 'err_code_wrong' };
     case 'CODE_EXPIRED': case 'CODE_LOCKED': return { key: 'err_code_expired' };
     case 'BAD_PHONE': return { key: 'phone_invalid' };
+    case 'GOOGLE_REJECTED': return { key: 'err_google' };
+    case 'LOGIN_METHOD_OFF': return { key: 'login_none' };
+    case 'PHONE_REQUIRED': return { key: 'contact_phone_sub' };
     case 'BAD_NAME': return { key: 'name_invalid' };
     case 'OFFER_GONE': case 'ORDER_TAKEN': return { key: 'offer_gone' };
     case 'ON_JOB': return { key: 'err_on_job' };

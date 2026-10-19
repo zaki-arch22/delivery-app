@@ -13,3 +13,6 @@ export const wsUrl = (api: string) => api.replace(/^http/, 'ws') + '/ws';
 export const mapStyleUrl = () => process.env.EXPO_PUBLIC_MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/liberty';
 // Where the map opens before we know anything better: central Algiers.
 export const ALGIERS = { lat: 36.7538, lng: 3.0588 };
+
+// Google sign-in: the "web client id" of the owner's Google/Firebase project (not a secret; it names our app to Google).
+export const googleWebClientId = () => process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '';

@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
   const api = env.VITE_API_URL ? new URL(env.VITE_API_URL).origin : "'self'";
   return {
     plugins: [react(), csp(api)],
+    base: env.VITE_BASE || '/',   // '/staff/' when the API server hands out the console
     build: { target: 'es2020', sourcemap: false, assetsInlineLimit: 0 },
     test: { environment: 'jsdom', globals: true, testTimeout: 30000, hookTimeout: 30000, fileParallelism: false, setupFiles: ['./test/setup.ts'] },
   };

@@ -1,7 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash, randomUUID } from 'crypto';
-import { promises as fs, mkdirSync } from 'fs';
-import { join } from 'path';
 import sharp from 'sharp';
 import { Db } from '../db/db.service';
 import { SecurityLog } from '../security/security-log.service';
@@ -10,9 +8,9 @@ import { bad, fail, UUID } from '../common/errors';
 export const KINDS = ['id_photo', 'licence_photo', 'vehicle_photo'] as const;
 export type Kind = typeof KINDS[number];
 export const MAX_UPLOAD_BYTES = 6 * 1024 * 1024;   // a phone photo; the server shrinks it anyway
-const MAX_UNUSED = 10;          // uploaded but not yet used by a driver profile, per account (stops disk filling)
+const MAX_UNUSED = 10;          // uploaded but not yet used by a driver profile, per account (stops storage filling)
 const MIN_SIDE = 300;           // smaller pictures cannot be read by staff
-const MAX_SIDE = 2000;          // stored size: enough to read an ID card, small on disk
+const MAX_SIDE = 2000;          // stored size: enough to read an ID card, small to store
 sharp.cache(false);             // never keep decoded images in memory between requests
 
 // What the first bytes of a file say it really is (never trust the name or the declared type).
@@ -24,20 +22,12 @@ function sniff(b: Buffer): 'jpeg' | 'png' | 'webp' | null {
 }
 
 // Driver document photos. Every picture is decoded and drawn again as a fresh JPEG: hidden data (location, camera details,
-// anything appended or disguised as an image) is thrown away. Files are kept on a private disk folder, named by a random id,
-// readable only by the server's own user, and shown only to logged-in staff (every view is written in the audit trail).
+// anything appended or disguised as an image) is thrown away. Photos are kept in the private database (table document_files),
+// never in a web folder, and shown only to logged-in staff (every view is written in the audit trail).
 @Injectable()
 export class Documents {
   private log = new Logger('Documents');
   constructor(private db: Db, private sec: SecurityLog) {}
-
-  private dir(): string {
-    const d = process.env.UPLOAD_DIR;
-    if (!d) throw fail(503, 'UPLOADS_UNAVAILABLE', 'Photo upload is not available right now');
-    mkdirSync(d, { recursive: true, mode: 0o700 });
-    return d;
-  }
-  private file(id: string) { return join(this.dir(), `${id}.jpg`); }   // id is always a server-made uuid
 
   async upload(accountId: string, ip: string, kind: any, body: any) {
     if (!KINDS.includes(kind)) throw bad('BAD_KIND', 'kind must be id_photo, licence_photo or vehicle_photo');
@@ -61,12 +51,12 @@ export class Documents {
     }
     if (Math.min(w, h) < MIN_SIDE) throw bad('IMAGE_TOO_SMALL', 'This photo is too small to read. Take a closer, sharper photo.');
 
-    const id = randomUUID(), path = this.file(id);
-    await fs.writeFile(path, out, { mode: 0o600, flag: 'wx' });
-    try {
-      await this.db.query(`INSERT INTO documents(id, account_id, kind, size_bytes, sha256) VALUES ($1,$2,$3,$4,$5)`,
+    const id = randomUUID();
+    await this.db.tx(async q => {
+      await q(`INSERT INTO documents(id, account_id, kind, size_bytes, sha256) VALUES ($1,$2,$3,$4,$5)`,
         [id, accountId, kind, out.length, createHash('sha256').update(out).digest('hex')]);
-    } catch (e) { await fs.unlink(path).catch(() => {}); throw e; }
+      await q(`INSERT INTO document_files(document_id, data) VALUES ($1,$2)`, [id, out]);
+    });
     return { document_id: id, kind };
   }
 
@@ -78,21 +68,20 @@ export class Documents {
     await q(`UPDATE documents SET profile_id=$1 WHERE id = ANY($2::uuid[])`, [profileId, ids]);
   }
 
-  // Staff only. The photo is sent straight from the private folder; who looked at it is recorded forever.
+  // Staff only. Who looked at a photo is recorded forever.
   async readForStaff(staffId: string, id: any) {
     if (typeof id !== 'string' || !UUID.test(id)) throw bad('BAD_ID', 'id must be an id');
-    const doc = await this.db.one(`SELECT id, kind, profile_id FROM documents WHERE id=$1 AND profile_id IS NOT NULL`, [id]);
+    const doc = await this.db.one(`SELECT d.id, d.kind, d.profile_id, f.data FROM documents d JOIN document_files f ON f.document_id=d.id WHERE d.id=$1 AND d.profile_id IS NOT NULL`, [id]);
     if (!doc) throw fail(404, 'NOT_FOUND', 'Document not found');
-    const data = await fs.readFile(this.file(doc.id));
+    const data: Buffer = doc.data;
     await this.db.query(`INSERT INTO staff_audit(staff_id, action, target_type, target_id, data) VALUES ($1,'view_document','profile',$2,$3)`,
       [staffId, doc.profile_id, { document_id: doc.id, kind: doc.kind }]);
     return data;
   }
 
-  // Hourly: photos uploaded but never used for a sign-up are deleted after a day (row and file).
+  // Hourly: photos uploaded but never used for a sign-up are deleted after a day (with their picture).
   async cleanup() {
     const old = await this.db.query(`DELETE FROM documents WHERE profile_id IS NULL AND created_at < now() - interval '1 day' RETURNING id`);
-    for (const d of old) await fs.unlink(this.file(d.id)).catch(e => this.log.warn(`could not delete ${d.id}: ${e.code}`));
     return old.length;
   }
 }

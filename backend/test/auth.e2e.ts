@@ -77,21 +77,22 @@ const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL! });
   await api('/logout', {}, driverTok2); ok('logged-out token refused', (await api('/get_me', undefined, driverTok2)).s === 401);
   // 11. driver document photos
   {
-    const { readFileSync, statSync } = await import('fs'); const sharp = (await import('sharp')).default; const dir = process.env.UPLOAD_DIR!;
+    const sharp = (await import('sharp')).default;
+    const stored$ = async (id: string): Promise<Buffer> => (await pool.query(`SELECT data FROM document_files WHERE document_id=$1`, [id])).rows[0]?.data;
     const P1 = '+213660000301', P2 = '+213660000302';
     const t1 = (await login(P1, 'driver')).b.token, t2 = (await login(P2, 'driver')).b.token;
     let u = await upload(B, t1, 'id_photo');
     ok('U1 a logged-in person (no profile yet) can upload a photo', u.s === 200 && /^[0-9a-f-]{36}$/.test(u.b.document_id) && u.b.kind === 'id_photo', JSON.stringify(u));
-    const st = statSync(`${dir}/${u.b.document_id}.jpg`);
-    ok('U1 the file is private to the server (owner read/write only)', (st.mode & 0o777) === 0o600, (st.mode & 0o777).toString(8));
+    const rec = (await pool.query(`SELECT d.size_bytes, d.sha256, encode(sha256(f.data), 'hex') AS real FROM documents d JOIN document_files f ON f.document_id=d.id WHERE d.id=$1`, [u.b.document_id])).rows[0];
+    ok('U1 the photo is kept in the private database, exactly as recorded (size and fingerprint)', !!rec && rec.sha256 === rec.real && rec.size_bytes > 0, JSON.stringify(rec));
     const withGps = await sharp(PHOTO).withExif({ IFD0: { Copyright: 'SECRET-OWNER-DATA', Make: 'SecretCam' } }).jpeg().toBuffer();
     ok('U2 (test setup) the test photo really carries hidden camera data', withGps.includes(Buffer.from('SECRET-OWNER-DATA')));
     u = await upload(B, t1, 'licence_photo', withGps);
-    const stored = readFileSync(`${dir}/${u.b.document_id}.jpg`);
+    const stored = await stored$(u.b.document_id);
     ok('U2 hidden data inside a photo (camera, location) is removed', u.s === 200 && !stored.includes(Buffer.from('SECRET-OWNER-DATA')) && !stored.includes(Buffer.from('SecretCam')));
     const huge = await sharp({ create: { width: 4000, height: 3000, channels: 3, background: '#88aadd' } }).png().toBuffer();
     u = await upload(B, t1, 'vehicle_photo', huge, 'image/png');
-    const m = await sharp(readFileSync(`${dir}/${u.b.document_id}.jpg`)).metadata();
+    const m = await sharp(await stored$(u.b.document_id)).metadata();
     ok('U3 a big PNG is accepted, shrunk to at most 2000 px and stored as JPEG', u.s === 200 && m.format === 'jpeg' && Math.max(m.width!, m.height!) === 2000, JSON.stringify(m.format));
     const mine = { vehicle: 'motorbike', id_photo: '', licence_photo: '', vehicle_photo: '' } as any;
     const all = await pool.query(`SELECT id, kind FROM documents WHERE account_id=(SELECT id FROM accounts WHERE phone=$1)`, [P1]);

@@ -9,7 +9,7 @@ ENVF="$ROOT/.local/test.env"
 [ -f "$ENVF" ] || { echo "Run scripts/dev-setup.sh first"; exit 1; }
 # shellcheck disable=SC1090
 source "$ENVF"
-export JWT_SECRET="$(openssl rand -hex 32)" HASH_PEPPER="$(openssl rand -hex 16)" UPLOAD_DIR="$ROOT/.local/uploads"
+export JWT_SECRET="$(openssl rand -hex 32)" HASH_PEPPER="$(openssl rand -hex 16)"
 LOG="$ROOT/.local/logs"; mkdir -p "$LOG"
 # Google sign-in in tests: a LOCAL test key stands in for Google's keys (accepted only with TEST_HOOKS=1).
 GKEY="$ROOT/.local/google-test-key.pem"
@@ -24,7 +24,7 @@ for p in backend staff-console mobile; do [ -d "$ROOT/$p/node_modules" ] || (ech
 (cd "$ROOT/backend" && OWNER_DATABASE_URL="$TEST_OWNER_URL" APP_DB_PASSWORD="$APP_PW" npx ts-node src/scripts/migrate.ts >"$LOG/migrate.log" 2>&1) || { echo "migration failed, see $LOG/migrate.log"; exit 1; }
 
 psql_owner() { psql "$TEST_OWNER_URL" -v ON_ERROR_STOP=0 "$@"; }
-wipe() { psql_owner -q -c "TRUNCATE otp_codes, sessions, quotes, offers, order_events, ratings, cash_ledger, problem_reports, notifications, device_tokens, orders, driver_details, documents, profiles, accounts, zones, pricing_rules, staff_audit, staff_users, security_events RESTART IDENTITY CASCADE" >/dev/null; rm -rf "$ROOT/.local/uploads"; }
+wipe() { psql_owner -q -c "TRUNCATE otp_codes, sessions, quotes, offers, order_events, ratings, cash_ledger, problem_reports, notifications, device_tokens, orders, driver_details, document_files, documents, profiles, accounts, zones, pricing_rules, staff_audit, staff_users, security_events RESTART IDENTITY CASCADE" >/dev/null; }
 
 port_busy() { curl -s -m 1 -o /dev/null "http://127.0.0.1:$1/" ; }
 # The server runs in its own process group, so stopping it stops EVERY process it started (npx, ts-node, node).
@@ -101,7 +101,10 @@ run "mobile: type check" mobile-tsc "$ROOT/mobile" npx tsc --noEmit
 run "mobile: foundation and screens against the real backend" mobile "$ROOT/mobile" env API_URL=http://localhost:3399 $T npx jest --runInBand
 
 # 5. Attacks, with every protection switched ON (rate limits, proxy, cross-origin rules).
-start_server 3398 security TRUST_PROXY=1 STAFF_ORIGINS=https://staff.example.test SMS_DAILY_CAP=100 OFFER_TTL_S=10 SEARCH_WINDOW_S=120 WIDEN_AFTER_S=60
+# The staff console built to be handed out by the server itself at /staff/ (as on the free host).
+(cd "$ROOT/staff-console" && VITE_BASE=/staff/ npx vite build --outDir "$ROOT/.local/staff-dist" --emptyOutDir >"$LOG/console-staff-dist.log" 2>&1) || echo "   staff console (for /staff/) did not build, see $LOG/console-staff-dist.log"
+echo "do-not-serve" > "$ROOT/.local/staff-dist/.hidden-test"
+start_server 3398 security STAFF_CONSOLE_DIR="$ROOT/.local/staff-dist" TRUST_PROXY=1 STAFF_ORIGINS=https://staff.example.test SMS_DAILY_CAP=100 OFFER_TTL_S=10 SEARCH_WINDOW_S=120 WIDEN_AFTER_S=60
 run "backend: security attacks" security "$B" env $T TEST_APP_DATABASE_URL="$TEST_APP_URL" SMS_DAILY_CAP=100 npx ts-node test/security.e2e.ts
 stop_server; wipe
 

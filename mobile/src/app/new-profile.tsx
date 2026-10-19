@@ -7,7 +7,7 @@ import { Button, Field, Gap, Screen, T } from '../ui/kit';
 // The FIRST profile, right after login (contract A: add_profile). Drivers go to the driver sign-up with photos.
 export default function NewProfile() {
   const { t, services, state } = useApp();
-  const [name, setName] = useState('');
+  const [name, setName] = useState(state.googleName ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const path = state.needsProfile ?? 'user';

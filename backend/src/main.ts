@@ -5,7 +5,9 @@ import { AppModule } from './app.module';
 import { SecurityLog } from './security/security-log.service';
 import { headers, inputGuard, ipLimit } from './security/middleware';
 import { deriveKey } from './security/crypto';
-import { raw } from 'express';
+import { raw, static as serveStatic } from 'express';
+import { existsSync } from 'fs';
+import { join, resolve } from 'path';
 import { MAX_UPLOAD_BYTES } from './documents/documents.service';
 
 // Last-resort safety nets. A stray failed background operation is logged, not allowed to take the platform down.
@@ -21,6 +23,17 @@ async function main() {
   const hops = Number(process.env.TRUST_PROXY ?? 0); if (hops > 0) express.set('trust proxy', hops);   // behind a reverse proxy: real client addresses
   app.use(headers);
   app.use(ipLimit(app.get(SecurityLog)));
+  // Optional: the server also hands out the staff console's files at /staff/ (one address for a small or free host).
+  // Same address = no cross-site access to open. The page may only run its own files and talk to this server.
+  const consoleDir = process.env.STAFF_CONSOLE_DIR ? resolve(process.env.STAFF_CONSOLE_DIR) : '';
+  if (consoleDir) {
+    if (!existsSync(join(consoleDir, 'index.html'))) throw new Error('STAFF_CONSOLE_DIR has no index.html (build the staff console with VITE_BASE=/staff/)');
+    app.use('/staff', (_req: any, res: any, next: any) => {
+      res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+      next();
+    }, serveStatic(consoleDir, { index: 'index.html', dotfiles: 'ignore', redirect: true }),
+      (_req: any, res: any) => res.status(404).json({ error: 'NOT_FOUND', message: 'Not found' }));   // nothing else, no error details
+  }
   // Photos are the only non-JSON body, accepted on ONE route only, up to 6 MB (everything else stays at 64 KB of JSON).
   // No login, no reading of a big body: anonymous callers are turned away before a single byte of the photo is read.
   const readPhoto = raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: MAX_UPLOAD_BYTES });

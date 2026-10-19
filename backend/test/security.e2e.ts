@@ -204,7 +204,7 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
     ok('SEC16 a fake JPEG (right first bytes, garbage inside) is refused', (await up(U, 'id_photo', poly)).b.error === 'BAD_IMAGE');
     const tail = Buffer.concat([PHOTO, Buffer.from('<script>alert(1)</script>PK\u0003\u0004hidden-zip')]);
     const ok1 = await up(U, 'id_photo', tail);
-    const stored = readFileSync(`${process.env.UPLOAD_DIR}/${ok1.b.document_id}.jpg`);
+    const stored: Buffer = (await pool.query(`SELECT data FROM document_files WHERE document_id=$1`, [ok1.b.document_id])).rows[0].data;
     ok('SEC16 data hidden after a real photo is thrown away (the picture is redrawn)', ok1.s === 200 && !stored.includes(Buffer.from('hidden-zip')) && !stored.includes(Buffer.from('<script>')));
     // A "decompression bomb": a tiny PNG claiming to be 30000 x 30000 pixels.
     const small = await sharp({ create: { width: 10, height: 10, channels: 3, background: '#000' } }).png().toBuffer();
@@ -219,8 +219,8 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
     ok('SEC16 a path trick in the kind is refused', (await up(U, '../../etc/passwd', PHOTO)).b.error === 'BAD_KIND');
     let last: any; for (let i = 0; i < 12; i++) last = await up(U, 'vehicle_photo', PHOTO);
     ok('SEC16 filling the disk is stopped: at most 10 unused photos per account', last.s === 429 && last.b.error === 'TOO_MANY_UPLOADS', last);
-    const files = readdirSync(process.env.UPLOAD_DIR!);
-    ok('SEC16 stored files have server-made names only (random id + .jpg)', files.every(f => /^[0-9a-f-]{36}\.jpg$/.test(f)), files.slice(0, 3));
+    const notJpeg = (await pool.query(`SELECT count(*)::int n FROM document_files WHERE substring(data from 1 for 3) <> '\\xffd8ff'::bytea`)).rows[0].n;
+    ok('SEC16 every stored photo is a clean JPEG made by the server', notJpeg === 0, notJpeg);
     ok('SEC16 photos are never served to app logins', (await api('/get_document?id=' + ok1.b.document_id, undefined, U)).b.error === 'STAFF_ONLY');
     ok('SEC16 the server is still healthy after all of this', (await api('/get_me', undefined, U)).s === 200);
   }
@@ -248,6 +248,21 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
     ok('SEC17 set_phone needs a login', (await api('/set_phone', { phone: '+213551000111' })).s === 401);
     const stf = (await pool.query(`SELECT count(*)::int n FROM accounts WHERE google_sub IS NOT NULL AND phone IS NULL`)).rows[0].n;
     ok('SEC17 the refused attempts created no accounts', stf === 2, stf);
+  }
+
+  // ===== SEC18 the staff console handed out by the server at /staff/ (free host setup) =====
+  {
+    const page = await raw('/staff/');
+    const csp = page.headers.get('content-security-policy') ?? '';
+    ok('SEC18 the staff console page is served', page.status === 200 && (await page.text()).includes('<div id="root">'));
+    ok('SEC18 ...with a strict policy: only its own files, only this server, never inside another site', /script-src 'self'/.test(csp) && /connect-src 'self'/.test(csp) && /frame-ancestors 'none'/.test(csp) && !/unsafe/.test(csp), csp);
+    ok('SEC18 ...and the usual protections (no type guessing, no framing)', page.headers.get('x-content-type-options') === 'nosniff' && page.headers.get('x-frame-options') === 'DENY');
+    let leaks = 0;
+    for (const p of ['/staff/../package.json', '/staff/%2e%2e/%2e%2e/backend/package.json', '/staff/..%2f..%2fbackend%2fpackage.json', '/staff/.hidden-test', '/staff/%2ehidden-test', '/staff//etc/passwd'])
+      { const r = await raw(p); const t = await r.text(); if (r.status === 200 && !t.includes('<div id="root">')) leaks++; if (/"dependencies"|do-not-serve|root:x:/.test(t)) leaks++; }
+    ok('SEC18 path tricks and hidden files never reveal anything outside the console', leaks === 0, leaks);
+    const apiCsp = (await api('/login_methods')).h.get('content-security-policy');
+    ok('SEC18 the API itself keeps its "nothing may run" policy', apiCsp === "default-src 'none'; frame-ancestors 'none'", apiCsp);
   }
 
   // ===== SEC15 evidence trail and code hygiene =====

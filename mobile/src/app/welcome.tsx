@@ -16,8 +16,8 @@ export default function Welcome() {
       <Gap n={2} />
       <T kind="muted">{t('welcome_sub')}</T>
       <Gap n={8} />
-      <Button testID="path-user" label={t('path_user')} sub={t('path_user_sub')} onPress={() => router.push({ pathname: '/phone', params: { path: 'user' } })} />
-      <Button testID="path-driver" kind="secondary" label={t('path_driver')} sub={t('path_driver_sub')} onPress={() => router.push({ pathname: '/phone', params: { path: 'driver' } })} />
+      <Button testID="path-user" label={t('path_user')} sub={t('path_user_sub')} onPress={() => router.push({ pathname: '/login', params: { path: 'user' } })} />
+      <Button testID="path-driver" kind="secondary" label={t('path_driver')} sub={t('path_driver_sub')} onPress={() => router.push({ pathname: '/login', params: { path: 'driver' } })} />
     </Screen>
   );
 }

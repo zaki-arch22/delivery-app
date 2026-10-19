@@ -46,6 +46,7 @@ test('sender sign-up: bad number, wrong code, then code -> name -> home; reopeni
   const store = memoryStore();
   await open(svc(store));
   await fireEvent.press(await screen.findByTestId('path-user'));
+  await fireEvent.press(await screen.findByTestId('login-phone'));
   await fireEvent.changeText(await screen.findByTestId('phone-input'), '0450 00 00 01');
   await fireEvent.press(screen.getByTestId('send-code'));
   expect(await screen.findByTestId('phone-input-error')).toBeTruthy();                 // a landline is refused before any SMS
@@ -138,4 +139,64 @@ test('settings: add a driver profile opens sign-up, log out, log out of all devi
   await screen.findByTestId('screen-welcome');
   alert.mockRestore();
   await expect(other.client.call('/get_me')).rejects.toMatchObject({ status: 401 });   // the other phone is logged out too
+});
+
+test('Google login, sender: picker closed -> nothing happens; then Google -> phone number -> name prefilled -> home; reopening stays logged in', async () => {
+  const { googleMock } = require('./mocks/google-signin');
+  const store = memoryStore();
+  await open(svc(store));
+  await fireEvent.press(await screen.findByTestId('path-user'));
+  await screen.findByTestId('login-google');
+  expect(screen.getByTestId('login-phone')).toBeTruthy();                                // SMS is also on in the test server
+  googleMock.cancel = true;
+  await fireEvent.press(screen.getByTestId('login-google'));
+  await waitFor(() => expect(screen.getByTestId('login-google').props.accessibilityState?.busy).toBeFalsy());
+  expect(screen.queryByTestId('login-error')).toBeNull();                               // closing Google's picker is not an error
+  expect(screen.getByTestId('screen-login')).toBeTruthy();
+  googleMock.cancel = false; googleMock.sub = 'g-mobile-sender'; googleMock.name = 'Sara Benali';
+  await fireEvent.press(screen.getByTestId('login-google'));
+  await screen.findByTestId('screen-contact-phone');
+  await fireEvent.changeText(screen.getByTestId('contact-phone-input'), '0450 00 00 01');
+  await fireEvent.press(screen.getByTestId('save-phone'));
+  expect(await screen.findByTestId('contact-phone-input-error')).toBeTruthy();
+  await fireEvent.changeText(screen.getByTestId('contact-phone-input'), '0554 00 00 07');
+  await fireEvent.press(screen.getByTestId('save-phone'));
+  await screen.findByTestId('screen-new-user');
+  expect(screen.getByTestId('name-input').props.value).toBe('Sara Benali');            // name offered by Google, can be changed
+  await fireEvent.press(screen.getByTestId('create-profile'));
+  expect(await screen.findByText('Hello, Sara Benali')).toBeTruthy();
+  const rows = await db.query(`SELECT a.phone, a.phone_verified, p.type FROM accounts a JOIN profiles p ON p.account_id=a.id WHERE a.google_sub='g-mobile-sender'`);
+  expect(rows.rows).toEqual([{ phone: '+213554000007', phone_verified: false, type: 'user' }]);
+  await screen.unmount();
+  await open(svc(store));
+  expect(await screen.findByText('Hello, Sara Benali')).toBeTruthy();
+});
+
+test('Google login, driver: phone number, then the driver sign-up with the Google name', async () => {
+  const { googleMock } = require('./mocks/google-signin');
+  googleMock.sub = 'g-mobile-driver'; googleMock.name = 'Yacine Driver';
+  await open(svc());
+  await fireEvent.press(await screen.findByTestId('path-driver'));
+  await fireEvent.press(await screen.findByTestId('login-google'));
+  await fireEvent.changeText(await screen.findByTestId('contact-phone-input'), '0664000008');
+  await fireEvent.press(screen.getByTestId('save-phone'));
+  await screen.findByTestId('screen-driver-signup');
+  expect(screen.getByTestId('name-input').props.value).toBe('Yacine Driver');
+  const n = await db.query(`SELECT count(*)::int n FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE a.google_sub='g-mobile-driver'`);
+  expect(n.rows[0].n).toBe(0);                                                          // nothing is created before the photos
+});
+
+test('Google login: someone who left before giving the phone number is asked for it at the next login', async () => {
+  const { googleMock } = require('./mocks/google-signin');
+  googleMock.sub = 'g-mobile-later'; googleMock.name = 'Later Person';
+  const store = memoryStore();
+  await open(svc(store));
+  await fireEvent.press(await screen.findByTestId('path-user'));
+  await fireEvent.press(await screen.findByTestId('login-google'));
+  await screen.findByTestId('screen-contact-phone');
+  await screen.unmount();
+  await open(svc(store));
+  await fireEvent.press(await screen.findByTestId('path-user'));
+  await fireEvent.press(await screen.findByTestId('login-google'));
+  await screen.findByTestId('screen-contact-phone');
 });

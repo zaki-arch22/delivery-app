@@ -16,7 +16,7 @@ type Slot = { uri?: string; id?: string; busy?: boolean; error?: string | null }
 // and from Settings to add a driver profile to an existing sender account.
 export default function DriverSignup() {
   const { t, services, state } = useApp();
-  const [name, setName] = useState(state.active?.display_name ?? '');
+  const [name, setName] = useState(state.active?.display_name ?? state.googleName ?? '');
   const [vehicle, setVehicle] = useState<'motorbike' | 'car' | null>(null);
   const [slots, setSlots] = useState<Record<Kind, Slot>>({ id_photo: {}, licence_photo: {}, vehicle_photo: {} });
   const [error, setError] = useState<string | null>(null);

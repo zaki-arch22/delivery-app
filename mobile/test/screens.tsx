@@ -13,6 +13,8 @@ import { toInternational } from '../src/lib/phone';
 import Start from '../src/app/index';
 import Welcome from '../src/app/welcome';
 import Phone from '../src/app/phone';
+import Login from '../src/app/login';
+import ContactPhone from '../src/app/contact-phone';
 import Code from '../src/app/code';
 import NewProfile from '../src/app/new-profile';
 import Home from '../src/app/home';
@@ -54,7 +56,7 @@ export function routes(services: Services) {
       <AppProvider services={services}><PushBridge /><Stack screenOptions={{ headerShown: false }} /></AppProvider>
     </SafeAreaProvider>
   );
-  return { _layout: Layout, index: Start, welcome: Welcome, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup, 'new-order': NewOrder, 'order-details': OrderDetails, 'order/[id]': OrderScreen, orders: Orders, 'rate/[id]': Rate, 'problem/[id]': Problem, job: JobScreen, jobs: Jobs, cash: Cash };
+  return { _layout: Layout, index: Start, welcome: Welcome, login: Login, 'contact-phone': ContactPhone, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup, 'new-order': NewOrder, 'order-details': OrderDetails, 'order/[id]': OrderScreen, orders: Orders, 'rate/[id]': Rate, 'problem/[id]': Problem, job: JobScreen, jobs: Jobs, cash: Cash };
 }
 export async function open(services: Services) {
   const r = await renderRouter(routes(services), { initialUrl: '/' });
@@ -73,6 +75,7 @@ export const svc = (store = memoryStore(), fetchFn: typeof fetch = nodeFetch) =>
 
 export async function loginThroughScreens(phoneTyped: string, path: 'user' | 'driver') {
   await fireEvent.press(await screen.findByTestId('path-' + path));
+  await fireEvent.press(await screen.findByTestId('login-phone'));
   await fireEvent.changeText(await screen.findByTestId('phone-input'), phoneTyped);
   await fireEvent.press(screen.getByTestId('send-code'));
   await screen.findByTestId('screen-code');

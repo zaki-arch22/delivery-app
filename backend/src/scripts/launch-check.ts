@@ -10,7 +10,6 @@ type R = { level: 'OK' | 'BLOCKER' | 'WARNING'; text: string };
   (env.HASH_PEPPER?.length ?? 0) >= 16 && env.HASH_PEPPER !== env.JWT_SECRET ? add('OK', 'HASH_PEPPER is set and different from JWT_SECRET') : add('BLOCKER', 'HASH_PEPPER (16+ random chars, different from JWT_SECRET) is missing or weak');
   Number(env.TRUST_PROXY ?? 0) > 0 ? add('OK', 'TRUST_PROXY is set (real client addresses behind the reverse proxy)') : add('WARNING', 'TRUST_PROXY is not set: behind a reverse proxy every visitor looks like the same address, so rate limits would hit everyone together');
   env.STAFF_ORIGINS ? add('OK', 'STAFF_ORIGINS is set (only the staff console may call from a browser)') : add('WARNING', 'STAFF_ORIGINS is not set: browsers will be refused (fine until the staff console is hosted)');
-  env.UPLOAD_DIR ? add('OK', `UPLOAD_DIR is set (private folder for driver document photos: ${env.UPLOAD_DIR}; include it in backups)`) : add('BLOCKER', 'UPLOAD_DIR is missing: drivers cannot send their document photos');
   // Providers
   add('BLOCKER', 'No SMS provider is connected: nobody can log in (SMS is used only for the login code)');
   env.FIREBASE_SERVICE_ACCOUNT_JSON ? add('OK', 'Firebase key is set (push notifications)') : add('BLOCKER', 'FIREBASE_SERVICE_ACCOUNT_JSON is missing: no phone push notifications');

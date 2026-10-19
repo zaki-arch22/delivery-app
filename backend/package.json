@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "dev": "ts-node src/main.ts",
     "test:e2e": "ts-node test/auth.e2e.ts",

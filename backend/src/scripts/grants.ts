@@ -10,8 +10,12 @@ export async function applyGrants(c: Client, role: string, password?: string) {
     if (!password || password.length < 16) throw new Error('APP_DB_PASSWORD (at least 16 characters) is required to create the role');
     await c.query((await q(`SELECT format('CREATE ROLE %I LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', $1::text, $2::text) AS s`, [role, password]))[0].s);
   } else if (password) {
-    await c.query((await q(`SELECT format('ALTER ROLE %I PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', $1::text, $2::text) AS s`, [role, password]))[0].s);
+    // Only the password: on hosted databases (Neon) the owner is not a superuser and may not restate special powers.
+    await c.query((await q(`SELECT format('ALTER ROLE %I PASSWORD %L', $1::text, $2::text) AS s`, [role, password]))[0].s);
   }
+  // The app role must never have special powers, whoever created it.
+  const [r] = await q(`SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls AS powerful FROM pg_roles WHERE rolname=$1`, [role]);
+  if (r.powerful) throw new Error(`database role "${role}" has special powers (superuser, create, replication or bypass rules): refusing to use it`);
   const I = (n: string) => '"' + n.replace(/"/g, '""') + '"', R = I(role);
   const db = (await q(`SELECT current_database() d`))[0].d;
   await c.query(`GRANT CONNECT ON DATABASE ${I(db)} TO ${R}`);

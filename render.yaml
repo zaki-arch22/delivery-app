@@ -1,0 +1,39 @@
+# Free TEST server on Render (no bank card). Guide: backend/deploy/render.md
+# ONE web service runs the API and also hands out the staff console at /staff/.
+# The database is a free Neon database (PostgreSQL + PostGIS); its address is pasted once as OWNER_DATABASE_URL.
+# Free limits: the server sleeps after 15 minutes without visits (the next visit waits about 1 minute), no permanent disk
+# (photos are kept in the database), road distances use the straight-line estimate (no OSRM on the free plan).
+services:
+  - type: web
+    name: delivery-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: cd backend && npm ci --include=dev && npm run build && cd ../staff-console && npm ci --include=dev && VITE_BASE=/staff/ npm run build
+    startCommand: bash backend/deploy/render-start.sh
+    healthCheckPath: /login_methods
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      # Secrets made by Render itself (never written anywhere else).
+      - key: JWT_SECRET
+        generateValue: true
+      - key: HASH_PEPPER
+        generateValue: true
+      - key: APP_DB_PASSWORD
+        generateValue: true
+      # Asked once when the service is created (the owner pastes them; they are not in this file).
+      - key: OWNER_DATABASE_URL
+        sync: false
+      - key: GOOGLE_CLIENT_IDS
+        sync: false
+      - key: FIRST_ADMIN_EMAIL
+        sync: false
+      - key: FIRST_ADMIN_PASSWORD
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false

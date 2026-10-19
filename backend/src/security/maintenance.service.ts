@@ -14,6 +14,6 @@ export class Maintenance implements OnModuleInit, OnModuleDestroy {
     await this.db.query(`DELETE FROM quotes WHERE expires_at < now() - interval '1 day'`);
     await this.db.query(`DELETE FROM otp_codes WHERE created_at < now() - interval '2 days'`);
     await this.db.query(`DELETE FROM sessions WHERE (revoked OR expires_at < now()) AND created_at < now() - interval '7 days'`);
-    if (process.env.UPLOAD_DIR) await this.documents.cleanup();   // photos uploaded but never used for a sign-up
+    await this.documents.cleanup();   // photos uploaded but never used for a sign-up
   }
 }

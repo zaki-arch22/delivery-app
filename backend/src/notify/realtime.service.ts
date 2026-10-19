@@ -14,12 +14,14 @@ const send = (ws: WebSocket, o: any) => { if (ws.readyState === WebSocket.OPEN) 
 //   1) client sends {type:'auth', token, since?}   (since = id of the last notification it already has)
 //   2) server answers {type:'ready'} and replays everything missed after `since`, in order
 //   3) from then on every new notification for THAT profile arrives instantly: {type:'notification', id, kind, order_id, data, priority, created_at, expires_at}
-// Clients de-duplicate and order by `id`. A socket belongs to one session and one profile; switching profile closes it.
+// Each notification reaches a connection at most once, even when it is created while the catch-up is running.
+// Clients still order (and, as a second safety, de-duplicate) by `id`. A socket belongs to one session and one profile; switching profile closes it.
 @Injectable()
 export class Realtime implements OnApplicationBootstrap, OnModuleDestroy {
   private log = new Logger('Realtime');
   private wss?: WebSocketServer;
   private meta = new WeakMap<WebSocket, Meta>();
+  private sent = new WeakMap<WebSocket, Set<number>>();   // ids already sent on each connection: never twice
   private byProfile = new Map<string, Set<WebSocket>>();
   private bySession = new Map<string, Set<WebSocket>>();
   private listener?: Client;
@@ -83,6 +85,13 @@ export class Realtime implements OnApplicationBootstrap, OnModuleDestroy {
   private del(m: Map<string, Set<WebSocket>>, k: string, ws: WebSocket) { const s = m.get(k); s?.delete(ws); if (s && !s.size) m.delete(k); }
   closeSession(sid: string) { this.bySession.get(sid)?.forEach(ws => ws.close(4403, 'profile changed')); }
 
+  // A notification created during the catch-up could come both from the catch-up and live: only the first one goes out.
+  private sendOnce(ws: WebSocket, r: any) {
+    const ids = this.sent.get(ws) ?? this.sent.set(ws, new Set()).get(ws)!, id = Number(r.id);
+    if (ids.has(id)) return;
+    ids.add(id); if (ids.size > 500) ids.delete(ids.values().next().value!);
+    send(ws, this.payload(r));
+  }
   private payload(r: any) { return { type: 'notification', id: Number(r.id), kind: r.type, order_id: r.order_id, data: r.data, priority: r.priority, created_at: r.created_at, expires_at: r.expires_at }; }
 
   // Missed notifications. First connection (since = 0): only still-valid live items such as an open offer.
@@ -90,12 +99,12 @@ export class Realtime implements OnApplicationBootstrap, OnModuleDestroy {
     const rows = await this.db.query(
       `SELECT id, type, order_id, data, priority, created_at, expires_at FROM notifications
        WHERE profile_id=$1 AND id > $2 AND (expires_at IS NULL OR expires_at > now()) AND ($2 > 0 OR expires_at IS NOT NULL) ORDER BY id LIMIT 200`, [profileId, since]);
-    for (const r of rows) send(ws, this.payload(r));
+    for (const r of rows) this.sendOnce(ws, r);
   }
 
   private async deliver(id: number) {
     const r = await this.db.one(`SELECT id, profile_id, type, order_id, data, priority, created_at, expires_at FROM notifications WHERE id=$1`, [id]);
     if (!r || (r.expires_at && new Date(r.expires_at) < new Date())) return;
-    this.byProfile.get(r.profile_id)?.forEach(ws => send(ws, this.payload(r)));
+    this.byProfile.get(r.profile_id)?.forEach(ws => this.sendOnce(ws, r));
   }
 }
