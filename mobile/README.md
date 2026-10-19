@@ -13,17 +13,18 @@ Follow `AGENTS.md` (Expo's own guidance) for any Expo or React Native API.
 ## Screens built and tested (src/app, Expo Router: every file there is a screen)
 - welcome: language switch (Arabic right-to-left, French, English) and the two paths
 - phone, code: SMS login (Algerian numbers typed any usual way; a new code only after 60 s; calm translated errors)
-- new-profile: the first (sender) profile; driver sign-up waits for the photo upload function
+- new-profile: the first sender profile
+- driver-signup: name, vehicle, the three document photos (camera or gallery, shrunk on the phone before sending), send for approval; also opened from Settings
 - home: temporary landing screen (becomes "New order" / driver home)
-- settings: language, switch or add the sender profile, log out, log out of all devices
+- settings: language, switch or add the other profile, log out, log out of all devices
 Shared pieces: `src/ui` (brand components, large buttons, never colour alone), `src/i18n` (all texts; the type check makes sure every language has every text), `src/lib` (login state, server address, error messages, phone numbers).
 The server address is set when building: `EXPO_PUBLIC_API_URL=https://...` (release builds refuse anything but HTTPS).
 
 ## Not built yet
-The order and driver screens, the map, push notifications (needs the Firebase key), driver document photos (needs the upload function on the server).
+The order and driver work screens, the map, push notifications (needs the Firebase key).
 
 ## Tests
-From the project root: `bash scripts/test-all.sh` (type check + 14 tests against the real backend: 7 for the foundation, 7 that drive the real screens like a person would).
+From the project root: `bash scripts/test-all.sh` (type check + 16 tests against the real backend: 7 for the foundation, 9 that drive the real screens like a person would (only the camera is replaced in tests)).
 
 ## Accepted build-tool risks
 See `backend/docs/SECURITY.md`, section "Known, accepted risks".

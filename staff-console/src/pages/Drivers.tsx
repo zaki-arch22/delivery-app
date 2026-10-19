@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { api, qs } from '../api';
+import { useEffect, useState } from 'react';
+import { api, errText, photoUrl, qs } from '../api';
 import { fmtDate, fmtNum, t, tx, useLang } from '../i18n';
 import { ActionDialog, Empty, ErrorBox, Field, Loading, Pager, Pill, Status, useLoad } from '../ui';
 import type { Nav } from '../App';
@@ -31,7 +31,7 @@ function Pending() {
           <thead><tr><th>{t('col.name')}</th><th>{t('col.phone')}</th><th>{t('col.vehicle')}</th><th>{t('col.docs')}</th><th>{t('col.created')}</th><th>{t('col.actions')}</th></tr></thead>
           <tbody>{data.drivers.map(d => (
             <tr key={d.id}><td><strong>{d.display_name}</strong></td><td>{d.phone}</td><td>{tx('vehicle.' + d.vehicle)}</td>
-              <td className="muted wrap-text">{[d.id_photo_url, d.licence_photo_url, d.vehicle_photo_url].join('\n')}</td><td className="num">{fmtDate(d.created_at)}</td>
+              <td><div className="docs">{(['id_photo', 'licence_photo', 'vehicle_photo'] as const).map(k => <DocPhoto key={k} id={d.documents?.[k]} label={tx('doc.' + k)} />)}</div></td><td className="num">{fmtDate(d.created_at)}</td>
               <td><div className="row"><button type="button" className="primary" onClick={() => { setLimit(''); setApprove(d); }}>{t('drivers.approve')}</button><button type="button" onClick={() => setReject(d)}>{t('drivers.reject')}</button></div></td></tr>))}</tbody>
         </table></div>)}
       {approve && <ActionDialog title={`${t('drivers.approve')} · ${approve.display_name}`} needReason={false} onClose={() => setApprove(null)}
@@ -40,6 +40,21 @@ function Pending() {
       </ActionDialog>}
       {reject && <ActionDialog title={`${t('drivers.reject')} · ${reject.display_name}`} danger onClose={() => setReject(null)} onSubmit={async reason => { await api('/reject_driver', { profile_id: reject.id, reason }); reload(); }} />}
     </div>
+  );
+}
+
+// One document photo: loaded only when staff ask for it (each view is audited on the server), opened large on click.
+function DocPhoto({ id, label }: { id?: string; label: string }) {
+  const [src, setSrc] = useState<string | null>(null), [err, setErr] = useState<string | null>(null), [big, setBig] = useState(false);
+  useEffect(() => () => { if (src) URL.revokeObjectURL(src); }, [src]);
+  if (!id) return <span className="muted">—</span>;
+  if (err) return <span className="error-text">{err}</span>;
+  if (!src) return <button type="button" onClick={() => photoUrl(id).then(setSrc, e => setErr(errText(e)))}>{label}: {t('doc.show')}</button>;
+  return (
+    <figure className="doc">
+      <button type="button" className="doc-thumb" onClick={() => setBig(!big)} aria-expanded={big}><img src={src} alt={label} className={big ? 'big' : ''} /></button>
+      <figcaption>{label}</figcaption>
+    </figure>
   );
 }
 

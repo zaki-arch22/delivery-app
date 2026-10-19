@@ -47,7 +47,7 @@ export class StaffService {
 
   // ---------- drivers ----------
   pendingDrivers() {
-    return this.db.query(`SELECT p.id, p.display_name, a.phone, d.vehicle, d.id_photo_url, d.licence_photo_url, d.vehicle_photo_url, p.created_at
+    return this.db.query(`SELECT p.id, p.display_name, a.phone, d.vehicle, json_build_object('id_photo', d.id_photo_doc, 'licence_photo', d.licence_photo_doc, 'vehicle_photo', d.vehicle_photo_doc) AS documents, p.created_at
       FROM profiles p JOIN accounts a ON a.id=p.account_id JOIN driver_details d ON d.profile_id=p.id WHERE p.type='driver' AND p.status='pending_approval' ORDER BY p.created_at`).then(drivers => ({ drivers }));
   }
 

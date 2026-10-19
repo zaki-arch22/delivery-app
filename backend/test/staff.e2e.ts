@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { driverDocs, upload, PHOTO } from './docs';
 import { hashPassword } from '../src/auth/password';
 import { seal } from '../src/security/crypto';
 import { codeAt, newSecret, stepNow } from '../src/security/totp';
@@ -19,9 +20,8 @@ class Sock {
   kind(k: string, ms = 4000, pred: (m: any) => boolean = () => true) { return until(() => this.msgs.find(m => m.kind === k && pred(m)), ms); }
 }
 async function login(phone: string, path: 'user' | 'driver') { await api('/send_code', { phone }); const c = (await api('/dev/last_code?phone=' + encodeURIComponent(phone))).b.code; return (await api('/verify_code', { phone, code: c, path })).b; }
-const docs = { id_photo_url: 'a', licence_photo_url: 'b', vehicle_photo_url: 'c', vehicle: 'motorbike' };
 async function makeUser(phone: string, name: string) { const l = await login(phone, 'user'); const r = await api('/add_profile', { type: 'user', display_name: name }, l.token); return { token: r.b.token as string, id: r.b.active_profile.id as string }; }
-async function makeDriver(phone: string, name: string) { const l = await login(phone, 'driver'); const r = await api('/add_profile', { type: 'driver', display_name: name, documents: docs }, l.token); return { token: r.b.token as string, id: r.b.active_profile.id as string }; }
+async function makeDriver(phone: string, name: string) { const l = await login(phone, 'driver'); const r = await api('/add_profile', { type: 'driver', display_name: name, documents: await driverDocs(HTTP, l.token) }, l.token); return { token: r.b.token as string, id: r.b.active_profile.id as string }; }
 const P = { lat: 36.7538, lng: 3.0588 }, D = { lat: 36.765, lng: 3.07 }, adr = { street: 'Rue Didouche Mourad' };
 async function order(tok: string, key: string, extra: any = {}) {
   const q = (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, tok)).b;
@@ -72,7 +72,16 @@ const BOX = { type: 'Polygon', coordinates: [[[2.9, 36.6], [3.3, 36.6], [3.3, 36
   const D1 = await makeDriver('+213550700001', 'Driver One'), D2 = await makeDriver('+213550700002', 'Driver Two'), DR = await makeDriver('+213550700003', 'Driver Rejected');
   const sD1 = new Sock(D1.token), sD2 = new Sock(D2.token), sDR = new Sock(DR.token), sU = new Sock(U.token); await until(() => sD1.ready && sD2.ready && sDR.ready && sU.ready);
   ok('S3 a pending driver cannot go online', (await api('/set_online', { online: true }, D1.token)).b.error === 'PROFILE_NOT_ACTIVE');
-  ok('S3 pending drivers are listed with their documents', (await S('/list_pending_drivers')).b.drivers.length === 3);
+  const pend = (await S('/list_pending_drivers')).b.drivers;
+  ok('S3 pending drivers are listed with their documents', pend.length === 3 && pend.every((d: any) => ['id_photo', 'licence_photo', 'vehicle_photo'].every(k => /^[0-9a-f-]{36}$/.test(d.documents?.[k]))), pend[0]);
+  const docId = pend.find((d: any) => d.id === D1.id).documents.id_photo;
+  const img = await fetch(HTTP + '/get_document?id=' + docId, { headers: { authorization: 'Bearer ' + ST } });
+  const bytes = Buffer.from(await img.arrayBuffer());
+  ok('S3 staff can see a driver\'s photo (a real JPEG, never cached, never run as a page)', img.status === 200 && img.headers.get('content-type') === 'image/jpeg' && bytes[0] === 0xff && bytes[1] === 0xd8
+    && img.headers.get('cache-control') === 'no-store' && img.headers.get('x-content-type-options') === 'nosniff' && /default-src 'none'/.test(img.headers.get('content-security-policy') ?? ''));
+  ok('S3 every photo view is written in the audit trail', (await pool.query(`SELECT 1 FROM staff_audit WHERE action='view_document' AND target_id=$1`, [D1.id])).rowCount === 1);
+  ok('S3 unknown or malformed photo ids are refused cleanly', (await S('/get_document?id=00000000-0000-0000-0000-000000000000')).s === 404 && (await S('/get_document?id=../../etc/passwd')).s === 400);
+  ok('S3 a driver cannot see photos (staff only)', (await api('/get_document?id=' + docId, undefined, D1.token)).b.error === 'STAFF_ONLY');
   ok('S3 approval needs an explicit cash limit', (await S('/approve_driver', { profile_id: D1.id })).b.error === 'CASH_LIMIT_REQUIRED' && (await S('/approve_driver', { profile_id: D1.id, cash_limit_da: -5 })).s === 400);
   ok('S3 approve driver', (await S('/approve_driver', { profile_id: D1.id, cash_limit_da: 50000 })).s === 200); await S('/approve_driver', { profile_id: D2.id, cash_limit_da: 50000 });
   ok('S3 the driver is told LIVE they were approved', !!(await sD1.kind('profile.approved')));
@@ -92,7 +101,7 @@ const BOX = { type: 'Polygon', coordinates: [[[2.9, 36.6], [3.3, 36.6], [3.3, 36
   await api('/update_location', { lat: 36.7628, lng: 3.0588 }, D2.token);
   await pool.query(`UPDATE profiles SET status='suspended' WHERE id=$1`, [DR.id]);
   ok('S4 a driver who was NEVER approved cannot be "unsuspended" into service', (await S('/unsuspend_profile', { profile_id: DR.id, reason: 'oops' })).b.error === 'NEVER_APPROVED');
-  const both = await makeUser('+213550800001', 'Both Person'); const lb = await login('+213550800001', 'user'); const bd = await api('/add_profile', { type: 'driver', display_name: 'Both Driver', documents: docs }, lb.token);
+  const both = await makeUser('+213550800001', 'Both Person'); const lb = await login('+213550800001', 'user'); const bd = await api('/add_profile', { type: 'driver', display_name: 'Both Driver', documents: await driverDocs(HTTP, lb.token) }, lb.token);
   await pool.query(`UPDATE profiles SET status='active' WHERE id=$1`, [bd.b.active_profile.id]); await S('/suspend_profile', { profile_id: bd.b.active_profile.id, reason: 'Test of independence' });
   ok('S4 suspending the DRIVER profile leaves the same person\'s USER profile working', (await api('/list_orders', undefined, both.token)).s === 200);
 

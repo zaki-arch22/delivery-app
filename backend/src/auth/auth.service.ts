@@ -6,6 +6,8 @@ import { Realtime } from '../notify/realtime.service';
 import { SecurityLog } from '../security/security-log.service';
 import { notify } from '../notify/notify';
 import { newCode, newRefresh, safeEq, sha, signAccess } from './tokens';
+import { Documents, KINDS } from '../documents/documents.service';
+import { UUID } from '../common/errors';
 
 type PType = 'user' | 'driver';
 const PHONE = /^\+[0-9]{8,15}$/;
@@ -18,7 +20,7 @@ const PUBLIC_PROFILE = `id, type, display_name, photo_url, status,
 
 @Injectable()
 export class AuthService {
-  constructor(private db: Db, private sms: Sms, private rt: Realtime, private sec: SecurityLog) {}
+  constructor(private db: Db, private sms: Sms, private rt: Realtime, private sec: SecurityLog, private documents: Documents) {}
 
   // Whenever a session changes its active profile: the live connection of the old profile is closed, the phone's push token
   // follows the new profile, and a driver who leaves the driver profile goes offline (offers could not reach them anyway).
@@ -109,9 +111,9 @@ export class AuthService {
     const name = (displayName ?? '').trim();
     if (name.length < 2 || name.length > 60 || CONTROL.test(name)) throw bad('BAD_NAME', 'Name must be 2 to 60 characters, without control characters');
     if (type === 'driver') {
+      // The three photos are uploaded first (upload_document); here the app sends their ids.
       const d = docs ?? {};
-      const link = (v: any) => typeof v === 'string' && v.length > 0 && v.length <= 500 && !CONTROL.test(v);
-      if (!link(d.id_photo_url) || !link(d.licence_photo_url) || !link(d.vehicle_photo_url) || !['motorbike', 'car'].includes(d.vehicle))
+      if (!KINDS.every(k => typeof d[k] === 'string' && UUID.test(d[k])) || !['motorbike', 'car'].includes(d.vehicle))
         throw bad('DRIVER_DOCS_MISSING', 'ID photo, licence photo, vehicle photo and vehicle type are required');
     }
     // The 2nd profile is created only from inside the first one (Settings). A session with no profile may create only the FIRST.
@@ -124,9 +126,11 @@ export class AuthService {
       if (ex.rowCount) throw new ConflictException({ error: 'PROFILE_EXISTS', message: `You already have a ${type} profile` });
       const status = type === 'user' ? 'active' : 'pending_approval';
       const p = await client.query(`INSERT INTO profiles(account_id,type,display_name,status) VALUES ($1,$2,$3,$4) RETURNING id`, [accountId, type, name, status]);
-      if (type === 'driver')
-        await client.query(`INSERT INTO driver_details(profile_id,id_photo_url,licence_photo_url,vehicle,vehicle_photo_url) VALUES ($1,$2,$3,$4,$5)`,
-          [p.rows[0].id, docs.id_photo_url, docs.licence_photo_url, docs.vehicle, docs.vehicle_photo_url]);
+      if (type === 'driver') {
+        await this.documents.attach((s, v = []) => client.query(s, v).then(x => x.rows), accountId, p.rows[0].id, docs);
+        await client.query(`INSERT INTO driver_details(profile_id,id_photo_doc,licence_photo_doc,vehicle,vehicle_photo_doc) VALUES ($1,$2,$3,$4,$5)`,
+          [p.rows[0].id, docs.id_photo, docs.licence_photo, docs.vehicle, docs.vehicle_photo]);
+      }
       await client.query('COMMIT');
       await this.profileChanged(sid, p.rows[0].id);
       const profiles = await this.profiles(accountId);

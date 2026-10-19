@@ -13,6 +13,11 @@ export function errorMessage(e: unknown): { key: Key; vars?: Record<string, numb
     case 'CODE_EXPIRED': case 'CODE_LOCKED': return { key: 'err_code_expired' };
     case 'BAD_PHONE': return { key: 'phone_invalid' };
     case 'BAD_NAME': return { key: 'name_invalid' };
+    case 'BAD_IMAGE': case 'IMAGE_ONLY': return { key: 'err_image_bad' };
+    case 'IMAGE_TOO_SMALL': return { key: 'err_image_small' };
+    case 'TOO_LARGE': return { key: 'err_image_large' };
+    case 'TOO_MANY_UPLOADS': return { key: 'err_too_many_uploads' };
+    case 'BAD_DOCUMENT': case 'DRIVER_DOCS_MISSING': return { key: 'err_bad_document' };
     case 'SESSION_ENDED': case 'BAD_TOKEN': return { key: 'err_session' };
     default: return { key: 'err_generic' };
   }

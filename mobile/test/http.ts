@@ -2,7 +2,10 @@
 // native one (which does not exist in tests), and other HTTP clients stall in that environment.
 import http from 'http';
 
-export const nodeFetch = ((url: string, init: any = {}) => new Promise((resolve, reject) => {
+export const nodeFetch = (async (url: string, init: any = {}) => {
+  // A photo (Blob) is turned into plain bytes first.
+  const body = init.body && typeof init.body.arrayBuffer === 'function' ? Buffer.from(await init.body.arrayBuffer()) : init.body;
+  return new Promise((resolve, reject) => {
   const req = http.request(url, { method: init.method ?? 'GET', headers: init.headers ?? {} }, res => {
     let body = '';
     res.setEncoding('utf8');
@@ -17,6 +20,7 @@ export const nodeFetch = ((url: string, init: any = {}) => new Promise((resolve,
     });
   });
   req.on('error', reject);
-  if (init.body) req.write(init.body);
+  if (body) req.write(body);
   req.end();
-})) as unknown as typeof fetch;
+  });
+}) as unknown as typeof fetch;

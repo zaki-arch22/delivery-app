@@ -15,7 +15,8 @@ Rules
 | verify_code | PUBLIC | phone, code, path (`user`\|`driver`) | token, refresh_token, profiles[], active_profile (null if the chosen path has no profile yet), needs_profile (the path, or null) |
 | refresh_token | PUBLIC | refresh_token | token, refresh_token |
 | switch_profile | ACCOUNT | type | token, active_profile (needs the profile to exist) |
-| add_profile | ACCOUNT (first profile) or the active profile (second profile, from Settings only) | type, display_name (+ driver documents if driver) | profile (driver starts `pending_approval`; document links come from the upload function, built with the app) |
+| upload_document | ACCOUNT | query `kind` (`id_photo`\|`licence_photo`\|`vehicle_photo`); the BODY is the photo itself (Content-Type image/jpeg, image/png or image/webp, max 6 MB) | document_id, kind. The photo is checked by decoding it, redrawn as a clean JPEG (hidden data removed, max 2000 px) and kept privately. Errors: IMAGE_ONLY 415, TOO_LARGE 413, BAD_IMAGE, IMAGE_TOO_SMALL (under 300 px), TOO_MANY_UPLOADS 429 (10 unused photos per account; unused photos are deleted after a day) |
+| add_profile | ACCOUNT (first profile) or the active profile (second profile, from Settings only) | type, display_name (+ for a driver: documents {vehicle `motorbike`\|`car`, id_photo, licence_photo, vehicle_photo} = the three document_ids) | profile (driver starts `pending_approval`). BAD_DOCUMENT if a photo is someone else's, in the wrong place, or already used |
 | get_me | ACCOUNT | - | account, profiles[], active_profile |
 | logout | ACCOUNT | - | ok |
 | logout_everywhere | ACCOUNT | - | sessions_ended (ends every device and live connection; for a lost phone) |
@@ -60,7 +61,8 @@ Staff use a separate login (email and password, created with `npm run create-adm
 |---|---|---|
 | staff_login (public) | email, password, code (6-digit authenticator code, required) | token (2 hours), staff. A code works once. Same error for any wrong factor. |
 | staff_logout | - | ends all of this staff member's logins on every device |
-| list_pending_drivers | - | drivers waiting, with phone, vehicle, and the document links |
+| list_pending_drivers | - | drivers waiting, with phone, vehicle, and documents {id_photo, licence_photo, vehicle_photo} (ids) |
+| get_document | id | the photo itself (image/jpeg). Staff only; every view is saved in the audit trail. Photos are never shown to app logins |
 | approve_driver | profile_id, cash_limit_da (required; 0 = no cash-on-delivery orders) | driver becomes active; driver gets a push |
 | reject_driver | profile_id, reason | driver rejected; push (the reason is shown in the app) |
 | suspend_profile / unsuspend_profile | profile_id, reason | one profile only; a suspended driver goes offline at once; the other profile on the same phone is untouched; a never-approved driver cannot be unsuspended into service |

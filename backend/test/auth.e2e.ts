@@ -11,9 +11,9 @@ async function login(phone: string, path: 'user' | 'driver') {
   return api('/verify_code', { phone, code: b.code, path });
 }
 import { Pool } from 'pg';
+import { driverDocs, upload, PHOTO } from './docs';
 if (!process.env.TEST_DATABASE_URL || /\/delivery$/.test(process.env.TEST_DATABASE_URL)) throw new Error('Tests need TEST_DATABASE_URL pointing to a separate test database, never the real one');
 const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL! });
-const docs = { id_photo_url: 'x/id.jpg', licence_photo_url: 'x/lic.jpg', vehicle_photo_url: 'x/v.jpg', vehicle: 'motorbike' };
 
 (async () => {
   const phone = '+213551112233';
@@ -36,7 +36,7 @@ const docs = { id_photo_url: 'x/id.jpg', licence_photo_url: 'x/lic.jpg', vehicle
   ok('new number picking a path gets only that one profile', (await login('+213660000077', 'driver')).b.needs_profile === 'driver');
   // 3. same number becomes a driver too (from Settings, while logged in to the first profile)
   ok('driver profile without documents refused', (await api('/add_profile', { type: 'driver', display_name: 'Karim Driver' }, tok)).b.error === 'DRIVER_DOCS_MISSING');
-  r = await api('/add_profile', { type: 'driver', display_name: 'Karim Driver', documents: docs }, tok); tok = r.b.token;
+  r = await api('/add_profile', { type: 'driver', display_name: 'Karim Driver', documents: await driverDocs(B, tok) }, tok); tok = r.b.token;
   ok('driver profile created on the SAME number, pending approval', r.s === 200 && r.b.active_profile.type === 'driver' && r.b.active_profile.status === 'pending_approval' && r.b.profiles.length === 2);
   ok('pending driver cannot use driver area', (await api('/dev/only_driver', undefined, tok)).b.error === 'PROFILE_NOT_ACTIVE');
   // 4. switching, no new SMS
@@ -74,5 +74,45 @@ const docs = { id_photo_url: 'x/id.jpg', licence_photo_url: 'x/lic.jpg', vehicle
   r = await api('/refresh_token', { refresh_token: refresh }); ok('refresh gives a new token', r.s === 200 && !!r.b.token);
   ok('old refresh token is dead after use', (await api('/refresh_token', { refresh_token: refresh })).s === 401);
   await api('/logout', {}, driverTok2); ok('logged-out token refused', (await api('/get_me', undefined, driverTok2)).s === 401);
+  // 11. driver document photos
+  {
+    const { readFileSync, statSync } = await import('fs'); const sharp = (await import('sharp')).default; const dir = process.env.UPLOAD_DIR!;
+    const P1 = '+213660000301', P2 = '+213660000302';
+    const t1 = (await login(P1, 'driver')).b.token, t2 = (await login(P2, 'driver')).b.token;
+    let u = await upload(B, t1, 'id_photo');
+    ok('U1 a logged-in person (no profile yet) can upload a photo', u.s === 200 && /^[0-9a-f-]{36}$/.test(u.b.document_id) && u.b.kind === 'id_photo', JSON.stringify(u));
+    const st = statSync(`${dir}/${u.b.document_id}.jpg`);
+    ok('U1 the file is private to the server (owner read/write only)', (st.mode & 0o777) === 0o600, (st.mode & 0o777).toString(8));
+    const withGps = await sharp(PHOTO).withExif({ IFD0: { Copyright: 'SECRET-OWNER-DATA', Make: 'SecretCam' } }).jpeg().toBuffer();
+    ok('U2 (test setup) the test photo really carries hidden camera data', withGps.includes(Buffer.from('SECRET-OWNER-DATA')));
+    u = await upload(B, t1, 'licence_photo', withGps);
+    const stored = readFileSync(`${dir}/${u.b.document_id}.jpg`);
+    ok('U2 hidden data inside a photo (camera, location) is removed', u.s === 200 && !stored.includes(Buffer.from('SECRET-OWNER-DATA')) && !stored.includes(Buffer.from('SecretCam')));
+    const huge = await sharp({ create: { width: 4000, height: 3000, channels: 3, background: '#88aadd' } }).png().toBuffer();
+    u = await upload(B, t1, 'vehicle_photo', huge, 'image/png');
+    const m = await sharp(readFileSync(`${dir}/${u.b.document_id}.jpg`)).metadata();
+    ok('U3 a big PNG is accepted, shrunk to at most 2000 px and stored as JPEG', u.s === 200 && m.format === 'jpeg' && Math.max(m.width!, m.height!) === 2000, JSON.stringify(m.format));
+    const mine = { vehicle: 'motorbike', id_photo: '', licence_photo: '', vehicle_photo: '' } as any;
+    const all = await pool.query(`SELECT id, kind FROM documents WHERE account_id=(SELECT id FROM accounts WHERE phone=$1)`, [P1]);
+    for (const row of all.rows) mine[row.kind] = row.id;
+    const other = await driverDocs(B, t2);
+    r = await api('/add_profile', { type: 'driver', display_name: 'Thief Driver', documents: { ...mine, id_photo: other.id_photo } }, t1);
+    ok('U4 someone else\'s photo cannot be used', r.b.error === 'BAD_DOCUMENT', JSON.stringify(r.b));
+    r = await api('/add_profile', { type: 'driver', display_name: 'Mixed Driver', documents: { ...mine, id_photo: mine.licence_photo, licence_photo: mine.id_photo } }, t1);
+    ok('U4 a photo in the wrong place (licence as ID) is refused', r.b.error === 'BAD_DOCUMENT');
+    ok('U4 a refused sign-up leaves no profile behind', (await pool.query(`SELECT 1 FROM profiles WHERE account_id=(SELECT id FROM accounts WHERE phone=$1)`, [P1])).rowCount === 0);
+    r = await api('/add_profile', { type: 'driver', display_name: 'Real Driver', documents: mine }, t1);
+    ok('U5 driver sign-up with the three photos works', r.s === 200 && r.b.active_profile.status === 'pending_approval');
+    const linked = await pool.query(`SELECT count(*)::int n FROM documents WHERE profile_id=$1`, [r.b.active_profile.id]);
+    ok('U5 the three photos are now tied to that driver profile', linked.rows[0].n === 3);
+    const t3 = (await login('+213660000303', 'driver')).b.token;
+    r = await api('/add_profile', { type: 'driver', display_name: 'Copy Driver', documents: mine }, t3);
+    ok('U6 photos already used by a driver cannot be reused', r.b.error === 'BAD_DOCUMENT');
+    let refused = 0; try { await pool.query(`DELETE FROM documents WHERE id=$1`, [mine.id_photo]); } catch { refused++; }
+    try { await pool.query(`UPDATE documents SET profile_id=NULL WHERE id=$1`, [mine.id_photo]); } catch { refused++; }
+    ok('U6 the database itself refuses to delete or detach a used photo', refused === 2);
+    ok('U7 unknown kind refused', (await upload(B, t3, 'selfie')).b.error === 'BAD_KIND');
+    ok('U7 the app cannot read photos back (staff only)', (await api('/get_document?id=' + mine.id_photo, undefined, t1)).b.error === 'STAFF_ONLY');
+  }
   console.log(`\n${pass} passed, ${fail} failed`); await pool.end(); process.exit(fail ? 1 : 0);
 })();

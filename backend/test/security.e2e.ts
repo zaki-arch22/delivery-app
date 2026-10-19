@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { driverDocs, upload, PHOTO } from './docs';
 import * as jwt from 'jsonwebtoken';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
@@ -22,7 +23,7 @@ async function login(phone: string, path: 'user' | 'driver' = 'user') { await ap
 const docs = { id_photo_url: 'a', licence_photo_url: 'b', vehicle_photo_url: 'c', vehicle: 'motorbike' };
 async function makeUser(phone: string, name: string) { const l = await login(phone); const r = await api('/add_profile', { type: 'user', display_name: name }, l.token); return { token: r.b.token as string, id: r.b.active_profile.id as string, refresh: l.refresh_token as string }; }
 async function makeDriver(phone: string, name: string, lat: number, lng: number) {
-  const l = await login(phone, 'driver'); const r = await api('/add_profile', { type: 'driver', display_name: name, documents: docs }, l.token); const id = r.b.active_profile.id;
+  const l = await login(phone, 'driver'); const r = await api('/add_profile', { type: 'driver', display_name: name, documents: await driverDocs(HTTP, l.token) }, l.token); const id = r.b.active_profile.id;
   await pool.query(`UPDATE profiles SET status='active' WHERE id=$1`, [id]); await pool.query(`UPDATE driver_details SET cash_limit_da=50000 WHERE profile_id=$1`, [id]);
   await api('/set_online', { online: true }, r.b.token); await api('/update_location', { lat, lng }, r.b.token); return { token: r.b.token as string, id: id as string };
 }
@@ -178,8 +179,53 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
   for (const [what, sql] of tries) ok(`SEC14 the database refuses the app role to ${what}`, await appPool.query(sql).then(() => false, () => true));
   ok('SEC14 ...but the app can still do its normal work (read staff, record a failed login)', await appPool.query(`UPDATE staff_users SET failed_attempts = failed_attempts WHERE false`).then(() => true, () => false) && await appPool.query(`SELECT count(*) FROM orders`).then(() => true, () => false));
 
+  // ===== SEC16 driver document photos: fake images, bombs, oversized files, disk filling =====
+  {
+    const { crc32 } = await import('zlib'); const sharp = (await import('sharp')).default;
+    const up = async (tok: string | null, kind: string, body: Buffer | string, type = 'image/jpeg') => {
+      const r = await raw(`/upload_document?kind=${encodeURIComponent(kind)}`, { method: 'POST', headers: { 'content-type': type, ...(tok ? { authorization: 'Bearer ' + tok } : {}) }, body });
+      return { s: r.status, b: (await r.json().catch(() => ({}))) as any };
+    };
+    const U = (await login('+213550990001', 'driver')).token as string;
+    ok('SEC16 no login: refused before the photo is even read', (await up(null, 'id_photo', PHOTO)).s === 401);
+    ok('SEC16 a staff token cannot upload', (await up(stTok, 'id_photo', PHOTO)).b.error === 'WRONG_PROFILE');
+    const fakes: [string, Buffer, string][] = [
+      ['an HTML page', Buffer.from('<html><script>alert(1)</script></html>'), 'image/jpeg'],
+      ['an SVG with a script', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>'), 'image/png'],
+      ['a program (.exe)', Buffer.concat([Buffer.from('MZ'), Buffer.alloc(2000)]), 'image/jpeg'],
+      ['a PDF', Buffer.from('%PDF-1.7\n' + 'x'.repeat(2000)), 'image/jpeg'],
+      ['a GIF (not allowed)', Buffer.from('GIF89a' + 'x'.repeat(2000)), 'image/png'],
+    ];
+    for (const [what, body, type] of fakes) { const r = await up(U, 'id_photo', body, type); ok(`SEC16 ${what} disguised as a photo is refused`, r.s === 415 && r.b.error === 'IMAGE_ONLY', r); }
+    ok('SEC16 a declared non-image type is refused', (await up(U, 'id_photo', PHOTO, 'text/html')).b.error === 'IMAGE_ONLY');
+    ok('SEC16 JSON sent to the photo route is refused', (await up(U, 'id_photo', '{"a":1}', 'application/json')).b.error === 'IMAGE_ONLY');
+    const poly = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('<?php system($_GET["c"]); ?>'.repeat(100))]);
+    ok('SEC16 a fake JPEG (right first bytes, garbage inside) is refused', (await up(U, 'id_photo', poly)).b.error === 'BAD_IMAGE');
+    const tail = Buffer.concat([PHOTO, Buffer.from('<script>alert(1)</script>PK\u0003\u0004hidden-zip')]);
+    const ok1 = await up(U, 'id_photo', tail);
+    const stored = readFileSync(`${process.env.UPLOAD_DIR}/${ok1.b.document_id}.jpg`);
+    ok('SEC16 data hidden after a real photo is thrown away (the picture is redrawn)', ok1.s === 200 && !stored.includes(Buffer.from('hidden-zip')) && !stored.includes(Buffer.from('<script>')));
+    // A "decompression bomb": a tiny PNG claiming to be 30000 x 30000 pixels.
+    const small = await sharp({ create: { width: 10, height: 10, channels: 3, background: '#000' } }).png().toBuffer();
+    const bomb = Buffer.from(small); bomb.writeUInt32BE(30000, 16); bomb.writeUInt32BE(30000, 20); bomb.writeUInt32BE(crc32(bomb.subarray(12, 29)) >>> 0, 29);
+    const t0 = Date.now(), rb = await up(U, 'id_photo', bomb, 'image/png');
+    ok('SEC16 an image "bomb" (tiny file, 900 million pixels) is refused quickly', rb.b.error === 'BAD_IMAGE' && Date.now() - t0 < 5000, rb);
+    const big = Buffer.concat([PHOTO, Buffer.alloc(7 * 1024 * 1024)]);
+    const rbig = await up(U, 'id_photo', big);
+    ok('SEC16 a file over 6 MB is refused with a clear error', rbig.s === 413 && rbig.b.error === 'TOO_LARGE', rbig);
+    const tiny = await sharp({ create: { width: 60, height: 60, channels: 3, background: '#fff' } }).jpeg().toBuffer();
+    ok('SEC16 a picture too small to read is refused', (await up(U, 'id_photo', tiny)).b.error === 'IMAGE_TOO_SMALL');
+    ok('SEC16 a path trick in the kind is refused', (await up(U, '../../etc/passwd', PHOTO)).b.error === 'BAD_KIND');
+    let last: any; for (let i = 0; i < 12; i++) last = await up(U, 'vehicle_photo', PHOTO);
+    ok('SEC16 filling the disk is stopped: at most 10 unused photos per account', last.s === 429 && last.b.error === 'TOO_MANY_UPLOADS', last);
+    const files = readdirSync(process.env.UPLOAD_DIR!);
+    ok('SEC16 stored files have server-made names only (random id + .jpg)', files.every(f => /^[0-9a-f-]{36}\.jpg$/.test(f)), files.slice(0, 3));
+    ok('SEC16 photos are never served to app logins', (await api('/get_document?id=' + ok1.b.document_id, undefined, U)).b.error === 'STAFF_ONLY');
+    ok('SEC16 the server is still healthy after all of this', (await api('/get_me', undefined, U)).s === 200);
+  }
+
   // ===== SEC15 evidence trail and code hygiene =====
-  const need = ['bad_token', 'app_token_on_staff_route', 'refresh_token_reuse', 'rate_limited', 'staff_login_failed', 'otp_wrong', 'sms_ip_cap', 'sms_daily_cap_reached', 'staff_login_ok', 'logout_everywhere'];
+  const need = ['upload_not_image', 'upload_bad_image', 'upload_cap', 'bad_token', 'app_token_on_staff_route', 'refresh_token_reuse', 'rate_limited', 'staff_login_failed', 'otp_wrong', 'sms_ip_cap', 'sms_daily_cap_reached', 'staff_login_ok', 'logout_everywhere'];
   const missing: string[] = []; for (const t of need) if (!(await ev(t))) missing.push(t);
   ok('SEC15 every attack above left a record in the permanent security log', missing.length === 0, missing);
   const walk = (d: string): string[] => readdirSync(d).flatMap(f => { const p = join(d, f); return statSync(p).isDirectory() ? walk(p) : p.endsWith('.ts') ? [p] : []; });

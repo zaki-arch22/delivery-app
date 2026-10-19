@@ -5,6 +5,8 @@ import { AppModule } from './app.module';
 import { SecurityLog } from './security/security-log.service';
 import { headers, inputGuard, ipLimit } from './security/middleware';
 import { deriveKey } from './security/crypto';
+import { raw } from 'express';
+import { MAX_UPLOAD_BYTES } from './documents/documents.service';
 
 // Last-resort safety nets. A stray failed background operation is logged, not allowed to take the platform down.
 process.on('unhandledRejection', e => console.error('unhandled rejection:', e));
@@ -19,6 +21,15 @@ async function main() {
   const hops = Number(process.env.TRUST_PROXY ?? 0); if (hops > 0) express.set('trust proxy', hops);   // behind a reverse proxy: real client addresses
   app.use(headers);
   app.use(ipLimit(app.get(SecurityLog)));
+  // Photos are the only non-JSON body, accepted on ONE route only, up to 6 MB (everything else stays at 64 KB of JSON).
+  // No login, no reading of a big body: anonymous callers are turned away before a single byte of the photo is read.
+  const readPhoto = raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: MAX_UPLOAD_BYTES });
+  app.use('/upload_document', (req: any, res: any, next: any) => {
+    if (!/^Bearer \S+$/.test(req.headers.authorization ?? '')) return res.status(401).json({ error: 'BAD_TOKEN', message: 'Login again' });
+    readPhoto(req, res, (err: any) => err
+      ? res.status(err.status === 413 ? 413 : 400).json(err.status === 413 ? { error: 'TOO_LARGE', message: 'The photo is larger than 6 MB' } : { error: 'BAD_INPUT', message: 'Invalid upload' })
+      : next());
+  });
   app.useBodyParser('json', { limit: '64kb' });
   app.use(inputGuard);
   // Cross-origin access is DENIED unless the staff console's address is listed. Mobile apps do not need CORS.

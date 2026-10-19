@@ -30,7 +30,15 @@
           "supportsRTL": false
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "The camera is used only to photograph your ID, driving licence and vehicle for driver sign-up.",
+          "photosPermission": "Your photos are used only to choose pictures of your ID, driving licence and vehicle for driver sign-up.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "scheme": "delivery"
   }

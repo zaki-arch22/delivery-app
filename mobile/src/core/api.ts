@@ -25,8 +25,11 @@ export class Client {
 
   private async raw(path: string, body: unknown, headers: Record<string, string>, auth: boolean) {
     let r: Response;
+    // A photo (Blob) is sent as it is, with its own type; everything else is JSON.
+    const isFile = typeof Blob !== 'undefined' && body instanceof Blob;
+    const type = isFile ? (body as Blob).type || 'image/jpeg' : 'application/json';
     try {
-      r = await this.fetchFn(this.baseUrl + path, { method: body === undefined ? 'GET' : 'POST', headers: { 'content-type': 'application/json', ...(auth && this.access ? { authorization: 'Bearer ' + this.access } : {}), ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
+      r = await this.fetchFn(this.baseUrl + path, { method: body === undefined ? 'GET' : 'POST', headers: { 'content-type': type, ...(auth && this.access ? { authorization: 'Bearer ' + this.access } : {}), ...headers }, body: body === undefined ? undefined : isFile ? (body as Blob) : JSON.stringify(body) });
     } catch { throw new ApiError(0, 'NETWORK', 'No connection'); }
     const j: any = await r.json().catch(() => ({}));
     if (!r.ok) throw new ApiError(r.status, j.error ?? 'ERROR', j.message ?? '', Number(r.headers.get('retry-after') ?? 0));

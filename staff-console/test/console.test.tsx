@@ -14,6 +14,11 @@ const API = process.env.VITE_API_URL!; const db = new Pool({ connectionString: p
 if (!/_test$/.test(process.env.TEST_DATABASE_URL ?? '')) throw new Error('test database only');
 const call = async (path: string, body?: any, tok?: string) => { const r = await fetch(API + path, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json', ...(tok ? { authorization: 'Bearer ' + tok } : {}) }, body: body ? JSON.stringify(body) : undefined }); return r.json() as any; };
 const login = async (phone: string, path: 'user' | 'driver') => { await call('/send_code', { phone }); const c = (await call('/dev/last_code?phone=' + encodeURIComponent(phone))).code; return call('/verify_code', { phone, code: c, path }); };
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+const PHOTO = readFileSync(resolve(process.cwd(), '../backend/test/fixtures/photo.jpg'));   // made-up test picture
+const upload = async (kind: string, tok: string) => (await (await fetch(API + '/upload_document?kind=' + kind, { method: 'POST', headers: { authorization: 'Bearer ' + tok, 'content-type': 'image/jpeg' }, body: PHOTO })).json() as any).document_id as string;
+const driverDocs = async (tok: string) => ({ vehicle: 'motorbike', id_photo: await upload('id_photo', tok), licence_photo: await upload('licence_photo', tok), vehicle_photo: await upload('vehicle_photo', tok) });
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const nav = () => within(screen.getByRole('navigation', { name: 'Main' }));
 const dialog = () => screen.findByRole('dialog');
@@ -22,7 +27,7 @@ let user: any, driver: any, orderId = '', ref = '';
 const u = userEvent.setup();
 
 beforeAll(async () => {
-  await db.query(`TRUNCATE otp_codes, sessions, quotes, offers, order_events, ratings, cash_ledger, problem_reports, notifications, device_tokens, orders, driver_details, profiles, accounts, zones, pricing_rules, staff_audit, staff_users, security_events RESTART IDENTITY CASCADE`);
+  await db.query(`TRUNCATE otp_codes, sessions, quotes, offers, order_events, ratings, cash_ledger, problem_reports, notifications, device_tokens, orders, driver_details, documents, profiles, accounts, zones, pricing_rules, staff_audit, staff_users, security_events RESTART IDENTITY CASCADE`);
   await db.query(`INSERT INTO staff_users(email,name,password_hash,totp_secret_sealed) VALUES ($1,'Console Tester',$2,$3)`, [EMAIL, hashPassword(PW), seal(SECRET, 'totp')]);
   setLang('en'); render(<App />);
 });
@@ -70,9 +75,13 @@ test('4. prices: empty warning, live example, save', async () => {
 
 test('5. drivers: a new driver waits; staff approve with a cash limit', async () => {
   const l = await login('+213551010001', 'user'); user = await call('/add_profile', { type: 'user', display_name: '<img src=x onerror=alert(1)>' }, l.token);
-  const ld = await login('+213551020001', 'driver'); driver = await call('/add_profile', { type: 'driver', display_name: 'Driver Console', documents: { id_photo_url: 'a', licence_photo_url: 'b', vehicle_photo_url: 'c', vehicle: 'motorbike' } }, ld.token);
+  const ld = await login('+213551020001', 'driver'); driver = await call('/add_profile', { type: 'driver', display_name: 'Driver Console', documents: await driverDocs(ld.token) }, ld.token);
   await u.click(nav().getByRole('button', { name: 'Drivers' }));
   const row = (await screen.findByText('Driver Console')).closest('tr')!;
+  await u.click(within(row).getByRole('button', { name: 'ID card: Show photo' }));
+  const img = await within(row).findByRole('img', { name: 'ID card' });
+  expect(img.getAttribute('src')).toMatch(/^blob:/);                                     // shown from memory, never a shareable link
+  expect((await db.query(`SELECT count(*)::int n FROM staff_audit WHERE action='view_document'`)).rows[0].n).toBe(1);   // the view is audited
   await u.click(within(row).getByRole('button', { name: 'Approve' }));
   const d = await dialog(); await u.type(within(d).getByLabelText(/^Cash limit/), '50000'); await u.click(within(d).getByRole('button', { name: 'Confirm' }));
   await waitFor(() => expect(screen.queryByText('Driver Console')).not.toBeInTheDocument());

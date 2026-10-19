@@ -37,5 +37,10 @@ DELETE FROM cash_ledger;
 INSERT INTO cash_ledger(driver_profile_id,order_id,type,amount_da) SELECT driver_profile_id,id,'cod_collected',5000 FROM orders WHERE idempotency_key='k1';
 \echo '--- TEST 11: handover without staff (must FAIL)'
 INSERT INTO cash_ledger(driver_profile_id,type,amount_da) SELECT driver_profile_id,'handover',-5000 FROM orders WHERE idempotency_key='k1';
+INSERT INTO documents(account_id,kind,size_bytes,sha256,profile_id) SELECT a.id,'id_photo',100,'x',pid('+213550000002','driver') FROM accounts a WHERE phone='+213550000002';
+\echo '--- TEST 12: delete a driver document photo used for approval (must FAIL)'
+DELETE FROM documents;
+\echo '--- TEST 13: move a used document photo to another profile (must FAIL)'
+UPDATE documents SET profile_id = pid('+213550000001','driver');
 \echo '--- Balance of the other driver (must be 5000)'
 SELECT driver_profile_id=pid('+213550000002','driver') AS is_other_driver, SUM(amount_da) FROM cash_ledger GROUP BY 1;

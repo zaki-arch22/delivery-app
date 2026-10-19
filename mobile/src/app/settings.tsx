@@ -41,7 +41,7 @@ export default function Settings() {
       <T kind="label">{t('settings_profile')}</T>
       {active ? <T testID="settings-active">{active.display_name} · {t(active.type === 'user' ? 'profile_user' : 'profile_driver')}</T> : null}
       {hasOther ? <Button testID="switch-profile" kind="secondary" busy={busy === 'switch'} label={t('switch_to', { type: t(other === 'user' ? 'profile_user' : 'profile_driver') })} onPress={switchProfile} />
-        : other === 'driver' ? <Notice text={t('add_driver_soon')} />
+        : other === 'driver' ? <Button testID="add-driver" kind="secondary" label={t('add_driver_profile')} onPress={() => router.push('/driver-signup')} />
         : adding ? (<>
             <Field testID="add-name" label={t('name_label')} value={name} onChangeText={setName} maxLength={60} />
             <Button testID="add-user-confirm" label={t('create_profile')} busy={busy === 'add'} onPress={addUser} />

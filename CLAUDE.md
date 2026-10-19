@@ -19,11 +19,11 @@ Built so far by Claude in a claude.ai chat (October 2026), then moved to Claude 
 ## 3. What exists (all tested)
 | Part | Folder | Technology | Status |
 |---|---|---|---|
-| Backend | `backend/` | NestJS (TypeScript), PostgreSQL 16 + PostGIS, Node 22 | complete for the current scope; 280 tests incl. 73 attacks and 12 road-distance tests + 10 database-rule checks |
-| Staff console | `staff-console/` | React 18 + Vite | complete; 13 tests against the real backend; matches the 22 staff functions one-to-one |
-| Mobile app | `mobile/` | React Native + Expo SDK 58 (React Native 0.88), Expo Router | foundation (`src/core`) + first screens: welcome/language, phone login, first sender profile, temporary home, settings; 14 tests against the real backend. Order and driver screens not built yet |
+| Backend | `backend/` | NestJS (TypeScript), PostgreSQL 16 + PostGIS, Node 22 | complete for the current scope; 317 tests incl. 92 attacks and 12 road-distance tests + 12 database-rule checks |
+| Staff console | `staff-console/` | React 18 + Vite | complete; 13 tests against the real backend; matches the 23 staff functions one-to-one (incl. viewing driver photos) |
+| Mobile app | `mobile/` | React Native + Expo SDK 58 (React Native 0.88), Expo Router | foundation (`src/core`) + welcome/language, phone login, first sender profile, driver sign-up with photos, temporary home, settings; 16 tests against the real backend. Order and driver work screens not built yet |
 
-- `bash scripts/dev-setup.sh` once (local test database), then `bash scripts/test-all.sh` runs everything (307 tests + database rules). Run it after every change.
+- `bash scripts/dev-setup.sh` once (local test database), then `bash scripts/test-all.sh` runs everything (346 tests + 12 database rules). Run it after every change.
 - The real database ships EMPTY: schema files only, no data.
 
 ## 4. Product decisions (current)
@@ -59,6 +59,7 @@ Built so far by Claude in a claude.ai chat (October 2026), then moved to Claude 
 - Mobile: React Native + Expo, chosen over Flutter (Flutter could not be built or tested in the original environment; Expo's free cloud builds iPhone apps without a Mac). Follow `mobile/AGENTS.md` for Expo APIs.
 - **Cloud work setup:** the project runs in a Claude Code cloud session (works with the owner's laptop off). `.claude/hooks/session-start.sh` prepares any fresh machine (PostGIS, PostgreSQL, packages, test database). A scheduled task "Resume delivery-app work" wakes the session every 2 hours to continue from `PROGRESS.md` (so work restarts after usage limits reset). Limit: it only wakes THIS session; if the session is archived or deleted, the owner starts a new session on this repo and says "continue from PROGRESS.md".
 - **Mobile structure:** Expo Router (screens in `mobile/src/app`), own small translation module (`src/i18n`, no extra library). Direction (right-to-left for Arabic) is applied by the app itself on every screen, and the phone's own RTL switching is turned off (`supportsRTL: false`), so changing language works instantly without restarting the app. Only the 3 Cairo weights used are bundled. `react-native-web` is a test tool only (screenshots for design checks), not a product.
+- **Driver document photos:** uploaded one by one (`upload_document`, raw image body, max 6 MB), decoded and redrawn by the server (sharp) so hidden data is dropped, stored in a private folder (`UPLOAD_DIR`, not in the database, not in a web folder). Staff see them only through `get_document` with their login, every view audited; no shareable links (safer than the expiring links first planned: nothing to leak in logs or chats). Unused photos are deleted after a day. The phone shrinks photos to 2000 px before sending (less mobile data).
 - **Working app name** until the owner chooses: "Delivery" / "Livraison" / "توصيل".
 - Publishing: Android first (Google Play is $25 one-time, or a direct APK). iPhone is built but published later (Apple $99/year).
 
@@ -79,12 +80,11 @@ Deep blue `#1E40AF` (main), navy `#0B2A6B` (dark), pale blue `#E8EEFB` (soft bac
 Legal status of the platform and drivers, data-protection registration (ANPDP), hosting location, insurance, and all money rules beyond COD goods money: delivery-fee accounting, commission, driver payouts, merchant remittances, cancellation, waiting and return fees (returns are priced 0 for now).
 
 ## 9. Next steps, in order
-Order changed (Claude's decision): the first phone screens come before photo upload, because they need neither, and each server piece is built right before the screen that uses it.
-1. **Mobile app shell and first screens:** navigation, the three languages (right-to-left Arabic), brand theme, then the first screen (path choice + language), phone login, and first-profile creation. Placeholder app name until the owner chooses one.
-2. **Photo upload on the server** for driver documents (today they are text links): type and size checks, private storage, expiring links, attack tests. Then the driver sign-up screen with photos.
-3. **User path** (new order with the map, price, searching, tracking, my orders, rating, problem), then the **Driver path** (home, offer, active job, failure, earnings, cash), then **Settings** (language, add the other profile, switch, log out, log out everywhere). Each screen calls only functions in the contract.
-4. Phone push inside the app (needs the owner's free Firebase project), driver location while online, an offline queue for driver job steps (the server already accepts repeated steps safely).
-5. Before launch: real SMS provider, real server (test `backend/deploy/`, including OSRM with real Algiers roads), a traffic-flood filter, a human security test, native-speaker review of texts, app name and logo.
+Order (Claude's decision): each server piece is built right before the screen that uses it.
+1. **User path:** new order with the map (MapLibre + OpenFreeMap, pin on map, address details), size, price (recommended, range, choose), recipient, cash on delivery; searching (raise price, cancel); tracking (driver, code, status); my orders; rating; problem report. Replaces the temporary home for senders.
+2. **Driver path:** home (online/offline, today's earnings, cash held), live offer (accept/decline, timer), active job (pickup, delivery code, cash), can't deliver, earnings list, cash ledger. Driver location sent while online.
+3. Phone push inside the app (needs the owner's free Firebase project), an offline queue for driver job steps (the server already accepts repeated steps safely).
+4. Before launch: real SMS provider, real server (test `backend/deploy/`, including OSRM with real Algiers roads and the photo folder), a traffic-flood filter, a human security test, native-speaker review of texts, app name and logo.
 
 ## 10. Accounts the owner does not have yet
 SMS provider, Firebase project (free), Google Play ($25 once) / Apple ($99 per year) developer accounts, a server. (No map key is needed.) Build without them. When one is needed, explain how to get it step by step and what it costs.

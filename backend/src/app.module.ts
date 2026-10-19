@@ -18,11 +18,13 @@ import { Matching } from './orders/matching.service';
 import { OrdersService } from './orders/orders.service';
 import { RatingsService } from './orders/ratings.service';
 import { DriverService } from './driver/driver.service';
+import { Documents } from './documents/documents.service';
+import { DocumentsController } from './documents/documents.controller';
 import { UserOrdersController, DriverController, RatingsController } from './orders/orders.controller';
 
 @Module({
   imports: [DbModule],
-  controllers: [AuthController, NotifyController, StaffController, ...(process.env.TEST_HOOKS === '1' ? [DevController] : []), UserOrdersController, DriverController, RatingsController],
-  providers: [SecurityLog, Maintenance, AuthService, Sms, Realtime, PushService, StaffService, Routing, Matching, OrdersService, RatingsService, DriverService, { provide: APP_GUARD, useClass: AuthGuard }],
+  controllers: [AuthController, NotifyController, StaffController, ...(process.env.TEST_HOOKS === '1' ? [DevController] : []), UserOrdersController, DriverController, RatingsController, DocumentsController],
+  providers: [SecurityLog, Maintenance, AuthService, Sms, Realtime, PushService, StaffService, Routing, Matching, OrdersService, RatingsService, DriverService, Documents, { provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule {}

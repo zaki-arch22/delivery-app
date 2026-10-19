@@ -9,7 +9,7 @@ ENVF="$ROOT/.local/test.env"
 [ -f "$ENVF" ] || { echo "Run scripts/dev-setup.sh first"; exit 1; }
 # shellcheck disable=SC1090
 source "$ENVF"
-export JWT_SECRET="$(openssl rand -hex 32)" HASH_PEPPER="$(openssl rand -hex 16)"
+export JWT_SECRET="$(openssl rand -hex 32)" HASH_PEPPER="$(openssl rand -hex 16)" UPLOAD_DIR="$ROOT/.local/uploads"
 LOG="$ROOT/.local/logs"; mkdir -p "$LOG"
 SERVER_PID=""; RESULTS=(); FAILED=0
 
@@ -19,7 +19,7 @@ for p in backend staff-console mobile; do [ -d "$ROOT/$p/node_modules" ] || (ech
 (cd "$ROOT/backend" && OWNER_DATABASE_URL="$TEST_OWNER_URL" APP_DB_PASSWORD="$APP_PW" npx ts-node src/scripts/migrate.ts >"$LOG/migrate.log" 2>&1) || { echo "migration failed, see $LOG/migrate.log"; exit 1; }
 
 psql_owner() { psql "$TEST_OWNER_URL" -v ON_ERROR_STOP=0 "$@"; }
-wipe() { psql_owner -q -c "TRUNCATE otp_codes, sessions, quotes, offers, order_events, ratings, cash_ledger, problem_reports, notifications, device_tokens, orders, driver_details, profiles, accounts, zones, pricing_rules, staff_audit, staff_users, security_events RESTART IDENTITY CASCADE" >/dev/null; }
+wipe() { psql_owner -q -c "TRUNCATE otp_codes, sessions, quotes, offers, order_events, ratings, cash_ledger, problem_reports, notifications, device_tokens, orders, driver_details, documents, profiles, accounts, zones, pricing_rules, staff_audit, staff_users, security_events RESTART IDENTITY CASCADE" >/dev/null; rm -rf "$ROOT/.local/uploads"; }
 
 port_busy() { curl -s -m 1 -o /dev/null "http://127.0.0.1:$1/" ; }
 # The server runs in its own process group, so stopping it stops EVERY process it started (npx, ts-node, node).
@@ -49,12 +49,12 @@ run() {  # run <title> <logname> <dir> <command...>
 }
 B="$ROOT/backend"; T="TEST_DATABASE_URL=$TEST_OWNER_URL"
 
-# 1. Rules enforced by the database itself (10 forbidden actions must be refused, the cash balance must be 5000).
+# 1. Rules enforced by the database itself (12 forbidden actions must be refused, the cash balance must be 5000).
 echo "== database rules"; wipe
 psql_owner -f "$B/test/db_rules.sql" >"$LOG/db-rules.log" 2>&1
 REFUSED=$(grep -c "ERROR:" "$LOG/db-rules.log"); BAL=$(grep -cE "^ t +\| +5000" "$LOG/db-rules.log")
-echo "   refused: $REFUSED of 10 expected; final balance check: $BAL"
-[ "$REFUSED" = 10 ] && [ "$BAL" = 1 ]; record "database rules" $? db-rules; wipe
+echo "   refused: $REFUSED of 12 expected; final balance check: $BAL"
+[ "$REFUSED" = 12 ] && [ "$BAL" = 1 ]; record "database rules" $? db-rules; wipe
 
 # 2. Orders and accounts (fast timers).
 start_server 3399 orders RATE_LIMIT_DISABLED=1 OFFER_TTL_S=3 SEARCH_WINDOW_S=15 WIDEN_AFTER_S=6

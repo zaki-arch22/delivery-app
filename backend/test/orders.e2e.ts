@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { driverDocs, upload, PHOTO } from './docs';
 const B = 'http://localhost:3399';
 if (!process.env.TEST_DATABASE_URL || /\/delivery$/.test(process.env.TEST_DATABASE_URL)) throw new Error('Tests need TEST_DATABASE_URL pointing to a separate test database, never the real one');
 const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL! });
@@ -10,13 +11,12 @@ async function api(path: string, body?: any, token?: string, headers: any = {}) 
 }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 async function until<T>(fn: () => Promise<T | null | undefined | false>, ms = 15000): Promise<T | null> { const t = Date.now(); while (Date.now() - t < ms) { const v = await fn(); if (v) return v as T; await sleep(300); } return null; }
-const docs = { id_photo_url: 'a', licence_photo_url: 'b', vehicle_photo_url: 'c', vehicle: 'motorbike' };
 
 async function login(phone: string, path: 'user' | 'driver') { await api('/send_code', { phone }); const c = (await api('/dev/last_code?phone=' + encodeURIComponent(phone))).b.code; return (await api('/verify_code', { phone, code: c, path })).b; }
 async function makeUser(phone: string, name: string) { const l = await login(phone, 'user'); return (await api('/add_profile', { type: 'user', display_name: name }, l.token)).b.token as string; }
 async function makeDriver(phone: string, name: string, lat: number, lng: number, vehicle = 'motorbike', limit: number | null = null) {
   const l = await login(phone, 'driver');
-  const r = await api('/add_profile', { type: 'driver', display_name: name, documents: { ...docs, vehicle } }, l.token);
+  const r = await api('/add_profile', { type: 'driver', display_name: name, documents: await driverDocs(B, l.token, vehicle) }, l.token);
   const id = r.b.active_profile.id;
   await pool.query(`UPDATE profiles SET status='active' WHERE id=$1`, [id]);
   await pool.query(`UPDATE driver_details SET cash_limit_da=$2 WHERE profile_id=$1`, [id, limit]);
@@ -40,7 +40,7 @@ const offerFor = (t: string) => until(async () => (await api('/get_current_offer
   const D2 = await makeDriver('+213550200002', 'Driver Two', 36.7628, 3.0588, 'motorbike', null);     // ~1 km
   const D3 = await makeDriver('+213550200003', 'Driver Three', 36.7990, 3.0588, 'motorbike', null);   // ~5 km (outside first radius)
   // Amina is ALSO a driver (second profile on the same number), online right at the pickup point
-  const lA = await login('+213550100001', 'user'); const selfD = await api('/add_profile', { type: 'driver', display_name: 'Amina Driver', documents: docs }, lA.token);
+  const lA = await login('+213550100001', 'user'); const selfD = await api('/add_profile', { type: 'driver', display_name: 'Amina Driver', documents: await driverDocs(B, lA.token) }, lA.token);
   await pool.query(`UPDATE profiles SET status='active' WHERE id=$1`, [selfD.b.active_profile.id]);
   await api('/set_online', { online: true }, selfD.b.token); await api('/update_location', P, selfD.b.token);
 

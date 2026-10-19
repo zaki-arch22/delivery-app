@@ -3,7 +3,7 @@
 ## The honest promise
 No system is unhackable. The goal is layers: an attacker has to defeat many independent barriers, every attempt leaves a trace, and a stolen secret never opens everything. Everything below is built, tested, and uses only free software.
 
-## Layers that are built and tested (280 backend tests, 73 of them are attacks)
+## Layers that are built and tested (317 backend tests, 92 of them are attacks)
 **Logins and sessions**
 - Phone code: 6 digits, 5 guesses per code, counted by the database so even 25 simultaneous guesses get only 5; a code works once even if submitted 10 times at the same instant; codes are stored only as keyed hashes (a stolen database cannot reveal them).
 - SMS fraud ("SMS pumping") cannot run up your bill: 5 codes/hour per phone, 20/hour per address, and a hard daily cap, all counted in the database.
@@ -20,6 +20,10 @@ No system is unhackable. The goal is layers: an attacker has to defeat many inde
 - All queries are parameterised (injection payloads are stored as harmless text). Everyone can only reach their own data (tested for orders, offers, jobs, ratings).
 - The app connects to the database as a LIMITED role. Even if the app were fully taken over, the DATABASE refuses to: edit or delete cash entries, order history, ratings, the staff audit trail or the security log; change or add staff accounts; drop, alter or truncate tables; switch off its own rules. Verified by attacking the database as that role.
 - Money rules live in the database itself (price lock, one job per driver, append-only ledger), not only in the app.
+**Driver document photos**
+- Only logged-in people can upload, and an anonymous caller is turned away before any of the photo is read. One route only, 6 MB maximum, 30 uploads per hour per address, 10 unused photos per account (unused ones are deleted after a day): the disk cannot be filled.
+- The first bytes must say JPEG, PNG or WebP; then the photo is fully decoded and drawn again as a fresh JPEG (max 2000 px). Anything hidden inside or after it (scripts, archives, camera and GPS data) is thrown away. "Image bombs" (a tiny file claiming hundreds of millions of pixels) are refused.
+- Files are stored outside any web folder, readable only by the server's user (mode 600), named by a random server id. Only staff can see them, through the API, and every view is written in the audit trail. The staff console shows them from memory (no shareable link). The database refuses to delete or move a photo once it is part of a driver's sign-up.
 **Watching**
 - A permanent security log records bad tokens, privilege probing, token theft, rate-limit hits, wrong codes, staff login failures, fraud caps. `npm run security-report` summarises the last 24 hours.
 - Dependencies: `npm audit` reports 0 known vulnerabilities (the framework was upgraded to get there).
@@ -37,7 +41,6 @@ No system is unhackable. The goal is layers: an attacker has to defeat many inde
 - **The server itself**: use deploy/ (HTTPS with Caddy, a sandboxed service, firewall, automatic security updates, SSH keys only, PostgreSQL reachable only from the server, disk encryption, encrypted backups). These templates are written but NOT tested on a real server yet.
 - **Floods of traffic (DDoS)** need a filtering layer in front. A free plan from a major provider can do this; I have not set it up.
 - **The mobile apps**: they must keep tokens in the phone's secure storage (not plain files), use HTTPS only (optionally pin the certificate), and can use Google's/Apple's free app-integrity checks. Built when the app is built.
-- **File uploads** (driver documents) are not built yet. When they are: type and size checks, no executable files, stored outside the web area, served only through expiring links.
 - **Staff insiders**: every action is audited, but two-person approval for big cash changes needs a second staff member to exist.
 - **Rate limits are held in memory** (one server). Running several servers needs them moved to a shared store.
 - **Legal data protection duties** (registration, retention, hosting location) are parked with the rest of the legal work.

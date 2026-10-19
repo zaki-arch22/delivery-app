@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useApp } from '../lib/app';
 import { errorMessage } from '../lib/errors';
-import { Button, Field, Gap, Notice, Screen, T } from '../ui/kit';
+import { Button, Field, Gap, Screen, T } from '../ui/kit';
 
-// The FIRST profile, right after login (contract A: add_profile). Drivers also need document photos:
-// that part opens with the photo upload function (CLAUDE.md section 9, step 2).
+// The FIRST profile, right after login (contract A: add_profile). Drivers go to the driver sign-up with photos.
 export default function NewProfile() {
   const { t, services, state } = useApp();
   const [name, setName] = useState('');
@@ -23,13 +22,7 @@ export default function NewProfile() {
   }
   async function leave() { await services.session.logout(); router.replace('/welcome'); }
 
-  if (path === 'driver') return (
-    <Screen testID="screen-new-driver">
-      <T kind="title">{t('driver_signup_title')}</T>
-      <Notice text={t('driver_signup_soon')} />
-      <Button kind="secondary" label={t('logout')} onPress={leave} />
-    </Screen>
-  );
+  if (path === 'driver') return <Redirect href="/driver-signup" />;
   return (
     <Screen testID="screen-new-user">
       <T kind="title">{t('profile_title_user')}</T>

@@ -26,6 +26,17 @@ export async function api<T = any>(path: string, body?: unknown): Promise<T> {
   }
   return j as T;
 }
+// A driver's document photo (staff only). It is fetched with the login token and shown from memory (a blob: address),
+// so the photo never gets a shareable link and the token never appears in a web address.
+export async function photoUrl(id: string): Promise<string> {
+  let r: Response;
+  try { r = await fetch(BASE + '/get_document?id=' + encodeURIComponent(id), { headers: token ? { authorization: 'Bearer ' + token } : {} }); }
+  catch { throw new ApiError(0, 'network', ''); }
+  if (!r.ok) { const j: any = await r.json().catch(() => ({})); throw new ApiError(r.status, j.error ?? 'ERROR', j.message ?? ''); }
+  const b = await r.blob();
+  if (b.type !== 'image/jpeg') throw new ApiError(415, 'IMAGE_ONLY', '');
+  return URL.createObjectURL(b);
+}
 export const qs = (o: Record<string, string | number | boolean | undefined | null>) => {
   const p = Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== '' && v !== false).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&');
   return p ? '?' + p : '';

@@ -12,16 +12,18 @@ Branch: `claude/optimistic-cannon-iw9rm9` (repo zaki-arch22/delivery-app). Resum
 
 - Milestone "first screens": Expo Router shell, ar/fr/en with instant right-to-left, brand components, welcome, phone, code, first sender profile, temporary home, settings. 7 screen tests drive the real screens against the real backend. Android bundle builds. 307 tests green.
 
+- Milestone "driver photos": `upload_document` (decode + redraw, private folder, limits), add_profile takes photo ids, staff `get_document` (audited) and photos in the staff console, database guards, driver sign-up screen (camera/gallery) also from Settings. 14 functional + 19 attack + staff/console/app tests. 346 tests + 12 database rules green.
+
 ## In progress
 - (none)
 
 ## Next, in order (matches CLAUDE.md section 9)
-1. Photo upload server function (driver documents) + driver sign-up screen (photos, vehicle), and "add driver profile" in Settings.
-2. User path (new order with map, price, searching, tracking, my orders, rating, problem).
-3. Driver path (home online/offline, offer, active job, failure, earnings, cash).
+1. User path (new order with map, price, searching, tracking, my orders, rating, problem).
+2. Driver path (home online/offline, offer, active job, failure, earnings, cash, location).
+3. Push inside the app (needs Firebase from the owner), offline queue for job steps.
 
 ## Exact next action
-Design the upload function: read backend auth (add_profile driver docs) and staff list_pending_drivers; add `upload_document` (type/size checks, private storage outside the web folder, expiring signed links for staff), attack tests, then the driver sign-up screen with expo-image-picker.
+User path, step 1: add @maplibre/maplibre-react-native (check its version against Expo SDK 58 and its config plugin), build a map component with the style address as a setting (default OpenFreeMap "liberty") and the OSM credit, then the "New order" screen (pickup and drop-off pins, address details, size) calling get_quote.
 
 ## Dev notes
 - Screen tests: `test/http.ts` is the test HTTP client (jest-expo replaces fetch). Use `await fireEvent...` (testing library v14 is async).

@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { driverDocs, upload, PHOTO } from './docs';
 const HTTP = 'http://localhost:3399', WS = 'ws://localhost:3399/ws';
 if (!process.env.TEST_DATABASE_URL || /\/delivery$/.test(process.env.TEST_DATABASE_URL)) throw new Error('Tests need TEST_DATABASE_URL pointing to a separate test database, never the real one');
 const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL! });
@@ -22,10 +23,9 @@ class Sock {
   close() { this.ws.close(); }
 }
 async function login(phone: string, path: 'user' | 'driver') { await api('/send_code', { phone }); const c = (await api('/dev/last_code?phone=' + encodeURIComponent(phone))).b.code; return (await api('/verify_code', { phone, code: c, path })).b; }
-const docs = { id_photo_url: 'a', licence_photo_url: 'b', vehicle_photo_url: 'c', vehicle: 'motorbike' };
 async function makeUser(phone: string, name: string) { const l = await login(phone, 'user'); const r = await api('/add_profile', { type: 'user', display_name: name }, l.token); return { token: r.b.token as string, id: r.b.active_profile.id as string }; }
 async function makeDriver(phone: string, name: string, lat: number, lng: number, online = true) {
-  const l = await login(phone, 'driver'); const r = await api('/add_profile', { type: 'driver', display_name: name, documents: docs }, l.token); const id = r.b.active_profile.id;
+  const l = await login(phone, 'driver'); const r = await api('/add_profile', { type: 'driver', display_name: name, documents: await driverDocs(HTTP, l.token) }, l.token); const id = r.b.active_profile.id;
   await pool.query(`UPDATE profiles SET status='active' WHERE id=$1`, [id]);
   if (online) { await api('/set_online', { online: true }, r.b.token); await api('/update_location', { lat, lng }, r.b.token); }
   return { token: r.b.token as string, id: id as string };
@@ -110,7 +110,7 @@ const profileOf = async (id: number) => (await pool.query(`SELECT profile_id FRO
 
   // N11 two profiles on ONE phone number never see each other's notifications
   const A = await makeUser('+213550500001', 'Adam Seller'); const l2 = await login('+213550500001', 'user');
-  const addD = await api('/add_profile', { type: 'driver', display_name: 'Adam Driver', documents: docs }, l2.token); const AD = { token: addD.b.token as string, id: addD.b.active_profile.id as string };
+  const addD = await api('/add_profile', { type: 'driver', display_name: 'Adam Driver', documents: await driverDocs(HTTP, l2.token) }, l2.token); const AD = { token: addD.b.token as string, id: addD.b.active_profile.id as string };
   await pool.query(`UPDATE profiles SET status='active' WHERE id=$1`, [AD.id]); await api('/set_online', { online: true }, AD.token); await api('/update_location', P, AD.token);
   const sAU = new Sock(A.token), sAD = new Sock(AD.token); await until(() => sAU.ready && sAD.ready);
   const O6 = await order(U1.token, 'notify-order-006');

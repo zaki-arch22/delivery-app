@@ -2,56 +2,14 @@
 // against the REAL backend and the TEST database. Nothing is mocked except the phone's secure vault (kept in memory).
 import React from 'react';
 import { Alert } from 'react-native';
-import { Stack } from 'expo-router';
-import { renderRouter, screen, fireEvent, waitFor, act, configure } from 'expo-router/testing-library';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Pool } from 'pg';
-import { AppProvider, makeServices, Services } from '../src/lib/app';
+import { screen, fireEvent, waitFor, act } from 'expo-router/testing-library';
 import { memoryStore } from '../src/core/storage';
-import { nodeFetch } from './http';
 import { toInternational, display } from '../src/lib/phone';
-import Start from '../src/app/index';
-import Welcome from '../src/app/welcome';
-import Phone from '../src/app/phone';
-import Code from '../src/app/code';
-import NewProfile from '../src/app/new-profile';
-import Home from '../src/app/home';
-import Settings from '../src/app/settings';
-
-const API = process.env.API_URL!;
-if (!/_test$/.test(process.env.TEST_DATABASE_URL ?? '')) throw new Error('test database only');
-const db = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
-
-const devCode = async (phone: string) => ((await (await nodeFetch(API + '/dev/last_code?phone=' + encodeURIComponent(phone))).json()) as any).code as string;
-configure({ asyncUtilTimeout: 10000 });   // real network calls to the test server
-jest.setTimeout(60000);
-const metrics = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } };
-
-function routes(services: Services) {
-  const Layout = () => (
-    <SafeAreaProvider initialMetrics={metrics}>
-      <AppProvider services={services}><Stack screenOptions={{ headerShown: false }} /></AppProvider>
-    </SafeAreaProvider>
-  );
-  return { _layout: Layout, index: Start, welcome: Welcome, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings };
-}
-async function open(services: Services) {
-  const r = await renderRouter(routes(services), { initialUrl: '/' });
-  return r;
-}
-const svc = (store = memoryStore()) => makeServices(store, API, nodeFetch);
-
-async function loginThroughScreens(phoneTyped: string, path: 'user' | 'driver') {
-  await fireEvent.press(await screen.findByTestId('path-' + path));
-  await fireEvent.changeText(await screen.findByTestId('phone-input'), phoneTyped);
-  await fireEvent.press(screen.getByTestId('send-code'));
-  await screen.findByTestId('screen-code');
-  const code = await devCode(toInternational(phoneTyped)!);
-  await act(async () => { await fireEvent.changeText(screen.getByTestId('code-input'), code); });
-}
+import { API, db, devCode, open, svc, uploadDocs, loginThroughScreens } from './screens';
+import { nodeFetch } from './http';
 
 beforeAll(async () => {
-  await db.query(`TRUNCATE otp_codes, sessions, notifications, device_tokens, driver_details, profiles, accounts, security_events CASCADE`);
+  await db.query(`TRUNCATE otp_codes, sessions, notifications, device_tokens, driver_details, documents, profiles, accounts, security_events CASCADE`);
 });
 afterAll(async () => { await db.end(); });
 
@@ -117,11 +75,11 @@ test('sender sign-up: bad number, wrong code, then code -> name -> home; reopeni
   expect(await screen.findByText('Hello, Lina Haddad')).toBeTruthy();
 });
 
-test('driver path, new number: no profile is created and the driver sign-up notice is shown', async () => {
+test('driver path, new number: no profile is created; the driver sign-up opens', async () => {
   const s = svc();
   await open(s);
   await loginThroughScreens('0553000002', 'driver');
-  await screen.findByTestId('screen-new-driver');
+  await screen.findByTestId('screen-driver-signup');
   const me = await s.client.call('/get_me');                       // asked from the server, not the screen
   expect(me.profiles).toEqual([]);
   expect(me.active_profile).toBeNull();
@@ -139,7 +97,7 @@ test('driver with both profiles: pending status shown, switch to the sender prof
   const phone = '+213553000003';
   await nodeFetch(API + '/send_code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ phone }) });
   const v = await (await nodeFetch(API + '/verify_code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ phone, code: await devCode(phone), path: 'driver' }) })).json() as any;
-  const d = await (await nodeFetch(API + '/add_profile', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + v.token }, body: JSON.stringify({ type: 'driver', display_name: 'Karim Driver', documents: { id_photo_url: 'a', licence_photo_url: 'b', vehicle_photo_url: 'c', vehicle: 'motorbike' } }) })).json() as any;
+  const d = await (await nodeFetch(API + '/add_profile', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + v.token }, body: JSON.stringify({ type: 'driver', display_name: 'Karim Driver', documents: await uploadDocs(v.token) }) })).json() as any;
   await nodeFetch(API + '/add_profile', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + d.token }, body: JSON.stringify({ type: 'user', display_name: 'Karim Sender' }) });
 
   await open(svc());
@@ -151,14 +109,17 @@ test('driver with both profiles: pending status shown, switch to the sender prof
   expect(await screen.findByText('Hello, Karim Sender')).toBeTruthy();
 });
 
-test('settings: no button for a driver profile that cannot be added yet, log out, log out of all devices', async () => {
+test('settings: add a driver profile opens sign-up, log out, log out of all devices', async () => {
   const store = memoryStore();
   await open(svc(store));
   await loginThroughScreens('0553000001', 'user');
   expect(await screen.findByText('Hello, Lina Haddad')).toBeTruthy();
   await fireEvent.press(screen.getByTestId('open-settings'));
   await screen.findByTestId('screen-settings');
-  expect(screen.getByText(/Adding a driver profile opens/)).toBeTruthy();    // no button that does not work
+  await fireEvent.press(screen.getByTestId('add-driver'));
+  await screen.findByTestId('screen-driver-signup');
+  await fireEvent.press(screen.getByText('‹ Back'));
+  await screen.findByTestId('screen-settings');
   await fireEvent.press(screen.getByTestId('logout'));
   await screen.findByTestId('screen-welcome');
   expect(await store.get('refresh_token')).toBeNull();

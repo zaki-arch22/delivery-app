@@ -1,6 +1,8 @@
 /** @jest-environment node */
 // The app's foundation, against the REAL backend (test database only).
 import { createHmac, hkdfSync } from 'crypto';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { Pool } from 'pg';
 import WS from 'ws';
 import { Client, ApiError } from '../src/core/api';
@@ -58,7 +60,11 @@ test('3. FIVE requests notice an expired key at the same moment: exactly ONE ren
 
 test('4. a second profile from Settings, and switching between the two', async () => {
   const app = await signUp('+213552000004', 'Karim Seller');
-  await app.session.addProfile('driver', 'Karim Driver', { id_photo_url: 'a', licence_photo_url: 'b', vehicle_photo_url: 'c', vehicle: 'motorbike' });
+  // Sign-up photos go up through the same client (renewal and all), then add_profile gets their ids.
+  const photo = () => new Blob([readFileSync(join(__dirname, '../../backend/test/fixtures/photo.jpg'))], { type: 'image/jpeg' });
+  const docs = { vehicle: 'motorbike', id_photo: await app.session.uploadDocument('id_photo', photo()), licence_photo: await app.session.uploadDocument('licence_photo', photo()), vehicle_photo: await app.session.uploadDocument('vehicle_photo', photo()) };
+  expect(docs.id_photo).toMatch(/^[0-9a-f-]{36}$/);
+  await app.session.addProfile('driver', 'Karim Driver', docs);
   expect(app.session.state.active?.type).toBe('driver'); expect(app.session.state.profiles.length).toBe(2);
   await app.session.switchProfile('user');
   expect(app.session.state.active?.type).toBe('user');

@@ -26,6 +26,10 @@ MemoryDenyWriteExecute=false
 SystemCallFilter=@system-service
 CapabilityBoundingSet=
 UMask=0077
+# The ONLY folder the app may write to: driver document photos (ProtectSystem=strict makes everything else read-only).
+StateDirectory=delivery/uploads
+StateDirectoryMode=0700
+ReadWritePaths=/var/lib/delivery/uploads
 
 [Install]
 WantedBy=multi-user.target
