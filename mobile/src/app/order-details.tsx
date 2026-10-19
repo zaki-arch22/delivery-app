@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { idempotencyKey, ApiError } from '../core/api';
 import { useApp } from '../lib/app';
 import { errorMessage } from '../lib/errors';
-import { Address, km, minutes, money, orders, Quote, Size } from '../lib/orders';
+import { Address, km, minutes, money, orders, Quote, RecipientHistory, Size } from '../lib/orders';
 import { toInternational } from '../lib/phone';
 import { color, font, radius, space } from '../lib/theme';
 import { Button, Field, Gap, Notice, Screen, T } from '../ui/kit';
@@ -21,6 +21,14 @@ export default function OrderDetails() {
   const [size, setSize] = useState<Size | null>(null);
   const [payer, setPayer] = useState<'sender' | 'recipient'>('sender');
   const [cod, setCod] = useState('');
+  const [inspection, setInspection] = useState<'outside' | 'open'>('outside');
+  // How earlier parcels to this receiver number ended (counts only): shown once the number is complete.
+  const [hist, setHist] = useState<RecipientHistory | null>(null);
+  useEffect(() => {
+    const ph = toInternational(rPhone); setHist(null); if (!ph) return;
+    const h = setTimeout(() => { api.recipientHistory(ph).then(setHist).catch(() => {}); }, 600);
+    return () => clearTimeout(h);
+  }, [rPhone]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [quote, setQuote] = useState<Quote | null>(null), [quoting, setQuoting] = useState(false);
   const [price, setPrice] = useState(0);
   const [errs, setErrs] = useState<Record<string, string | null>>({});
@@ -52,7 +60,7 @@ export default function OrderDetails() {
   async function submit() {
     if (!validate() || !quote) { if (!quote && size) setMsg(t('choose_size')); return; }
     setBusy(true); setMsg(null);
-    const body = (q: Quote) => ({ quote_id: q.quote_id, offered_da: Math.min(q.max_da, Math.max(q.min_da, price)), pickup_address: pa, dropoff_address: da, recipient_name: rName.trim(), recipient_phone: toInternational(rPhone)!, payer, cod_amount_da: cod.trim() ? Number(cod.trim()) : 0 });
+    const body = (q: Quote) => ({ quote_id: q.quote_id, offered_da: Math.min(q.max_da, Math.max(q.min_da, price)), pickup_address: pa, dropoff_address: da, recipient_name: rName.trim(), recipient_phone: toInternational(rPhone)!, payer, cod_amount_da: cod.trim() ? Number(cod.trim()) : 0, inspection });
     try {
       const o = await api.create(key, body(quote));
       router.dismissAll(); router.push({ pathname: '/order/[id]', params: { id: o.id } });
@@ -81,6 +89,7 @@ export default function OrderDetails() {
         <Field testID="da-notes" label={t('notes_driver')} value={da.notes ?? ''} onChangeText={v => setDa({ ...da, notes: v })} maxLength={200} />
         <Field testID="r-name" label={t('recipient_name')} value={rName} onChangeText={setRName} error={errs.rName} maxLength={60} autoComplete="name" />
         <Field testID="r-phone" label={t('recipient_phone')} hint={t('phone_hint')} value={rPhone} onChangeText={setRPhone} error={errs.rPhone} keyboardType="phone-pad" maxLength={18} />
+        {hist ? <Notice testID="r-history" warn={hist.refused > 0} text={hist.delivered + hist.refused + hist.no_answer === 0 ? t('rhist_none') : t('rhist_line', { d: hist.delivered, r: hist.refused, n: hist.no_answer })} /> : null}
       </Section>
 
       <T kind="label">{t('size_label')}</T>
@@ -89,6 +98,8 @@ export default function OrderDetails() {
       <Gap n={3} />
       <T kind="label">{t('payer_label')}</T>
       <Choice testID="payer" value={payer} onChange={setPayer} options={[{ v: 'sender', label: t('payer_sender') }, { v: 'recipient', label: t('payer_recipient') }]} />
+      <T kind="label">{t('inspection_label')}</T>
+      <Choice testID="inspection" value={inspection} onChange={setInspection} options={[{ v: 'outside', label: t('insp_outside'), sub: t('insp_outside_sub') }, { v: 'open', label: t('insp_open'), sub: t('insp_open_sub') }]} />
       <Field testID="cod" label={t('cod_label')} hint={t('cod_hint')} value={cod} onChangeText={v => setCod(v.replace(/[^\d]/g, ''))} error={errs.cod} keyboardType="number-pad" maxLength={9} />
 
       {quoting ? <Notice text={t('quote_loading')} /> : null}

@@ -13,12 +13,17 @@ export interface Order {
   distance_m: number; duration_s: number; delivery_code: string; pickup_address: Address; dropoff_address: Address; recipient_name: string; recipient_phone: string;
   pickup_lat: number; pickup_lng: number; dropoff_lat: number; dropoff_lng: number; created_at: string; rated: boolean;
   driver: null | { name: string; photo_url: string | null; rating: string | null; vehicle: 'motorbike' | 'car'; location: null | { lat: number; lng: number; at: string } };
+  pickup_code: string | null; inspection: 'outside' | 'open'; tracking_token: string | null; recipient_expecting_at: string | null;
+  pickup_photo_doc: string | null; pickup_distance_m: number | null; delivery_distance_m: number | null; evidence_photos: string[];
+  history: { type: string; at: string; data: any }[];
 }
+export type RecallReason = 'buyer_cancelled' | 'wrong_parcel' | 'wrong_address' | 'other';
+export interface RecipientHistory { delivered: number; refused: number; no_answer: number }
 export const ACTIVE: Status[] = ['searching', 'assigned', 'picked_up'];
 
 export const orders = (c: Client) => ({
   quote: (pickup: Point, dropoff: Point, size: Size) => c.call<Quote>('/get_quote', { pickup, dropoff, size }),
-  create: (key: string, b: { quote_id: string; offered_da: number; pickup_address: Address; dropoff_address: Address; recipient_name: string; recipient_phone: string; payer: 'sender' | 'recipient'; cod_amount_da: number }) =>
+  create: (key: string, b: { quote_id: string; offered_da: number; pickup_address: Address; dropoff_address: Address; recipient_name: string; recipient_phone: string; payer: 'sender' | 'recipient'; cod_amount_da: number; inspection: 'outside' | 'open' }) =>
     c.call<Order>('/create_order', b, { 'Idempotency-Key': key }),
   get: (id: string) => c.call<Order>('/get_order?id=' + encodeURIComponent(id)),
   list: (page = 1) => c.call<{ page: number; orders: Order[] }>('/list_orders?page=' + page),
@@ -26,6 +31,8 @@ export const orders = (c: Client) => ({
   raise: (id: string, price: number) => c.call<Order>('/raise_price', { order_id: id, new_offered_da: price }),
   rate: (id: string, stars: number, comment?: string) => c.call('/submit_rating', { order_id: id, stars, comment: comment || undefined }),
   problem: (id: string, reason: string, note?: string) => c.call('/report_problem', { order_id: id, reason, note: note || undefined }),
+  recall: (id: string, reason: RecallReason) => c.call<Order>('/recall_order', { order_id: id, reason }),
+  recipientHistory: (phone: string) => c.call<RecipientHistory>('/recipient_history?phone=' + encodeURIComponent(phone)),
 });
 
 // 12500 -> "12 500" (how prices are written in Algeria). Digits stay Western in every language, like on Algerian price tags.

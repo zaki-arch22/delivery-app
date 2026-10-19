@@ -109,7 +109,7 @@ test('8. offline job-step queue: a step the server refuses is dropped and report
   const app = await signUp('+213552000008', 'Queue Tester');
   const q = new StepQueue(app.client, app.store, 200);
   const events: any[] = []; q.onEvent((e: any) => events.push(e));
-  await q.send({ order_id: '00000000-0000-0000-0000-000000000000', step: 'picked_up' });   // a sender profile has no job: refused
+  await q.send({ order_id: '00000000-0000-0000-0000-000000000000', step: 'picked_up', location: { lat: 36.75, lng: 3.05 } });   // a sender profile has no job: refused
   expect(events).toHaveLength(1);
   expect(events[0].sent).toBe(false);
   expect(events[0].error.code).toBe('WRONG_PROFILE');

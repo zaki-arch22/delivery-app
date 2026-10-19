@@ -1,9 +1,9 @@
 // The sender path, driven like a person would, against the REAL backend and the TEST database:
 // map pins -> details -> price -> order -> searching (raise price) -> driver comes -> delivered -> rating -> problem report;
 // a cancelled order; an area we do not serve; my orders. Only the map drawing and the phone's GPS are replaced.
-import { Alert } from 'react-native';
+import { Alert, Share } from 'react-native';
 import { screen, fireEvent, act, waitFor } from 'expo-router/testing-library';
-import { API, db, open, svc, loginThroughScreens, uploadDocs, devCode } from './screens';
+import { API, db, open, svc, loginThroughScreens, uploadDocs, devCode, PHOTO } from './screens';
 import { nodeFetch } from './http';
 
 jest.mock('expo-location', () => ({
@@ -20,6 +20,13 @@ const P = { lat: 36.7538, lng: 3.0588 }, D = { lat: 36.7650, lng: 3.0700 };
 async function moveMapTo(p: { lat: number; lng: number }) {
   await act(async () => { await fireEvent(screen.getByTestId('map'), 'onRegionDidChange', { nativeEvent: { center: [p.lng, p.lat], zoom: 16 } }); });
 }
+// The driver's side of a pickup and a delivery, through the API (the driver screens have their own tests).
+const parcelPhoto = async (tok: string) => ((await (await nodeFetch(API + '/upload_document?kind=parcel_photo', { method: 'POST', headers: { authorization: 'Bearer ' + tok, 'content-type': 'image/jpeg' }, body: PHOTO })).json()) as any).document_id;
+async function apiPickup(orderId: string, dTok: string) {
+  const o = (await db.query(`SELECT pickup_code, ST_Y(pickup_point::geometry) lat, ST_X(pickup_point::geometry) lng FROM orders WHERE id=$1`, [orderId])).rows[0];
+  return call('/update_job_step', { order_id: orderId, step: 'picked_up', pickup_code: o.pickup_code, parcel_photo: await parcelPhoto(dTok), location: { lat: o.lat, lng: o.lng } }, dTok);
+}
+const dropoffOf = async (orderId: string) => (await db.query(`SELECT ST_Y(dropoff_point::geometry) lat, ST_X(dropoff_point::geometry) lng FROM orders WHERE id=$1`, [orderId])).rows[0];
 async function driverOnline(phone: string, at: { lat: number; lng: number }) {
   await call('/send_code', { phone });
   const v = await call('/verify_code', { phone, code: await devCode(phone), path: 'driver' });
@@ -84,6 +91,8 @@ test('a full order: pins, details, price, searching, raise, driver, delivered, r
   expect((await db.query(`SELECT count(*)::int n FROM orders`)).rows[0].n).toBe(0);
 
   await fillDetails();
+  expect(await screen.findByTestId('r-history')).toHaveTextContent(/No earlier parcels to this number/);   // what earlier parcels to this number became
+  await fireEvent.press(screen.getByTestId('inspection-open'));                                         // the buyer may open it before paying
   await act(async () => { await fireEvent.press(screen.getByTestId('size-small')); });
   await screen.findByTestId('price-box');
   expect(screen.getByTestId('trip-info')).toHaveTextContent(/By motorbike/);
@@ -98,8 +107,8 @@ test('a full order: pins, details, price, searching, raise, driver, delivered, r
 
   // Searching: the order exists once, with exactly what was chosen.
   expect(await screen.findByTestId('order-status')).toHaveTextContent(/Looking for a driver/);
-  const [o] = (await db.query(`SELECT id, offered_da, payer, cod_amount_da, recipient_phone, pickup_address, dropoff_address, delivery_code FROM orders`)).rows;
-  expect(o).toMatchObject({ offered_da: rec + 10, payer: 'recipient', cod_amount_da: 2500, recipient_phone: '+213770112233' });
+  const [o] = (await db.query(`SELECT id, ref, offered_da, payer, cod_amount_da, recipient_phone, pickup_address, dropoff_address, delivery_code, pickup_code, inspection FROM orders`)).rows;
+  expect(o).toMatchObject({ offered_da: rec + 10, payer: 'recipient', cod_amount_da: 2500, recipient_phone: '+213770112233', inspection: 'open' });
   expect(o.pickup_address).toEqual({ street: 'Rue Didouche Mourad 12' });
   expect(screen.getByTestId('delivery-code')).toHaveTextContent(o.delivery_code);    // the sender sees the code
   await act(async () => { await fireEvent.press(screen.getByTestId('raise-50')); });
@@ -113,10 +122,22 @@ test('a full order: pins, details, price, searching, raise, driver, delivered, r
   expect(await screen.findByText('A driver is coming to pick it up')).toBeTruthy();
   expect(screen.getByTestId('driver-card')).toHaveTextContent(/Rachid Rider/);
   expect(screen.getByTestId('order-price')).toHaveTextContent(new RegExp(`Price: ${rec + 60} DA \\(fixed\\)`));
-  await call('/update_job_step', { order_id: o.id, step: 'picked_up' }, dTok);
+  expect(screen.getByTestId('pickup-code')).toHaveTextContent(o.pickup_code);         // the sender shows this (or its QR) to the driver
+  expect(screen.getByTestId('pickup-qr')).toBeTruthy();
+  const shared = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as any);
+  await fireEvent.press(screen.getByTestId('share-tracking'));
+  const msg = (shared.mock.calls[0][0] as any).message as string;
+  expect(msg).toMatch(/Amine Recipient/); expect(msg).toMatch(new RegExp(`${API}/t/[A-Za-z0-9_-]{32}`));   // the receiver's tracking link
+  shared.mockRestore();
+  await call('/track_expecting', { t: /\/t\/([A-Za-z0-9_-]{32})/.exec(msg)![1] });   // the receiver opens the link and confirms
+  await apiPickup(o.id, dTok);
   expect(await screen.findByText('On the way to the recipient')).toBeTruthy();
+  expect(await screen.findByTestId('parcel-photo')).toBeTruthy();                      // the photo the driver took at pickup
+  expect(screen.getByTestId('expecting')).toHaveTextContent(/expecting the parcel/);
+  expect(screen.getByTestId('history')).toHaveTextContent(/Parcel collected \(code \+ photo\)/);
+  expect(screen.queryByTestId('pickup-box')).toBeNull();                               // the pickup code is no longer needed
   expect(screen.queryByTestId('cancel-order')).toBeNull();                              // no cancel after pickup
-  await call('/update_job_step', { order_id: o.id, step: 'delivered', delivery_code: o.delivery_code, cash_collected_da: 2500 + rec + 60 }, dTok);
+  await call('/update_job_step', { order_id: o.id, step: 'delivered', delivery_code: o.delivery_code, cash_collected_da: 2500 + rec + 60, location: await dropoffOf(o.id) }, dTok);
   expect(await screen.findByText('Delivered')).toBeTruthy();
 
   // Rating, once.
@@ -173,4 +194,27 @@ test('a place we do not serve is refused with a clear message, and no order is m
   await act(async () => { await fireEvent.press(screen.getByTestId('size-small')); });
   expect(await screen.findByTestId('order-msg')).toHaveTextContent(/We do not deliver there yet/);
   expect(screen.queryByTestId('price-box')).toBeNull();
+});
+
+test('after pickup the sender calls the parcel back: it returns to him, with a code and a QR for the driver', async () => {
+  const phone = '+213555000001';
+  await call('/send_code', { phone }); const v = await call('/verify_code', { phone, code: await devCode(phone), path: 'user' });
+  const q = await call('/get_quote', { pickup: P, dropoff: D, size: 'small' }, v.token);
+  const o = await (await nodeFetch(API + '/create_order', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + v.token, 'idempotency-key': 'recall-test-0001' }, body: JSON.stringify({ quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: { street: 'Rue Hassiba 3' }, dropoff_address: { street: 'Kouba' }, recipient_name: 'Recall Recipient', recipient_phone: '+213770998877', payer: 'sender' }) })).json() as any;
+  const dTok = await driverOnline('+213555000019', { lat: 36.7545, lng: 3.0590 });
+  let offer: any = null; for (let i = 0; i < 40 && !offer; i++) { offer = (await call('/get_current_offer', undefined, dTok)).offer; if (!offer) await sleep(250); }
+  await call('/accept_offer', { offer_id: offer.offer_id }, dTok);
+  await apiPickup(o.id, dTok);
+  await open(svc());
+  await sender('0555000001');
+  await fireEvent.press(await screen.findByTestId('open-orders'));
+  await fireEvent.press(await screen.findByText(/→ Recall Recipient/));
+  await fireEvent.press(await screen.findByTestId('recall'));
+  expect(screen.getByTestId('recall-confirm').props.accessibilityState.disabled).toBe(true);   // a reason is required
+  await fireEvent.press(screen.getByTestId('recall-buyer_cancelled'));
+  await act(async () => { await fireEvent.press(screen.getByTestId('recall-confirm')); });
+  await waitFor(() => expect(screen.getByTestId('order-status')).toHaveTextContent(/Delivery failed/));
+  expect(screen.getByTestId('history')).toHaveTextContent(/You called the parcel back: The buyer cancelled/);
+  const ret = (await db.query(`SELECT id, status, leg FROM orders WHERE parent_order_id=$1`, [o.id])).rows[0];
+  expect(ret).toMatchObject({ status: 'picked_up', leg: 'return' });                    // the driver is already bringing it back
 });

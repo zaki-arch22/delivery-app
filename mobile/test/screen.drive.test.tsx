@@ -15,6 +15,14 @@ jest.mock('expo-location', () => ({
   Accuracy: { Balanced: 3, High: 4 },
 }));
 
+// The phone camera (photos) is replaced by a fixed test picture; the QR camera by a stand-in the test controls.
+const mockPhoto = require('fs').readFileSync(require('path').join(__dirname, '../../backend/test/fixtures/photo.jpg'));
+jest.mock('../src/lib/photos', () => ({
+  pickPhoto: jest.fn(async () => ({ uri: 'file:///test/parcel.jpg' })),
+  photoBlob: jest.fn(async () => new Blob([mockPhoto], { type: 'image/jpeg' })),
+}));
+const { cameraMock } = require('./mocks/camera');
+
 const call = async (path: string, body?: any, token?: string, headers: any = {}) => (await (await nodeFetch(API + path, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}), ...headers }, body: body ? JSON.stringify(body) : undefined })).json()) as any;
 const P = { lat: 36.7538, lng: 3.0588 }, D = { lat: 36.7650, lng: 3.0700 };
 let sender = '', n = 0;
@@ -23,6 +31,7 @@ const rx = (text: string) => new RegExp(text.replace(/[\u00a0 ]/g, '\\s'));
 
 // Driver home, online (tests can run alone or in order).
 async function driverOnlineHome(services = svc()) {
+  await db.query(`DELETE FROM otp_codes`);   // the same test number logs in many times: stay under the 5-codes-per-hour protection
   await open(services);
   await loginThroughScreens('0556000002', 'driver');
   const st = await screen.findByTestId('online-state');
@@ -33,6 +42,18 @@ async function login(phone: string, path: 'user' | 'driver') { await call('/send
 async function newOrder(extra: any = {}) {
   const q = await call('/get_quote', { pickup: P, dropoff: D, size: 'small' }, sender);
   return call('/create_order', { quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: { street: 'Rue Larbi Ben Mhidi 5' }, dropoff_address: { landmark: 'Jardin d’Essai' }, recipient_name: 'Samir Recipient', recipient_phone: '+213661234567', payer: 'sender', ...extra }, sender, { 'idempotency-key': 'drive-test-' + (++n) + '-' + Date.now() });
+}
+
+// Pickup as a driver does it: the sender's code (typed, or read from his QR), a parcel photo, then "picked up".
+async function pickup(orderId: string, how: 'type' | 'qr' = 'type') {
+  const r = (await db.query(`SELECT ref, pickup_code FROM orders WHERE id=$1`, [orderId])).rows[0];
+  if (how === 'qr') {
+    await fireEvent.press(await screen.findByTestId('scan-pickup'));
+    cameraMock.next = `PCK1:${r.ref}:${r.pickup_code}`;
+    await fireEvent.press(await screen.findByTestId('mock-scan'));
+  } else await fireEvent.changeText(await screen.findByTestId('pickup-code-input'), r.pickup_code);
+  await act(async () => { await fireEvent.press(screen.getByTestId('parcel-photo')); });
+  await act(async () => { await fireEvent.press(screen.getByTestId('picked-up')); });
 }
 
 beforeAll(async () => {
@@ -70,7 +91,28 @@ test('online, offer with cash, accept, pickup, wrong code, cash check, delivered
   await fireEvent.press(screen.getByTestId('call'));
   expect(dial).toHaveBeenCalledWith('tel:+213556000001');                                // calls the sender
   await act(async () => { await fireEvent.press(screen.getByTestId('picked-up')); });
+  expect(await screen.findByTestId('job-msg')).toHaveTextContent(/pickup code has 4 digits/);   // no pickup without the sender's code
+  const ref = (await db.query(`SELECT ref FROM orders WHERE id=$1`, [o.id])).rows[0].ref;
+  await fireEvent.press(screen.getByTestId('scan-pickup'));
+  cameraMock.next = `DLV1:${ref}:1234`;                                                   // the wrong kind of QR (a delivery QR)
+  await fireEvent.press(await screen.findByTestId('mock-scan'));
+  expect(await screen.findByTestId('job-msg')).toHaveTextContent(/not the right one for this step/);
+  await fireEvent.press(screen.getByTestId('scan-pickup'));
+  cameraMock.next = `PCK1:D999999:1234`;                                                  // another order's QR
+  await fireEvent.press(await screen.findByTestId('mock-scan'));
+  expect(await screen.findByTestId('job-msg')).toHaveTextContent(/belongs to another order/);
+  await fireEvent.press(screen.getByTestId('scan-pickup'));
+  cameraMock.next = `PCK1:${ref}:${(await db.query(`SELECT pickup_code FROM orders WHERE id=$1`, [o.id])).rows[0].pickup_code}`;
+  await fireEvent.press(await screen.findByTestId('mock-scan'));
+  await act(async () => { await fireEvent.press(screen.getByTestId('picked-up')); });
+  expect(await screen.findByTestId('job-msg')).toHaveTextContent(/Take a photo of the parcel first/);   // no pickup without a photo
+  await act(async () => { await fireEvent.press(screen.getByTestId('parcel-photo')); });
+  expect(screen.getByTestId('parcel-photo')).toHaveTextContent(/Photo taken/);
+  await act(async () => { await fireEvent.press(screen.getByTestId('picked-up')); });
   await waitFor(() => expect(screen.getByTestId('job-step')).toHaveTextContent(/Deliver the parcel/));
+  const proof = (await db.query(`SELECT pickup_photo_doc IS NOT NULL AS photo, pickup_distance_m FROM orders WHERE id=$1`, [o.id])).rows[0];
+  expect(proof.photo).toBe(true); expect(proof.pickup_distance_m).toBeLessThan(300);      // photo and position reached the server
+  expect(screen.getByTestId('inspection')).toHaveTextContent(/outside of the parcel only/);
 
   const code = (await db.query(`SELECT delivery_code FROM orders WHERE id=$1`, [o.id])).rows[0].delivery_code as string;
   const wrong = code === '0000' ? '1111' : '0000';
@@ -109,19 +151,40 @@ test('cannot deliver: the job turns into a return to the sender, finished with t
   const o = await newOrder();
   expect(await screen.findByTestId('offer-card', {}, { timeout: 15000 })).toBeTruthy();
   await act(async () => { await fireEvent.press(screen.getByTestId('accept-offer')); });
-  const el_picked_up = await screen.findByTestId('picked-up'); await act(async () => { await fireEvent.press(el_picked_up); });
+  await pickup(o.id);
   await fireEvent.press(await screen.findByTestId('cant-deliver'));
   expect(screen.getByTestId('fail-confirm').props.accessibilityState.disabled).toBe(true);   // a reason is required
-  await fireEvent.press(screen.getByTestId('fail-no_answer'));
+  await fireEvent.press(screen.getByTestId('fail-refused_damaged'));
+  await act(async () => { await fireEvent.press(screen.getByTestId('fail-confirm')); });
+  expect(await screen.findByTestId('job-msg')).toHaveTextContent(/photo as evidence first/);  // damage needs a photo
+  await act(async () => { await fireEvent.press(screen.getByTestId('evidence-photo')); });
   await act(async () => { await fireEvent.press(screen.getByTestId('fail-confirm')); });
   await waitFor(() => expect(screen.getByTestId('job-step')).toHaveTextContent(/Return the parcel to the sender/));
   expect(screen.getByTestId('job-address')).toHaveTextContent(/Rue Larbi Ben Mhidi 5/);   // back to the pickup address
-  const ret = (await db.query(`SELECT id, delivery_code FROM orders WHERE parent_order_id=$1`, [o.id])).rows[0];
-  await fireEvent.changeText(screen.getByTestId('code-input'), ret.delivery_code);
+  const ret = (await db.query(`SELECT id, ref, delivery_code FROM orders WHERE parent_order_id=$1`, [o.id])).rows[0];
+  expect((await db.query(`SELECT count(*)::int n FROM documents WHERE order_id=$1 AND kind='evidence_photo'`, [o.id])).rows[0].n).toBe(1);
+  await fireEvent.press(screen.getByTestId('scan-delivery'));                             // the sender shows his QR: read by the camera
+  cameraMock.next = `DLV1:${ret.ref}:${ret.delivery_code}`;
+  await fireEvent.press(await screen.findByTestId('mock-scan'));
   await act(async () => { await fireEvent.press(screen.getByTestId('delivered')); });
   expect(await screen.findByTestId('job-done')).toBeTruthy();
   expect(screen.queryByTestId('rate-sender')).toBeNull();                                  // return legs are not rated
   expect((await db.query(`SELECT status FROM orders WHERE id IN ($1,$2) ORDER BY leg`, [o.id, ret.id])).rows.map((r: any) => r.status)).toEqual(['failed', 'delivered']);   // original failed, return delivered
+  expect((await db.query(`SELECT data->>'method' m FROM order_events WHERE order_id=$1 AND type='delivered'`, [ret.id])).rows[0].m).toBe('qr');
+});
+
+test('the driver gives a job back before pickup: it searches again for another driver', async () => {
+  await driverOnlineHome();
+  const o = await newOrder();
+  expect(await screen.findByTestId('offer-card', {}, { timeout: 15000 })).toBeTruthy();
+  await act(async () => { await fireEvent.press(screen.getByTestId('accept-offer')); });
+  await fireEvent.press(await screen.findByTestId('give-back'));
+  expect(screen.getByTestId('release-confirm').props.accessibilityState.disabled).toBe(true);   // a reason is required
+  await fireEvent.press(screen.getByTestId('release-vehicle_problem'));
+  await act(async () => { await fireEvent.press(screen.getByTestId('release-confirm')); });
+  expect(await screen.findByTestId('job-none')).toHaveTextContent(/Another driver will take it/);
+  expect((await db.query(`SELECT status, driver_profile_id FROM orders WHERE id=$1`, [o.id])).rows[0]).toEqual({ status: 'searching', driver_profile_id: null });
+  await call('/cancel_order', { order_id: o.id }, sender);
 });
 
 test('the sender cancels after the driver accepted: the driver is told; going offline', async () => {
@@ -145,7 +208,10 @@ test('no network in the middle of a job: steps are saved on the phone and sent w
   const o = await newOrder();
   expect(await screen.findByTestId('offer-card', {}, { timeout: 15000 })).toBeTruthy();
   await act(async () => { await fireEvent.press(screen.getByTestId('accept-offer')); });
-  const pick = await screen.findByTestId('picked-up');
+  const pc = (await db.query(`SELECT pickup_code FROM orders WHERE id=$1`, [o.id])).rows[0].pickup_code;
+  await fireEvent.changeText(await screen.findByTestId('pickup-code-input'), pc);
+  await act(async () => { await fireEvent.press(screen.getByTestId('parcel-photo')); });
+  const pick = screen.getByTestId('picked-up');
   const status = async () => (await db.query(`SELECT status FROM orders WHERE id=$1`, [o.id])).rows[0].status;
 
   net.down = true;                                                                         // the driver enters a dead zone
@@ -157,6 +223,7 @@ test('no network in the middle of a job: steps are saved on the phone and sent w
 
   net.down = false;                                                                        // network is back: sent by itself
   await waitFor(async () => expect(await status()).toBe('picked_up'), { timeout: 8000 });
+  expect((await db.query(`SELECT pickup_photo_doc IS NOT NULL AS p FROM orders WHERE id=$1`, [o.id])).rows[0].p).toBe(true);   // the photo kept on the phone was sent too
   await waitFor(() => expect(screen.queryByTestId('unsent')).toBeNull());
 
   const code = (await db.query(`SELECT delivery_code FROM orders WHERE id=$1`, [o.id])).rows[0].delivery_code as string;

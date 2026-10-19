@@ -7,6 +7,7 @@ import { KeyStore, secureStore } from '../core/storage';
 import { deviceLang, isLang, isRtl, Key, Lang, translate } from '../i18n';
 import { apiUrl, wsUrl } from './config';
 import { tracking } from './tracker';
+import { photoBlob } from './photos';
 
 export interface Services { client: Client; session: Session; store: KeyStore; realtime: Realtime | null; queue: StepQueue }
 interface AppCtx {
@@ -22,7 +23,7 @@ const LANG_KEY = 'lang';
 
 export function makeServices(store: KeyStore = secureStore(), url = apiUrl(), fetchFn?: typeof fetch, WS: typeof WebSocket | null = typeof WebSocket === 'undefined' ? null : WebSocket, retryMs?: number): Services {
   const client = new Client(url, store, fetchFn);
-  return { client, session: new Session(client), store, realtime: WS ? new Realtime(client, store, wsUrl(url), WS) : null, queue: new StepQueue(client, store, retryMs) };
+  return { client, session: new Session(client), store, realtime: WS ? new Realtime(client, store, wsUrl(url), WS) : null, queue: new StepQueue(client, store, retryMs, photoBlob) };
 }
 
 // Holds the login state and the chosen language for the whole app. Tests pass their own services.
