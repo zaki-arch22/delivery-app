@@ -8,6 +8,15 @@ const who = (req: any): Who => req.who;
 export class AuthController {
   constructor(private auth: AuthService) {}
 
+  @Public() @Get('login_methods')
+  methods() { return this.auth.loginMethods(); }
+
+  @Public() @Post('login_google') @HttpCode(200)
+  google(@Req() r: any, @Body() b: any) { return this.auth.loginGoogle(b?.id_token, b?.path, r.ip); }
+
+  @Access('account') @Post('set_phone') @HttpCode(200)
+  setPhone(@Req() r: any, @Body() b: any) { return this.auth.setPhone(who(r).accountId, b?.phone); }
+
   @Public() @Post('send_code') @HttpCode(200)
   sendCode(@Req() r: any, @Body() b: any) { return this.auth.sendCode(b?.phone, r.ip); }
 

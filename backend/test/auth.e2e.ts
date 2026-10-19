@@ -12,6 +12,7 @@ async function login(phone: string, path: 'user' | 'driver') {
 }
 import { Pool } from 'pg';
 import { driverDocs, upload, PHOTO } from './docs';
+import { googleToken } from './google';
 if (!process.env.TEST_DATABASE_URL || /\/delivery$/.test(process.env.TEST_DATABASE_URL)) throw new Error('Tests need TEST_DATABASE_URL pointing to a separate test database, never the real one');
 const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL! });
 
@@ -113,6 +114,33 @@ const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL! });
     ok('U6 the database itself refuses to delete or detach a used photo', refused === 2);
     ok('U7 unknown kind refused', (await upload(B, t3, 'selfie')).b.error === 'BAD_KIND');
     ok('U7 the app cannot read photos back (staff only)', (await api('/get_document?id=' + mine.id_photo, undefined, t1)).b.error === 'STAFF_ONLY');
+  }
+  {
+    // G. Login with Google (no SMS). The phone number is typed, not verified.
+    let r = await api('/login_methods');
+    ok('G1 the app can ask which login methods are on', r.s === 200 && r.b.google === true && r.b.sms === true, JSON.stringify(r.b));
+    r = await api('/login_google', { id_token: googleToken('g-100001'), path: 'user' });
+    ok('G2 new Google account: logged in, asked for a phone number and a profile', r.s === 200 && r.b.needs_phone === true && r.b.needs_profile === 'user' && r.b.active_profile === null && !!r.b.refresh_token, JSON.stringify(r.b));
+    ok('G2 the Google name is offered to prefill the profile name', r.b.google_name === 'Test Person');
+    let t = r.b.token;
+    ok('G3 no profile before a phone number (drivers and senders must be able to call)', (await api('/add_profile', { type: 'user', display_name: 'Nadia' }, t)).b.error === 'PHONE_REQUIRED');
+    ok('G4 a badly written phone number is refused', (await api('/set_phone', { phone: '0551 12 34 56' }, t)).b.error === 'BAD_PHONE');
+    r = await api('/set_phone', { phone: '+213551000111' }, t);
+    ok('G4 phone number saved as NOT verified', r.s === 200 && r.b.phone === '+213551000111' && r.b.phone_verified === false);
+    r = await api('/add_profile', { type: 'user', display_name: 'Nadia' }, t);
+    ok('G5 then the profile is created', r.s === 200 && r.b.active_profile.type === 'user');
+    r = await api('/login_google', { id_token: googleToken('g-100001'), path: 'user' });
+    ok('G6 the same Google account logs in again: same account, straight into the profile', r.s === 200 && r.b.needs_phone === false && r.b.active_profile?.display_name === 'Nadia' && r.b.needs_profile === null);
+    r = await api('/get_me', undefined, r.b.token);
+    ok('G7 get_me shows a Google account with an unverified phone', r.b.account.google === true && r.b.account.phone_verified === false && r.b.account.phone === '+213551000111');
+    const t2 = (await api('/login_google', { id_token: googleToken('g-100002'), path: 'driver' })).b.token;
+    ok('G8 another Google account may type the same number (unverified numbers prove nothing, so they are not unique)', (await api('/set_phone', { phone: '+213551000111' }, t2)).s === 200);
+    ok('G8 ...and stays a separate account', (await pool.query(`SELECT count(*)::int n FROM accounts WHERE phone='+213551000111'`)).rows[0].n === 2);
+    const sms = (await login('+213551000999', 'user')).b.token;
+    ok('G9 a VERIFIED (SMS) phone number can never be overwritten by set_phone', (await api('/set_phone', { phone: '+213551000111' }, sms)).b.error === 'PHONE_LOCKED');
+    ok('G10 an SMS login still works next to Google (separate accounts)', (await pool.query(`SELECT phone_verified, google_sub FROM accounts WHERE phone='+213551000999'`)).rows[0].phone_verified === true);
+    let refused = false; try { await pool.query(`INSERT INTO accounts(phone, phone_verified) VALUES ('+213551000777', false)`); } catch { refused = true; }
+    ok('G11 the database refuses an account that is neither Google nor a verified number', refused);
   }
   console.log(`\n${pass} passed, ${fail} failed`); await pool.end(); process.exit(fail ? 1 : 0);
 })();

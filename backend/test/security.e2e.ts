@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { googleToken, otherKey } from './google';
 import { driverDocs, upload, PHOTO } from './docs';
 import * as jwt from 'jsonwebtoken';
 import { readdirSync, readFileSync, statSync } from 'fs';
@@ -224,8 +225,33 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
     ok('SEC16 the server is still healthy after all of this', (await api('/get_me', undefined, U)).s === 200);
   }
 
+  // ===== SEC17 Google login: only a real, current Google proof issued for OUR app opens an account =====
+  {
+    const L = (id_token: any, path: any = 'user') => api('/login_google', { id_token, path });
+    ok('SEC17 a genuine proof works', (await L(googleToken('g-sec-1'))).s === 200);
+    ok('SEC17 a proof signed by someone else\'s key is refused', (await L(googleToken('g-sec-1', {}, otherKey()))).b.error === 'GOOGLE_REJECTED');
+    ok('SEC17 a proof made for ANOTHER app is refused', (await L(googleToken('g-sec-1', { aud: 'someone-else.apps.googleusercontent.com' }))).b.error === 'GOOGLE_REJECTED');
+    ok('SEC17 an expired proof is refused', (await L(googleToken('g-sec-1', { iat: Math.floor(Date.now() / 1000) - 7200, exp: Math.floor(Date.now() / 1000) - 3600 }))).b.error === 'GOOGLE_REJECTED');
+    ok('SEC17 a proof not issued by Google is refused', (await L(googleToken('g-sec-1', { iss: 'https://evil.example' }))).b.error === 'GOOGLE_REJECTED');
+    const [h, , sig] = googleToken('g-sec-1').split('.');
+    ok('SEC17 a genuine proof with a changed account inside is refused (signature check)', (await L(`${h}.${b64({ iss: 'https://accounts.google.com', aud: process.env.GOOGLE_CLIENT_IDS, sub: 'g-victim', exp: Math.floor(Date.now() / 1000) + 600 })}.${sig}`)).b.error === 'GOOGLE_REJECTED');
+    ok('SEC17 an unsigned proof ("alg: none") is refused', (await L(`${b64({ alg: 'none', typ: 'JWT' })}.${b64({ iss: 'accounts.google.com', aud: process.env.GOOGLE_CLIENT_IDS, sub: 'g-victim', exp: Math.floor(Date.now() / 1000) + 600 })}.`)).b.error === 'GOOGLE_REJECTED');
+    ok('SEC17 a proof with an unknown key id is refused', (await L(googleToken('g-sec-1', {}, undefined, 'unknown-kid'))).b.error === 'GOOGLE_REJECTED');
+    ok('SEC17 a proof with a strange account id is refused', (await L(googleToken("x' OR 1=1 --"))).s >= 400);
+    let odd = 0; for (const v of [null, 42, { a: 1 }, ['x'], 'short', 'x'.repeat(5000)]) if ((await L(v)).b.error === 'BAD_INPUT') odd++;
+    ok('SEC17 missing, wrong-type, too short and huge proofs are refused before any check', odd === 6, odd);
+    ok('SEC17 a bad path is refused', (await L(googleToken('g-sec-1'), 'staff')).b.error === 'BAD_PATH');
+    ok('SEC17 a refused Google proof leaves a security record', await until(() => ev('google_token_rejected')) === true);
+    const g = (await L(googleToken('g-sec-2'))).b.token;
+    let badPhones = 0; for (const v of ['+213 55', '+213551\u202e000', '213551000111', { p: 1 }, '+2135510001119999999']) if ((await api('/set_phone', { phone: v }, g)).b.error === 'BAD_PHONE') badPhones++;
+    ok('SEC17 set_phone refuses badly formed or disguised numbers', badPhones === 5, badPhones);
+    ok('SEC17 set_phone needs a login', (await api('/set_phone', { phone: '+213551000111' })).s === 401);
+    const stf = (await pool.query(`SELECT count(*)::int n FROM accounts WHERE google_sub IS NOT NULL AND phone IS NULL`)).rows[0].n;
+    ok('SEC17 the refused attempts created no accounts', stf === 2, stf);
+  }
+
   // ===== SEC15 evidence trail and code hygiene =====
-  const need = ['upload_not_image', 'upload_bad_image', 'upload_cap', 'bad_token', 'app_token_on_staff_route', 'refresh_token_reuse', 'rate_limited', 'staff_login_failed', 'otp_wrong', 'sms_ip_cap', 'sms_daily_cap_reached', 'staff_login_ok', 'logout_everywhere'];
+  const need = ['upload_not_image', 'upload_bad_image', 'upload_cap', 'bad_token', 'app_token_on_staff_route', 'refresh_token_reuse', 'rate_limited', 'staff_login_failed', 'otp_wrong', 'sms_ip_cap', 'sms_daily_cap_reached', 'staff_login_ok', 'logout_everywhere', 'google_token_rejected'];
   const missing: string[] = []; for (const t of need) if (!(await ev(t))) missing.push(t);
   ok('SEC15 every attack above left a record in the permanent security log', missing.length === 0, missing);
   const walk = (d: string): string[] => readdirSync(d).flatMap(f => { const p = join(d, f); return statSync(p).isDirectory() ? walk(p) : p.endsWith('.ts') ? [p] : []; });

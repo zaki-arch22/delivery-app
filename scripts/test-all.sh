@@ -11,6 +11,11 @@ ENVF="$ROOT/.local/test.env"
 source "$ENVF"
 export JWT_SECRET="$(openssl rand -hex 32)" HASH_PEPPER="$(openssl rand -hex 16)" UPLOAD_DIR="$ROOT/.local/uploads"
 LOG="$ROOT/.local/logs"; mkdir -p "$LOG"
+# Google sign-in in tests: a LOCAL test key stands in for Google's keys (accepted only with TEST_HOOKS=1).
+GKEY="$ROOT/.local/google-test-key.pem"
+[ -f "$GKEY" ] || openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$GKEY" 2>/dev/null
+export GOOGLE_TEST_KEY_FILE="$GKEY" GOOGLE_CLIENT_IDS="test-app.apps.googleusercontent.com"
+export GOOGLE_TEST_CERTS="$(node -e "const k=require('crypto').createPublicKey(require('fs').readFileSync(process.argv[1]));console.log(JSON.stringify({'test-key-1':k.export({type:'spki',format:'pem'})}))" "$GKEY")"
 SERVER_PID=""; RESULTS=(); FAILED=0
 
 for p in backend staff-console mobile; do [ -d "$ROOT/$p/node_modules" ] || (echo "installing $p ..."; cd "$ROOT/$p" && npm ci --silent); done
@@ -35,7 +40,7 @@ trap 'stop_server; stop_helper' EXIT
 start_server() {
   local port="$1" name="$2"; shift 2; stop_server
   if port_busy "$port"; then echo "port $port is already used by another program: stop it first"; exit 1; fi
-  ( cd "$ROOT/backend" && exec setsid env DATABASE_URL="$TEST_APP_URL" TEST_HOOKS=1 PORT="$port" PUSH_TICK_MS=300 RETRY_BASE_S=0.3 TICK_MS=500 "$@" npx ts-node src/main.ts >"$LOG/server-$name.log" 2>&1 ) &
+  ( cd "$ROOT/backend" && exec setsid env DATABASE_URL="$TEST_APP_URL" TEST_HOOKS=1 LOGIN_SMS=1 PORT="$port" PUSH_TICK_MS=300 RETRY_BASE_S=0.3 TICK_MS=500 "$@" npx ts-node src/main.ts >"$LOG/server-$name.log" 2>&1 ) &
   SERVER_PID=$!
   for _ in $(seq 1 60); do curl -s -m 2 -o /dev/null "http://127.0.0.1:$port/get_me" -H 'x-forwarded-for: 127.0.0.9' && return 0; sleep 1; done
   echo "server did not start, see $LOG/server-$name.log"; exit 1
@@ -80,6 +85,11 @@ run "backend: road distances (OSRM down)" routing-down "$B" env $T MODE=down npx
 node -e "require('net').createServer(()=>{}).listen(5055,'127.0.0.1')" & HELPER_PID=$!; sleep 0.5; wipe
 run "backend: road distances (OSRM not answering)" routing-hang "$B" env $T MODE=hang npx ts-node test/routing.e2e.ts
 stop_helper; wipe
+
+# 3c. A server with BOTH login methods switched off (as before any Google or SMS setup).
+start_server 3399 login-off LOGIN_SMS=0 GOOGLE_CLIENT_IDS=
+run "backend: login methods switched off" login-off "$B" env $T npx ts-node test/login-off.e2e.ts
+wipe
 
 # 4. Staff functions, staff console, mobile foundation (slower timers).
 start_server 3399 staff RATE_LIMIT_DISABLED=1 OFFER_TTL_S=10 SEARCH_WINDOW_S=120 WIDEN_AFTER_S=60

@@ -1,3 +1,4 @@
+import { googleToken } from './google';
 import { Pool } from 'pg';
 import { driverDocs, upload, PHOTO } from './docs';
 const HTTP = 'http://localhost:3399', WS = 'ws://localhost:3399/ws';
@@ -159,6 +160,13 @@ const profileOf = async (id: number) => (await pool.query(`SELECT profile_id FRO
   const O11 = await order(A.token, 'notify-order-011', '+213550500001'); await sleep(800);
   ok('N14 a sender who names their OWN number as recipient is not notified twice', (await pool.query(`SELECT 1 FROM notifications WHERE type='order.incoming' AND order_id=$1`, [O11.id])).rowCount === 0);
   await api('/cancel_order', { order_id: O11.id }, A.token);
+  { // A Google account only TYPED this number (not verified): it must not receive anyone's delivery code.
+    const g = (await api('/login_google', { id_token: googleToken('g-notify-1'), path: 'user' })).b.token;
+    await api('/set_phone', { phone: '+213770088888' }, g); await api('/add_profile', { type: 'user', display_name: 'Claims A Number' }, g);
+    const O13 = await order(U1.token, 'notify-order-013', '+213770088888'); await sleep(800);
+    ok('N14 a number that was only typed (not verified) never receives the delivery code', (await pool.query(`SELECT 1 FROM notifications WHERE type='order.incoming' AND order_id=$1`, [O13.id])).rowCount === 0);
+    await api('/cancel_order', { order_id: O13.id }, U1.token);
+  }
   // N16 English
   ok('N16 an unsupported language is refused', (await api('/register_device', { token: 'tok-recipient-0001', platform: 'android', language: 'de' }, R.token)).b.error === 'BAD_LANGUAGE');
   ok('N16 English is accepted', (await api('/register_device', { token: 'tok-recipient-0001', platform: 'android', language: 'en' }, R.token)).s === 200);

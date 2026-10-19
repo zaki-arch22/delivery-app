@@ -55,10 +55,10 @@ export class OrdersService {
           [userId, d.pickup.lng, d.pickup.lat, pickup_address, d.dropoff.lng, d.dropoff.lat, dropoff_address, name, b.recipient_phone,
            d.size, vehicleFor(d.size), b.payer, cod, d.pricing_version, d.distance_m, d.duration_s, d.recommended_da, d.min_da, d.max_da, b.offered_da, code, key]);
         await q(`INSERT INTO order_events(order_id, type, actor_profile_id, data) VALUES ($1,'created',$2,$3)`, [o.id, userId, { offered_da: b.offered_da }]);
-        // No SMS. If the recipient's phone number belongs to a registered user, that user gets a PUSH with the delivery code.
+        // No SMS. If the recipient's phone number is the VERIFIED number of a registered user, that user gets a PUSH with the delivery code.
         // Everyone else gets the code from the sender, who always sees it in the app.
         const [rp] = await q(`SELECT p.id FROM accounts a JOIN profiles p ON p.account_id=a.id AND p.type='user' AND p.status='active'
-                              WHERE a.phone=$1 AND a.id <> (SELECT account_id FROM profiles WHERE id=$2)`, [b.recipient_phone, userId]);
+                              WHERE a.phone=$1 AND a.phone_verified AND a.id <> (SELECT account_id FROM profiles WHERE id=$2)`, [b.recipient_phone, userId]);
         if (rp) await notify(q, { profile: rp.id, kind: 'order.incoming', order: o.id, dedupe: `order:${o.id}:incoming`, data: { ref: o.ref, delivery_code: code } });
         return o.id;
       });

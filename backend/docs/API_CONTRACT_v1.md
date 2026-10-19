@@ -11,17 +11,22 @@ Rules
 ## A. Account and profiles (user app and driver path share these)
 | Function | Who | Request | Answer |
 |---|---|---|---|
-| send_code | PUBLIC | phone | ok |
-| verify_code | PUBLIC | phone, code, path (`user`\|`driver`) | token, refresh_token, profiles[], active_profile (null if the chosen path has no profile yet), needs_profile (the path, or null) |
+| login_methods | PUBLIC | - | google (bool), sms (bool): which login buttons the app shows |
+| login_google | PUBLIC | id_token (Google's signed sign-in proof from the phone), path (`user`\|`driver`) | same as verify_code + needs_phone (true until set_phone), google_name (to prefill the profile name). GOOGLE_REJECTED 401 if the proof is not genuine, expired or for another app |
+| set_phone | ACCOUNT | phone | phone, phone_verified (false). Google accounts only: the contact number, typed, NOT verified. PHONE_LOCKED if the account's number is verified (SMS) |
+| send_code | PUBLIC | phone | ok (LOGIN_METHOD_OFF 403 while SMS login is switched off) |
+| verify_code | PUBLIC | phone, code, path (`user`\|`driver`) | needs_phone (false), token, refresh_token, profiles[], active_profile (null if the chosen path has no profile yet), needs_profile (the path, or null) |
 | refresh_token | PUBLIC | refresh_token | token, refresh_token |
 | switch_profile | ACCOUNT | type | token, active_profile (needs the profile to exist) |
 | upload_document | ACCOUNT | query `kind` (`id_photo`\|`licence_photo`\|`vehicle_photo`); the BODY is the photo itself (Content-Type image/jpeg, image/png or image/webp, max 6 MB) | document_id, kind. The photo is checked by decoding it, redrawn as a clean JPEG (hidden data removed, max 2000 px) and kept privately. Errors: IMAGE_ONLY 415, TOO_LARGE 413, BAD_IMAGE, IMAGE_TOO_SMALL (under 300 px), TOO_MANY_UPLOADS 429 (10 unused photos per account; unused photos are deleted after a day) |
 | add_profile | ACCOUNT (first profile) or the active profile (second profile, from Settings only) | type, display_name (+ for a driver: documents {vehicle `motorbike`\|`car`, id_photo, licence_photo, vehicle_photo} = the three document_ids) | profile (driver starts `pending_approval`). BAD_DOCUMENT if a photo is someone else's, in the wrong place, or already used |
-| get_me | ACCOUNT | - | account, profiles[], active_profile |
+| get_me | ACCOUNT | - | account {id, phone, phone_verified, google}, profiles[], active_profile |
 | logout | ACCOUNT | - | ok |
 | logout_everywhere | ACCOUNT | - | sessions_ended (ends every device and live connection; for a lost phone) |
 
-verify_code rule (ONE PROFILE AT FIRST): the account is created or found by phone. (1) Number with NO profile yet: `needs_profile` = the chosen path, and the app shows the profile-creation screen that calls add_profile; until then the token can call only get_me, add_profile, switch_profile, logout. (2) Number that already has the chosen profile: it opens. (3) Number that already has a profile but NOT the chosen one: nothing is created. The person lands in the profile they have, with `notice` = {code: NO_PROFILE_FOR_PATH, missing: path}, and the app tells them they can add the other profile from Settings. Never a "wrong role" error.
+Login methods: Google login is on when the server has the app's Google client ids; SMS login stays in the code but is OFF until an SMS provider is chosen (LOGIN_SMS=1). One Google account = one account; one verified phone number = one account (they are separate accounts). A Google account must call set_phone before add_profile (PHONE_REQUIRED): drivers and senders need to call each other. An unverified number is a contact number only: not unique, never used to find a person.
+
+verify_code / login_google rule (ONE PROFILE AT FIRST): the account is created or found by phone (or by Google account). (1) Number with NO profile yet: `needs_profile` = the chosen path, and the app shows the profile-creation screen that calls add_profile; until then the token can call only get_me, add_profile, switch_profile, logout. (2) Number that already has the chosen profile: it opens. (3) Number that already has a profile but NOT the chosen one: nothing is created. The person lands in the profile they have, with `notice` = {code: NO_PROFILE_FOR_PATH, missing: path}, and the app tells them they can add the other profile from Settings. Never a "wrong role" error.
 
 add_profile rule: the FIRST profile is created right after login (path choice). The SECOND profile is created only from Settings, while logged in to the first one; a session with no profile cannot create a second (error USE_SETTINGS).
 
@@ -119,7 +124,7 @@ Cash: delivered with a cash amount writes one `cod_collected` ledger entry for t
 | offer.updated | driver | the user raised the price of the open offer | offer_id, price_da | no |
 | offer.withdrawn | driver | the offer ended: expired, order cancelled, or order expired | offer_id, reason | no |
 | job.cancelled | driver | the user cancelled after the driver accepted (high priority) | ref | yes |
-| order.incoming | recipient (only if registered) | an order for their phone number was created | ref, delivery_code | yes |
+| order.incoming | recipient (only if registered with that VERIFIED number) | an order for their phone number was created | ref, delivery_code | yes |
 | profile.approved / profile.rejected / profile.suspended / profile.unsuspended | the profile concerned | a staff decision | reason (rejected only) | yes |
 | order.cancelled / order.reassigned | user | staff cancelled / are finding another driver | ref | yes |
 | job.updated | driver | staff corrected the address | ref | yes |
@@ -141,7 +146,7 @@ Android uses Firebase directly and iPhone through Apple's push service via Fireb
 SMS is used ONLY to verify a phone number at login (send_code). Nothing else is ever sent by SMS. Email is not used at launch (an email channel could later be added to the notification delivery worker, like push).
 How the recipient gets the delivery code:
 1. The sender always sees the 4-digit code in the app (get_order) and gives it to the recipient.
-2. If the recipient's phone number belongs to a registered user, that user also receives `order.incoming` (live and as a push) containing the code. A sender who names their own number is not notified.
+2. If the recipient's phone number is the VERIFIED number of a registered user (SMS login; a number typed by a Google account does not count), that user also receives `order.incoming` (live and as a push) containing the code. A sender who names their own number is not notified.
 3. A recipient with no account receives nothing from the platform.
 
 ### G5. Rules added with notifications

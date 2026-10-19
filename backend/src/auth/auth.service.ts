@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, HttpExcepti
 import { randomUUID } from 'crypto';
 import { Db } from '../db/db.service';
 import { Sms } from './sms.service';
+import { Google, googleClientIds } from './google';
 import { Realtime } from '../notify/realtime.service';
 import { SecurityLog } from '../security/security-log.service';
 import { notify } from '../notify/notify';
@@ -15,12 +16,17 @@ const CONTROL = /[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e]/;   // control c
 const MAX_SESSIONS = 5;                                          // devices logged in at once per account
 const smsDailyCap = () => Number(process.env.SMS_DAILY_CAP ?? 2000); // tunable; protects against SMS-pumping fraud bills
 const bad = (error: string, message: string) => new BadRequestException({ error, message });
+// Login methods. SMS login stays in the code but is OFF until a real SMS provider is chosen (LOGIN_SMS=1 turns it on).
+// Google login is on as soon as the app's Google client ids are set (GOOGLE_CLIENT_IDS).
+export const smsLoginOn = () => process.env.LOGIN_SMS === '1';
+export const googleLoginOn = () => googleClientIds().length > 0;
+const methodOff = () => new ForbiddenException({ error: 'LOGIN_METHOD_OFF', message: 'This way of logging in is not available' });
 const PUBLIC_PROFILE = `id, type, display_name, photo_url, status,
   CASE WHEN rating_count = 0 THEN NULL ELSE round(rating_sum::numeric / rating_count, 2) END AS rating, rating_count`;
 
 @Injectable()
 export class AuthService {
-  constructor(private db: Db, private sms: Sms, private rt: Realtime, private sec: SecurityLog, private documents: Documents) {}
+  constructor(private db: Db, private sms: Sms, private google: Google, private rt: Realtime, private sec: SecurityLog, private documents: Documents) {}
 
   // Whenever a session changes its active profile: the live connection of the old profile is closed, the phone's push token
   // follows the new profile, and a driver who leaves the driver profile goes offline (offers could not reach them anyway).
@@ -35,7 +41,10 @@ export class AuthService {
     this.rt.closeSession(sid);
   }
 
+  loginMethods() { return { google: googleLoginOn(), sms: smsLoginOn() }; }
+
   async sendCode(phone: string, ip: string) {
+    if (!smsLoginOn()) throw methodOff();
     if (!PHONE.test(phone ?? '')) throw bad('BAD_PHONE', 'Phone must be in international format, e.g. +213...');
     const recent = await this.db.one(`SELECT count(*)::int n FROM otp_codes WHERE phone=$1 AND created_at > now() - interval '1 hour'`, [phone]);
     if (recent.n >= 5) throw new HttpException({ error: 'TOO_MANY_CODES', message: 'Try again later' }, 429);
@@ -56,6 +65,7 @@ export class AuthService {
   }
 
   async verifyCode(phone: string, code: string, path: PType, ip: string) {
+    if (!smsLoginOn()) throw methodOff();
     if (!PHONE.test(phone ?? '') || !/^\d{6}$/.test(code ?? '')) throw bad('BAD_INPUT', 'Phone or code format is wrong');
     if (path !== 'user' && path !== 'driver') throw bad('BAD_PATH', 'path must be user or driver');
     const otp = await this.db.one(`SELECT id, code_hash FROM otp_codes WHERE phone=$1 AND NOT consumed AND expires_at > now() ORDER BY id DESC LIMIT 1`, [phone]);
@@ -68,7 +78,31 @@ export class AuthService {
     const won = await this.db.one(`UPDATE otp_codes SET consumed = true WHERE id=$1 AND NOT consumed RETURNING id`, [otp.id]);
     if (!won) throw new UnauthorizedException({ error: 'CODE_EXPIRED', message: 'Request a new code' });
 
-    const acc = await this.db.one(`INSERT INTO accounts(phone) VALUES ($1) ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone RETURNING id`, [phone]);
+    const acc = await this.db.one(`INSERT INTO accounts(phone) VALUES ($1) ON CONFLICT (phone) WHERE phone_verified DO UPDATE SET phone = EXCLUDED.phone RETURNING id`, [phone]);
+    return this.startLogin(acc.id, path, ip);
+  }
+
+  // Google sign-in: the app sends Google's signed proof; one Google account = one account here.
+  async loginGoogle(idToken: string, path: PType, ip: string) {
+    if (!googleLoginOn()) throw methodOff();
+    if (typeof idToken !== 'string' || idToken.length < 20 || idToken.length > 4096) throw bad('BAD_INPUT', 'Google sign-in proof is missing');
+    if (path !== 'user' && path !== 'driver') throw bad('BAD_PATH', 'path must be user or driver');
+    let g; try { g = await this.google.verify(idToken); }
+    catch { this.sec.event('google_token_rejected', ip); throw new UnauthorizedException({ error: 'GOOGLE_REJECTED', message: 'Google sign-in failed. Please try again.' }); }
+    const acc = await this.db.one(`INSERT INTO accounts(google_sub, phone_verified) VALUES ($1, false) ON CONFLICT (google_sub) DO UPDATE SET google_sub = EXCLUDED.google_sub RETURNING id`, [g.sub]);
+    return { ...(await this.startLogin(acc.id, path, ip)), google_name: g.name };
+  }
+
+  // The contact number of a Google account (typed, not verified: there is no SMS yet). A VERIFIED number is never overwritten.
+  async setPhone(accountId: string, phone: string) {
+    if (!PHONE.test(phone ?? '')) throw bad('BAD_PHONE', 'Phone must be in international format, e.g. +213...');
+    const r = await this.db.one(`UPDATE accounts SET phone=$2 WHERE id=$1 AND NOT phone_verified RETURNING phone, phone_verified`, [accountId, phone]);
+    if (!r) throw new ForbiddenException({ error: 'PHONE_LOCKED', message: 'This account\'s phone number is verified and cannot be changed here' });
+    return { ok: true, phone: r.phone, phone_verified: r.phone_verified };
+  }
+
+  private async startLogin(accountId: string, path: PType, ip: string) {
+    const acc = await this.db.one(`SELECT id, phone FROM accounts WHERE id=$1`, [accountId]);
     const profiles = await this.profiles(acc.id);
     const chosen = profiles.find(p => p.type === path) ?? null;
     // New number (no profile at all): the chosen path gets its first profile (created next by add_profile).
@@ -77,7 +111,7 @@ export class AuthService {
     const start = chosen ?? (profiles.length ? profiles[0] : null);
     const out = await this.newSession(acc.id, start?.id ?? null, ip, profiles);
     return {
-      ...out, profiles, active_profile: start,
+      ...out, profiles, active_profile: start, needs_phone: !acc.phone,
       needs_profile: profiles.length === 0 ? path : null,
       notice: !chosen && profiles.length ? { code: 'NO_PROFILE_FOR_PATH', missing: path, message: `You have no ${path} profile. You can add one from Settings.` } : null,
     };
@@ -101,7 +135,7 @@ export class AuthService {
   }
 
   async getMe(accountId: string, activeId: string | null) {
-    const acc = await this.db.one(`SELECT id, phone FROM accounts WHERE id=$1`, [accountId]);
+    const acc = await this.db.one(`SELECT id, phone, phone_verified, google_sub IS NOT NULL AS google FROM accounts WHERE id=$1`, [accountId]);
     const profiles = await this.profiles(accountId);
     return { account: acc, profiles, active_profile: profiles.find(p => p.id === activeId) ?? null };
   }
@@ -117,6 +151,9 @@ export class AuthService {
         throw bad('DRIVER_DOCS_MISSING', 'ID photo, licence photo, vehicle photo and vehicle type are required');
     }
     // The 2nd profile is created only from inside the first one (Settings). A session with no profile may create only the FIRST.
+    // Drivers and senders call each other, so every profile needs a contact number first (set_phone for Google accounts).
+    const own = await this.db.one(`SELECT phone FROM accounts WHERE id=$1`, [accountId]);
+    if (!own?.phone) throw bad('PHONE_REQUIRED', 'Add your phone number first');
     const have = await this.db.one(`SELECT count(*)::int n FROM profiles WHERE account_id=$1`, [accountId]);
     if (have.n > 0 && !activeProfileId) throw new ForbiddenException({ error: 'USE_SETTINGS', message: 'Log in to your profile and add the second one from Settings' });
     const client = await this.db.pool.connect();
