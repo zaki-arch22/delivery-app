@@ -1,4 +1,5 @@
 // Shared helpers for the screen tests: the real screens, the real backend, the TEST database.
+// Rule for these tests: never wait for an element INSIDE act(...): act holds screen updates back until it ends.
 import React from 'react';
 import { Stack } from 'expo-router';
 import { renderRouter, screen, fireEvent, act, configure } from 'expo-router/testing-library';
@@ -22,11 +23,14 @@ import OrderScreen from '../src/app/order/[id]';
 import Orders from '../src/app/orders';
 import Rate from '../src/app/rate/[id]';
 import Problem from '../src/app/problem/[id]';
+import JobScreen from '../src/app/job';
+import Jobs from '../src/app/jobs';
+import Cash from '../src/app/cash';
 
 export const API = process.env.API_URL!;
 if (!/_test$/.test(process.env.TEST_DATABASE_URL ?? '')) throw new Error('test database only');
-// Test database access through the psql program, synchronously. (The pg library stalls inside the phone-app test
-// environment once screens are running; a separate program is not affected.) Values are quoted as SQL literals.
+// Test database access through the psql program, synchronously. (The pg library stalled while the navigation test
+// tool's fake clocks were on; a separate program is never affected.) Values are quoted as SQL literals.
 const lit = (v: any): string => v === null || v === undefined ? 'NULL' : typeof v === 'number' || typeof v === 'boolean' ? String(v) : `'${String(v).replace(/'/g, "''")}'`;
 export const db = {
   async query(text: string, params: any[] = []) {
@@ -49,7 +53,7 @@ export function routes(services: Services) {
       <AppProvider services={services}><Stack screenOptions={{ headerShown: false }} /></AppProvider>
     </SafeAreaProvider>
   );
-  return { _layout: Layout, index: Start, welcome: Welcome, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup, 'new-order': NewOrder, 'order-details': OrderDetails, 'order/[id]': OrderScreen, orders: Orders, 'rate/[id]': Rate, 'problem/[id]': Problem };
+  return { _layout: Layout, index: Start, welcome: Welcome, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup, 'new-order': NewOrder, 'order-details': OrderDetails, 'order/[id]': OrderScreen, orders: Orders, 'rate/[id]': Rate, 'problem/[id]': Problem, job: JobScreen, jobs: Jobs, cash: Cash };
 }
 export async function open(services: Services) {
   const r = await renderRouter(routes(services), { initialUrl: '/' });

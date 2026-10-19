@@ -5,6 +5,7 @@ import { Notice as LiveNotice, Realtime } from '../core/realtime';
 import { KeyStore, secureStore } from '../core/storage';
 import { deviceLang, isLang, isRtl, Key, Lang, translate } from '../i18n';
 import { apiUrl, wsUrl } from './config';
+import { tracking } from './tracker';
 
 export interface Services { client: Client; session: Session; store: KeyStore; realtime: Realtime | null }
 interface AppCtx {
@@ -48,7 +49,7 @@ export function AppProvider({ services: given, children }: { services?: Services
   useEffect(() => {
     const rt = services.realtime; if (!rt) return;
     if (activeId) rt.start(activeId).catch(() => {}); else rt.stop();
-    return () => rt.stop();
+    return () => { rt.stop(); tracking.stop(); };   // a switch or logout takes the driver offline on the server too
   }, [services, activeId]);
 
   const setLang = useCallback(async (l: Lang) => { setLangState(l); await services.store.set(LANG_KEY, l).catch(() => {}); }, [services]);

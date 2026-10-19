@@ -15,7 +15,9 @@ Follow `AGENTS.md` (Expo's own guidance) for any Expo or React Native API.
 - phone, code: SMS login (Algerian numbers typed any usual way; a new code only after 60 s; calm translated errors)
 - new-profile: the first sender profile
 - driver-signup: name, vehicle, the three document photos (camera or gallery, shrunk on the phone before sending), send for approval; also opened from Settings
-- home: sender: "Send a parcel", parcels in progress, my orders (driver home comes with the driver screens)
+- home: sender: "Send a parcel", parcels in progress, my orders. Driver (src/ui/DriverHome.tsx): online switch, live offer with countdown (accept/decline), today's earnings, cash held and limit, rating
+- job: the active delivery: go to pickup (call the sender, open in the phone's map app), picked up, delivery code + cash confirmation, can't deliver (return leg), rate the sender
+- jobs, cash: my deliveries; cash held and every movement (collected, handed over with receipt number, corrections)
 - new-order: pickup pin A then delivery pin B on the map (move the map under a fixed pin, or "My location")
 - order-details: address details, recipient, size, who pays, cash on delivery, price (recommended, choose within the range in 10 DA steps), order
 - order/[id]: searching (raise the offer), driver coming, on the way, delivered/failed/cancelled/expired; delivery code; map with the driver; cancel before pickup
@@ -25,10 +27,10 @@ Shared pieces: `src/ui` (brand components, large buttons, never colour alone), `
 The server address is set when building: `EXPO_PUBLIC_API_URL=https://...` (release builds refuse anything but HTTPS).
 
 ## Not built yet
-The driver work screens, push notifications (needs the Firebase key). A real phone build has not been made yet (needs a free Expo account).
+Push notifications (needs the Firebase key), the offline queue for job steps. A real phone build has not been made yet (needs a free Expo account).
 
 ## Tests
-From the project root: `bash scripts/test-all.sh` (type check + 20 tests against the real backend: 7 for the foundation, 13 that drive the real screens like a person would (only the camera, the GPS and the map drawing are replaced in tests)).
+From the project root: `bash scripts/test-all.sh` (type check + 23 tests against the real backend: 7 for the foundation, 16 that drive the real screens like a person would (only the camera, the GPS, the phone dialer and the map drawing are replaced in tests)).
 
 ## Accepted build-tool risks
 See `backend/docs/SECURITY.md`, section "Known, accepted risks".

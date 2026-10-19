@@ -13,6 +13,11 @@ export function errorMessage(e: unknown): { key: Key; vars?: Record<string, numb
     case 'CODE_EXPIRED': case 'CODE_LOCKED': return { key: 'err_code_expired' };
     case 'BAD_PHONE': return { key: 'phone_invalid' };
     case 'BAD_NAME': return { key: 'name_invalid' };
+    case 'OFFER_GONE': case 'ORDER_TAKEN': return { key: 'offer_gone' };
+    case 'ON_JOB': return { key: 'err_on_job' };
+    case 'PROFILE_NOT_ACTIVE': return { key: 'err_not_active' };
+    case 'CASH_MISMATCH': return { key: 'err_cash_mismatch' };
+    case 'NOT_ONLINE': return { key: 'offline_now' };
     case 'QUOTE_EXPIRED': return { key: 'err_quote_expired' };
     case 'PRICE_OUT_OF_RANGE': case 'PRICE_NOT_ALLOWED': return { key: 'err_price_range' };
     case 'ZONE_CLOSED': return { key: 'zone_closed' };

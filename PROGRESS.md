@@ -16,18 +16,20 @@ Branch: `claude/optimistic-cannon-iw9rm9` (repo zaki-arch22/delivery-app). Resum
 
 - Milestone "sender path": MapLibre map (OpenFreeMap style, OSM credit), pin A/B picking with "My location", details + price + order, live order screen (raise, cancel, driver, code, map), my orders, rating, problem report; live connection wired into the app. 4 screen tests incl. a full order with a real driver through the API. 350 tests + 12 database rules green.
 
+- Milestone "driver path": driver home (online switch + position, live offer with countdown, today's numbers), job screen (pickup, call, maps, picked up, code + cash check, can't deliver -> return), my deliveries, cash; fixed a real bug (the start screen stacked "home" twice). 3 driver screen tests. 353 tests + 12 database rules green.
+
 ## In progress
 - (none)
 
 ## Next, in order (matches CLAUDE.md section 9)
-1. Driver path (home online/offline, offer, active job, failure, earnings, cash, location).
-2. Push inside the app (needs Firebase from the owner), offline queue for job steps.
+1. Offline queue for driver job steps.
+2. First real phone build + push (both need free owner accounts: Expo, Firebase).
 
 ## Exact next action
-Driver path, step 1: read backend/src/driver/driver.service.ts (home, offer, accept, job, steps, failure, jobs, cash), then build the driver home (online switch, earnings today, cash held/limit, rating) replacing DriverHome in src/app/home.tsx; location sending while online (expo-location watch, foreground only); live offer card with countdown (offer.new/offer.updated/offer.withdrawn + get_current_offer fallback).
+Offline queue: in mobile/src/core, a small persistent queue (secure store or file) for update_job_step calls; the job screen marks the step as done locally and the queue retries until the server answers (repeated steps are safe on the server). Test it by making the server unreachable in a screen test.
 
 ## Dev notes
-- Screen tests: `test/screens.tsx` (helpers, all routes), `test/http.ts` (test HTTP client; jest-expo replaces fetch). `renderRouter` turns on fake clocks: `open()` switches back to real ones. Test DB access goes through `psql` (pg stalls in that environment). Use `await fireEvent...` (testing library v14 is async); `toHaveTextContent('x')` is an EXACT match, use a regex.
+- Screen tests: `test/screens.tsx` (helpers, all routes), `test/http.ts` (test HTTP client; jest-expo replaces fetch). `renderRouter` turns on fake clocks: `open()` switches back to real ones. Test DB access goes through `psql` (pg stalls in that environment). Use `await fireEvent...` (testing library v14 is async); `toHaveTextContent('x')` is an EXACT match, use a regex; NEVER put `findBy...` inside `act(...)` (act holds updates back: deadlock); prices use non-breaking spaces (match with \s).
 - Visual check: `EXPO_OFFLINE=1 EXPO_PUBLIC_API_URL=http://localhost:3399 npx expo export --dev --platform web`, serve, screenshot with the global playwright (`$(npm root -g)/playwright`).
 
 ## Pending questions / owner actions (ask together at the end of a milestone)

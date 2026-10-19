@@ -69,11 +69,11 @@ export default function OrderScreen() {
         </View>
       ) : null}
 
-      {['searching', 'assigned', 'picked_up'].includes(o.status) && o.leg === 'delivery' ? (
+      {['searching', 'assigned', 'picked_up'].includes(o.status) ? (
         <View style={[s.box, s.codeBox]} testID="code-box">
           <T kind="label">{t('dcode_title')}</T>
           <T style={s.code} testID="delivery-code" accessibilityLabel={o.delivery_code.split('').join(' ')}>{o.delivery_code}</T>
-          <T kind="muted">{t('dcode_sub')}</T>
+          <T kind="muted">{t(o.leg === 'return' ? 'dcode_sub_return' : 'dcode_sub')}</T>
         </View>
       ) : null}
 
