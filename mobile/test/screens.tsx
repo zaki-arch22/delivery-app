@@ -3,7 +3,7 @@ import React from 'react';
 import { Stack } from 'expo-router';
 import { renderRouter, screen, fireEvent, act, configure } from 'expo-router/testing-library';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Pool } from 'pg';
+import { execFileSync } from 'child_process';
 import { AppProvider, makeServices, Services } from '../src/lib/app';
 import { memoryStore } from '../src/core/storage';
 import { nodeFetch } from './http';
@@ -16,10 +16,27 @@ import NewProfile from '../src/app/new-profile';
 import Home from '../src/app/home';
 import Settings from '../src/app/settings';
 import DriverSignup from '../src/app/driver-signup';
+import NewOrder from '../src/app/new-order';
+import OrderDetails from '../src/app/order-details';
+import OrderScreen from '../src/app/order/[id]';
+import Orders from '../src/app/orders';
+import Rate from '../src/app/rate/[id]';
+import Problem from '../src/app/problem/[id]';
 
 export const API = process.env.API_URL!;
 if (!/_test$/.test(process.env.TEST_DATABASE_URL ?? '')) throw new Error('test database only');
-export const db = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
+// Test database access through the psql program, synchronously. (The pg library stalls inside the phone-app test
+// environment once screens are running; a separate program is not affected.) Values are quoted as SQL literals.
+const lit = (v: any): string => v === null || v === undefined ? 'NULL' : typeof v === 'number' || typeof v === 'boolean' ? String(v) : `'${String(v).replace(/'/g, "''")}'`;
+export const db = {
+  async query(text: string, params: any[] = []) {
+    const q = text.replace(/\$(\d+)/g, (_, i) => lit(params[Number(i) - 1]));
+    const isRead = /^\s*(SELECT|WITH)\b/i.test(q);
+    const out = execFileSync('psql', [process.env.TEST_DATABASE_URL!, '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-c', isRead ? `SELECT coalesce(json_agg(x), '[]') FROM (${q}) x` : q], { encoding: 'utf8' });
+    return { rows: isRead ? JSON.parse(out.trim() || '[]') : [] as any[] };
+  },
+  async end() {},
+};
 
 export const devCode = async (phone: string) => ((await (await nodeFetch(API + '/dev/last_code?phone=' + encodeURIComponent(phone))).json()) as any).code as string;
 configure({ asyncUtilTimeout: 10000 });   // real network calls to the test server
@@ -32,10 +49,12 @@ export function routes(services: Services) {
       <AppProvider services={services}><Stack screenOptions={{ headerShown: false }} /></AppProvider>
     </SafeAreaProvider>
   );
-  return { _layout: Layout, index: Start, welcome: Welcome, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup };
+  return { _layout: Layout, index: Start, welcome: Welcome, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup, 'new-order': NewOrder, 'order-details': OrderDetails, 'order/[id]': OrderScreen, orders: Orders, 'rate/[id]': Rate, 'problem/[id]': Problem };
 }
 export async function open(services: Services) {
   const r = await renderRouter(routes(services), { initialUrl: '/' });
+  // renderRouter switches to fake clocks; these tests talk to a real server and need real time (polling, waits).
+  jest.useRealTimers();
   return r;
 }
 export const PHOTO = require('fs').readFileSync(require('path').join(__dirname, '../../backend/test/fixtures/photo.jpg'));
@@ -44,7 +63,8 @@ export async function uploadDocs(token: string) {
   for (const k of ['id_photo', 'licence_photo', 'vehicle_photo']) out[k] = ((await (await nodeFetch(API + '/upload_document?kind=' + k, { method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'image/jpeg' }, body: PHOTO })).json()) as any).document_id;
   return out;
 }
-export const svc = (store = memoryStore()) => makeServices(store, API, nodeFetch);
+// The live connection uses the `ws` package (Node), exactly like the core tests.
+export const svc = (store = memoryStore()) => makeServices(store, API, nodeFetch, require('ws'));
 
 export async function loginThroughScreens(phoneTyped: string, path: 'user' | 'driver') {
   await fireEvent.press(await screen.findByTestId('path-' + path));

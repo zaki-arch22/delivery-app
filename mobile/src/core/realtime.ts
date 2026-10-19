@@ -25,6 +25,7 @@ export class Realtime {
     if (this.stopped) return;
     const since = Number((await this.store.get(this.sinceKey())) ?? 0);
     const ws = new this.WS(this.wsUrl); this.ws = ws;
+    ws.onerror = () => {};   // a failed or aborted connection is handled by onclose (reconnect); never crash on it
     ws.onopen = () => ws.send(JSON.stringify({ type: 'auth', token: this.client.token, since }));
     ws.onmessage = async (e: any) => {
       let m: any; try { m = JSON.parse(String(e.data)); } catch { return; }

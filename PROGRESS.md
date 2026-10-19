@@ -14,19 +14,20 @@ Branch: `claude/optimistic-cannon-iw9rm9` (repo zaki-arch22/delivery-app). Resum
 
 - Milestone "driver photos": `upload_document` (decode + redraw, private folder, limits), add_profile takes photo ids, staff `get_document` (audited) and photos in the staff console, database guards, driver sign-up screen (camera/gallery) also from Settings. 14 functional + 19 attack + staff/console/app tests. 346 tests + 12 database rules green.
 
+- Milestone "sender path": MapLibre map (OpenFreeMap style, OSM credit), pin A/B picking with "My location", details + price + order, live order screen (raise, cancel, driver, code, map), my orders, rating, problem report; live connection wired into the app. 4 screen tests incl. a full order with a real driver through the API. 350 tests + 12 database rules green.
+
 ## In progress
 - (none)
 
 ## Next, in order (matches CLAUDE.md section 9)
-1. User path (new order with map, price, searching, tracking, my orders, rating, problem).
-2. Driver path (home online/offline, offer, active job, failure, earnings, cash, location).
-3. Push inside the app (needs Firebase from the owner), offline queue for job steps.
+1. Driver path (home online/offline, offer, active job, failure, earnings, cash, location).
+2. Push inside the app (needs Firebase from the owner), offline queue for job steps.
 
 ## Exact next action
-User path, step 1: add @maplibre/maplibre-react-native (check its version against Expo SDK 58 and its config plugin), build a map component with the style address as a setting (default OpenFreeMap "liberty") and the OSM credit, then the "New order" screen (pickup and drop-off pins, address details, size) calling get_quote.
+Driver path, step 1: read backend/src/driver/driver.service.ts (home, offer, accept, job, steps, failure, jobs, cash), then build the driver home (online switch, earnings today, cash held/limit, rating) replacing DriverHome in src/app/home.tsx; location sending while online (expo-location watch, foreground only); live offer card with countdown (offer.new/offer.updated/offer.withdrawn + get_current_offer fallback).
 
 ## Dev notes
-- Screen tests: `test/http.ts` is the test HTTP client (jest-expo replaces fetch). Use `await fireEvent...` (testing library v14 is async).
+- Screen tests: `test/screens.tsx` (helpers, all routes), `test/http.ts` (test HTTP client; jest-expo replaces fetch). `renderRouter` turns on fake clocks: `open()` switches back to real ones. Test DB access goes through `psql` (pg stalls in that environment). Use `await fireEvent...` (testing library v14 is async); `toHaveTextContent('x')` is an EXACT match, use a regex.
 - Visual check: `EXPO_OFFLINE=1 EXPO_PUBLIC_API_URL=http://localhost:3399 npx expo export --dev --platform web`, serve, screenshot with the global playwright (`$(npm root -g)/playwright`).
 
 ## Pending questions / owner actions (ask together at the end of a milestone)

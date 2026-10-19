@@ -20,11 +20,11 @@ export function Screen({ children, testID }: { children: React.ReactNode; testID
   );
 }
 
-export function Button({ label, onPress, kind = 'primary', busy = false, disabled = false, testID, sub }:
-  { label: string; onPress: () => void; kind?: 'primary' | 'secondary' | 'plain' | 'danger'; busy?: boolean; disabled?: boolean; testID?: string; sub?: string }) {
+export function Button({ label, onPress, kind = 'primary', busy = false, disabled = false, testID, sub, a11y }:
+  { label: string; onPress: () => void; kind?: 'primary' | 'secondary' | 'plain' | 'danger'; busy?: boolean; disabled?: boolean; testID?: string; sub?: string; a11y?: string }) {
   const off = disabled || busy;
   return (
-    <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: off, busy }}
+    <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={a11y ?? label} accessibilityState={{ disabled: off, busy }}
       onPress={off ? undefined : onPress} style={({ pressed }) => [s.btn, s[`btn_${kind}`], off && s.btnOff, pressed && !off && s.btnPressed]}>
       {busy ? <ActivityIndicator color={kind === 'primary' ? color.white : color.primary} /> : (
         <View style={s.btnInner}>

@@ -13,6 +13,17 @@ export function errorMessage(e: unknown): { key: Key; vars?: Record<string, numb
     case 'CODE_EXPIRED': case 'CODE_LOCKED': return { key: 'err_code_expired' };
     case 'BAD_PHONE': return { key: 'phone_invalid' };
     case 'BAD_NAME': return { key: 'name_invalid' };
+    case 'QUOTE_EXPIRED': return { key: 'err_quote_expired' };
+    case 'PRICE_OUT_OF_RANGE': case 'PRICE_NOT_ALLOWED': return { key: 'err_price_range' };
+    case 'ZONE_CLOSED': return { key: 'zone_closed' };
+    case 'PRICING_NOT_SET': return { key: 'err_not_ready' };
+    case 'CANNOT_CANCEL': return { key: 'err_cannot_cancel' };
+    case 'PRICE_LOCKED': return { key: 'err_price_locked' };
+    case 'ALREADY_RATED': return { key: 'err_already_rated' };
+    case 'BAD_RECIPIENT': return { key: 'recipient_invalid' };
+    case 'BAD_RECIPIENT_PHONE': return { key: 'phone_invalid' };
+    case 'BAD_ADDRESS': return { key: 'address_needed' };
+    case 'BAD_COD': return { key: 'cod_invalid' };
     case 'BAD_IMAGE': case 'IMAGE_ONLY': return { key: 'err_image_bad' };
     case 'IMAGE_TOO_SMALL': return { key: 'err_image_small' };
     case 'TOO_LARGE': return { key: 'err_image_large' };

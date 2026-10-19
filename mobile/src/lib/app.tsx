@@ -1,11 +1,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Client } from '../core/api';
 import { Session, SessionState } from '../core/session';
+import { Notice as LiveNotice, Realtime } from '../core/realtime';
 import { KeyStore, secureStore } from '../core/storage';
 import { deviceLang, isLang, isRtl, Key, Lang, translate } from '../i18n';
-import { apiUrl } from './config';
+import { apiUrl, wsUrl } from './config';
 
-export interface Services { client: Client; session: Session; store: KeyStore }
+export interface Services { client: Client; session: Session; store: KeyStore; realtime: Realtime | null }
 interface AppCtx {
   services: Services;
   ready: boolean;                 // the stored login (if any) has been checked
@@ -17,9 +18,9 @@ interface AppCtx {
 const Ctx = createContext<AppCtx | null>(null);
 const LANG_KEY = 'lang';
 
-export function makeServices(store: KeyStore = secureStore(), url = apiUrl(), fetchFn?: typeof fetch): Services {
+export function makeServices(store: KeyStore = secureStore(), url = apiUrl(), fetchFn?: typeof fetch, WS: typeof WebSocket | null = typeof WebSocket === 'undefined' ? null : WebSocket): Services {
   const client = new Client(url, store, fetchFn);
-  return { client, session: new Session(client), store };
+  return { client, session: new Session(client), store, realtime: WS ? new Realtime(client, store, wsUrl(url), WS) : null };
 }
 
 // Holds the login state and the chosen language for the whole app. Tests pass their own services.
@@ -42,6 +43,14 @@ export function AppProvider({ services: given, children }: { services?: Services
     return () => { live = false; };
   }, [services]);
 
+  // One live connection for the active profile (contract G1): restarted on every switch, stopped on logout.
+  const activeId = state.active?.id ?? null;
+  useEffect(() => {
+    const rt = services.realtime; if (!rt) return;
+    if (activeId) rt.start(activeId).catch(() => {}); else rt.stop();
+    return () => rt.stop();
+  }, [services, activeId]);
+
   const setLang = useCallback(async (l: Lang) => { setLangState(l); await services.store.set(LANG_KEY, l).catch(() => {}); }, [services]);
   const t = useCallback((k: Key, v?: Record<string, string | number>) => translate(lang, k, v), [lang]);
   const value = useMemo(() => ({ services, ready, state, lang, rtl: isRtl(lang), setLang, t }), [services, ready, state, lang, setLang, t]);
@@ -52,4 +61,11 @@ export function useApp(): AppCtx {
   const c = useContext(Ctx);
   if (!c) throw new Error('useApp outside AppProvider');
   return c;
+}
+
+// Runs `f` for every live notification of the active profile (screens use it to refresh at once instead of waiting).
+export function useNotices(f: (n: LiveNotice) => void) {
+  const { services } = useApp();
+  const ref = React.useRef(f); ref.current = f;
+  useEffect(() => { const rt = services.realtime; if (!rt) return; const off = rt.onNotice(n => ref.current(n)); return () => { off(); }; }, [services]);
 }
