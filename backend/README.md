@@ -3,14 +3,13 @@
 All server logic: accounts and profiles, orders, matching, cash ledger, ratings, push-only notifications, staff functions, security.
 
 ## Folders
-- `db/`            schema files 001 to 009, applied in order by `npm run migrate`. They create tables and rules only: NO data is ever inserted.
+- `db/`            schema files 001 to 011, applied in order by `npm run migrate`. They create tables and rules only: NO data is ever inserted.
 - `docs/API_CONTRACT_v1.md`  the contract the apps and the backend are both built from (every function, who may call it, what it returns).
 - `docs/SECURITY.md`         security layers, bugs found and fixed, what is NOT covered, the routine.
-- `deploy/`        server templates (HTTPS with Caddy, sandboxed service, encrypted backup, env file, OSRM road distances: osrm.md). Written but NOT yet tested on a real server.
-- `UPLOAD_DIR`     the private folder for driver document photos (required on a real server; in backups).
+- `deploy/`        free test server on Render + Neon (`render.md`, `render-start.sh`, `/render.yaml`); own-server templates (HTTPS with Caddy, sandboxed service, encrypted backup, env file, OSRM road distances: osrm.md), not yet tested on a real server.
 - `src/`           the server. `src/dev/` holds test hooks, loaded only when `TEST_HOOKS=1` (a production server refuses to start with it).
 - `src/scripts/`   migrate, setup-db-roles, create-admin, reset-2fa, launch-check, security-report.
-- `test/`          317 end-to-end tests (92 are attacks, 12 road distances) + `db_rules.sql`. They refuse to run on a database named `delivery`.
+- `test/`          356 end-to-end tests (112 are attacks, 12 road distances, 4 with login switched off) + `db_rules.sql`. They refuse to run on a database named `delivery`.
 
 ## Tests
 From the project root: `bash scripts/dev-setup.sh` once, then `bash scripts/test-all.sh`.

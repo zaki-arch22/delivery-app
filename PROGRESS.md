@@ -24,17 +24,25 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Milestone "first Android build" (2026-10-19): Expo project @delivery_platform/mobile (id 85947c9a-3728-412f-939c-9cc15ab586c2, in app.json), robot role now Developer, build 0e2aaf5e-eedb-4fcf-89c7-39edd479b705 FINISHED: APK https://expo.dev/artifacts/eas/zcf33VsVJeK_S44Fus-Ix68z7U-5bhRjW-pfnomCT40.apk (keystore kept on Expo's servers). Points at a placeholder API (no server yet), so login cannot work. OpenFreeMap tiles verified for Algiers.
 
+- Milestone "Google login + free test server" (2026-10-19, owner's choices): Google login on server and app (login_methods, login_google, set_phone; SMS login off), contact phone screen, name prefilled; render.yaml + render-start.sh (Neon-like database tested: non-superuser owner, restarts), staff console at /staff/, photos in the database; owner guide backend/deploy/render.md. Fixed 3 bugs (double notification on reconnect, limited-role password refresh on Neon, compiled server in the wrong folder). 400 tests + 12 database rules green.
+
 ## In progress
 - (none)
 
 ## Next, in order (matches CLAUDE.md section 9)
-1. Owner actions (pending questions below), then: first Android build (APK) through Expo's cloud.
-2. Firebase push (owner's free project), then the before launch list (CLAUDE.md section 9).
+1. Owner creates Neon + Firebase + Render (backend/deploy/render.md) and sends: the Render address + the content of google-services.json.
+2. Then the new APK (server + Google login), first zone and prices in the staff console, phone push.
+3. Before launch list (CLAUDE.md section 9).
 
 ## Exact next action
-1. Wait for the owner's report on the APK (does it install and open; do screens, language switch and the map show). Fix anything found, rebuild with `npx eas-cli build -p android --profile preview --non-interactive --no-wait` in `mobile/`.
-2. Then guide the owner step by step through a free Firebase project (google-services.json) for phone push.
-3. When `download.geofabrik.de` is reachable: build OSRM data for Algiers per backend/deploy/osrm.md into .local/osrm-algiers and test real road distances (e.g. Place des Martyrs -> Bab Ezzouar).
+When the owner sends the Render address (https://....onrender.com) and google-services.json:
+1. Save the file as mobile/google-services.json (not secret; commit it). Check it has an oauth_client with client_type 3 (web) and one with client_type 1 for dz.delivery.app with certificate_hash fb1552c2e61f2ef53785f15d63b5bfc725fe77b2.
+2. In mobile/eas.json (preview + production env): EXPO_PUBLIC_API_URL = the Render address; EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID = the client_type 3 client id (must equal the Render setting GOOGLE_CLIENT_IDS).
+3. curl the address: /login_methods must say google:true (first call may take ~1 min while it wakes). Open /staff/ (page loads).
+4. bash scripts/test-all.sh, commit, push, then `npx eas-cli@latest build -p android --profile preview --non-interactive --no-wait` in mobile/; send the APK link.
+5. Guide the owner in the staff console: create the first zone (prepare a GeoJSON polygon of central Algiers for him to paste) and open it; set the first price version (the OWNER chooses the numbers: base, per km, extras, min/max %).
+6. Check TRUST_PROXY=1 on Render: rate-limit addresses in security_events must be real client addresses.
+OSRM real data: still blocked (download.geofabrik.de); not possible on Render free anyway.
 
 ## Dev notes
 - Screen tests: `test/screens.tsx` (helpers, all routes), `test/http.ts` (test HTTP client; jest-expo replaces fetch). `renderRouter` turns on fake clocks: `open()` switches back to real ones. Test DB access goes through `psql` (pg stalls in that environment). Use `await fireEvent...` (testing library v14 is async); `toHaveTextContent('x')` is an EXACT match, use a regex; NEVER put `findBy...` inside `act(...)` (act holds updates back: deadlock); prices use non-breaking spaces (match with \s).
@@ -47,5 +55,5 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 - Real map data: YES, allowing download.geofabrik.de and tiles.openfreemap.org.
 
 ## Pending questions / owner actions
-- Owner: install the APK on an Android phone and report what works.
-- download.geofabrik.de is still blocked (connection reset); tiles.openfreemap.org now answers 200.
+- Owner: create Neon, Firebase, Render following backend/deploy/render.md; send the Render address and google-services.json.
+- Later (when the server is up): the starting prices (base, per km, size and car extras, allowed range), set by the owner in the staff console.
