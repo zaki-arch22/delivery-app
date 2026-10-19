@@ -64,6 +64,12 @@
         }
       ]
     ],
-    "scheme": "delivery"
+    "scheme": "delivery",
+    "extra": {
+      "eas": {
+        "projectId": "85947c9a-3728-412f-939c-9cc15ab586c2"
+      }
+    },
+    "owner": "delivery_platform"
   }
 }
