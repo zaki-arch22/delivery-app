@@ -261,6 +261,8 @@ export const en = {
   step_saved_offline: "No network: saved on the phone. It will be sent automatically as soon as there is network.",
   step_sync_failed: "A step saved without network was refused: {err} Call support.",
   sync_pending: "Waiting for network to send it…",
+  incoming_title: "A parcel is on its way to you",
+  incoming_code: "Give this code to the driver when you receive it: {code}",
   map_credit: '© OpenStreetMap contributors',
 };
 export type Key = keyof typeof en;

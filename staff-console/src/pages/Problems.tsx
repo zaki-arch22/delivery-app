@@ -26,7 +26,7 @@ export function Problems({ nav }: { nav: Nav }) {
                 <td className="num">{fmtDate(p.created_at)}</td>
                 <td><button type="button" className="link" onClick={() => nav.go('orders', { orderId: p.order_id })}>{p.ref}</button></td>
                 <td>{p.reporter} <span className="muted">({p.reporter_type === 'driver' ? t('col.driver') : t('col.user')})</span><div className="muted">{p.reporter_phone}</div></td>
-                <td><strong className="wrap-text">{p.reason}</strong>{p.note && <div className="wrap-text">{p.note}</div>}{p.resolution && <div className="muted wrap-text">→ {p.resolution}</div>}</td>
+                <td><strong className="wrap-text">{tx('reason.' + p.reason, p.reason)}</strong>{p.note && <div className="wrap-text">{p.note}</div>}{p.resolution && <div className="muted wrap-text">→ {p.resolution}</div>}</td>
                 <td><Status s={p.status} /></td>
                 <td>{p.status !== 'resolved' && <div className="row">
                   {p.status === 'open' && <button type="button" onClick={() => progress(p.id)}>{t('problems.inProgress')}</button>}

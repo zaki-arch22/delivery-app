@@ -2,7 +2,7 @@
 // updated on a language change, and a tapped notification opens the right screen. Real backend, TEST database;
 // only the phone's notification system is replaced (test/mocks/notifications.ts).
 import { screen, fireEvent, act, waitFor } from 'expo-router/testing-library';
-import { API, db, open, svc, loginThroughScreens } from './screens';
+import { API, db, open, svc, loginThroughScreens, devCode } from './screens';
 import { nodeFetch } from './http';
 const { pushState } = require('./mocks/notifications');
 
@@ -51,4 +51,25 @@ test('registered for the active profile and language; language change and profil
   const o = await call('/create_order', { quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: { street: 'Rue A' }, dropoff_address: { street: 'Rue B' }, recipient_name: 'Omar', recipient_phone: '+213661111111', payer: 'sender' }, s.client.token!, { 'idempotency-key': 'push-test-order-1' });
   await act(async () => { pushState.tap({ id: '1', kind: 'order.assigned', order_id: o.id }); });
   expect(await screen.findByTestId('order-status')).toHaveTextContent(/Looking for a driver/);
+});
+
+test('a registered recipient sees the incoming parcel and its code on the home screen (live, and from a tapped push)', async () => {
+  pushState.token = null;
+  // Someone else sends a parcel to Hana's number.
+  await call('/send_code', { phone: '+213557000002' });
+  const v = await call('/verify_code', { phone: '+213557000002', code: await devCode('+213557000002'), path: 'user' });
+  const other = (await call('/add_profile', { type: 'user', display_name: 'Yanis Sender' }, v.token)).token;
+  const send = async (key: string) => {
+    const q = await call('/get_quote', { pickup: { lat: 36.7538, lng: 3.0588 }, dropoff: { lat: 36.765, lng: 3.07 }, size: 'small' }, other);
+    return call('/create_order', { quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: { street: 'Rue C' }, dropoff_address: { street: 'Rue D' }, recipient_name: 'Hana', recipient_phone: '+213557000001', payer: 'sender' }, other, { 'idempotency-key': key });
+  };
+  await open(svc());
+  await loginThroughScreens('0557000001', 'user');
+  await screen.findByTestId('send-parcel');
+  await new Promise(r => setTimeout(r, 1000));                                           // the live connection is up
+  const o1 = await send('push-incoming-1');
+  expect(await screen.findByTestId('incoming-' + o1.ref)).toHaveTextContent(new RegExp(`Give this code to the driver when you receive it: ${o1.delivery_code}`));
+  // A push tapped while the app was closed carries the same data.
+  await act(async () => { pushState.tap({ id: '99', kind: 'order.incoming', order_id: '11111111-1111-1111-1111-111111111111', ref: 'TEST-REF', delivery_code: '4321' }); });
+  expect(await screen.findByTestId('incoming-TEST-REF')).toHaveTextContent(/4321/);
 });

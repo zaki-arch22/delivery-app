@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import { useApp } from './app';
 import { devicePushToken, onNewToken, onTap, quietWhileOpen, routeFor } from './push';
+import { addIncoming } from './incoming';
 
 // Connects phone push to the app: registers this phone for the ACTIVE profile in the chosen language (again after every
 // profile switch, language change or new token), and opens the right screen when a notification is tapped.
@@ -21,8 +22,11 @@ export function PushBridge() {
   }, [services, activeId, lang]);
   useEffect(() => {
     if (!ready) return;
-    const sub = onTap(data => { const r = routeFor(data); if (r && state.active) router.push(r as any); });
+    const sub = onTap(data => {
+      if (data.kind === 'order.incoming') addIncoming(services.store, data, String(data.order_id ?? '') || null);   // shown on the home screen
+      const r = routeFor(data); if (r && state.active) router.push(r as any);
+    });
     return () => sub.remove();
-  }, [ready, state.active]);
+  }, [ready, state.active, services]);
   return null;
 }

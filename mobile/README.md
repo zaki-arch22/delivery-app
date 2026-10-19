@@ -19,6 +19,7 @@ Follow `AGENTS.md` (Expo's own guidance) for any Expo or React Native API.
 - home: sender: "Send a parcel", parcels in progress, my orders. Driver (src/ui/DriverHome.tsx): online switch, live offer with countdown (accept/decline), today's earnings, cash held and limit, rating
 - job: the active delivery: go to pickup (call the sender, open in the phone's map app), picked up, delivery code + cash confirmation, can't deliver (return leg), rate the sender
 - jobs, cash: my deliveries; cash held and every movement (collected, handed over with receipt number, corrections)
+- push (src/lib/push.ts, PushBridge.tsx): registers the phone for the active profile and language, opens the right screen on tap; incoming parcels (someone sends to your number) show their code on the home screen
 - new-order: pickup pin A then delivery pin B on the map (move the map under a fixed pin, or "My location")
 - order-details: address details, recipient, size, who pays, cash on delivery, price (recommended, choose within the range in 10 DA steps), order
 - order/[id]: searching (raise the offer), driver coming, on the way, delivered/failed/cancelled/expired; delivery code; map with the driver; cancel before pickup
@@ -28,10 +29,10 @@ Shared pieces: `src/ui` (brand components, large buttons, never colour alone), `
 The server address is set when building: `EXPO_PUBLIC_API_URL=https://...` (release builds refuse anything but HTTPS).
 
 ## Not built yet
-Push notifications (needs the Firebase key). A real phone build has not been made yet (needs a free Expo account).
+Nothing on the product list; a real phone build has not been made yet (needs the owner's free Expo account, see BUILD.md), and phone push is switched on by adding the owner's Firebase file.
 
 ## Tests
-From the project root: `bash scripts/test-all.sh` (type check + 25 tests against the real backend: 8 for the foundation, 17 that drive the real screens like a person would (only the camera, the GPS, the phone dialer and the map drawing are replaced in tests)).
+From the project root: `bash scripts/test-all.sh` (type check + 28 tests against the real backend: 8 for the foundation, 20 that drive the real screens like a person would (only the camera, the GPS, the phone dialer, the notification system and the map drawing are replaced in tests)).
 
 ## Accepted build-tool risks
 See `backend/docs/SECURITY.md`, section "Known, accepted risks".

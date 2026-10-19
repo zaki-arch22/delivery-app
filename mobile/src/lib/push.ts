@@ -23,7 +23,7 @@ export function quietWhileOpen() {
 // Where a tapped notification leads (its data carries kind and order_id, contract G3).
 export function routeFor(data: Record<string, unknown> | undefined): { pathname: string; params?: Record<string, string> } | null {
   const kind = String(data?.kind ?? ''), order = String(data?.order_id ?? '');
-  if (kind.startsWith('offer.') || kind.startsWith('profile.') || kind.startsWith('cash.')) return { pathname: '/home' };
+  if (kind.startsWith('offer.') || kind.startsWith('profile.') || kind.startsWith('cash.') || kind === 'order.incoming') return { pathname: '/home' };   // incoming: not this person's order
   if (kind.startsWith('job.')) return { pathname: '/job' };
   if ((kind.startsWith('order.') || kind === 'return.delivered') && /^[0-9a-f-]{36}$/i.test(order)) return { pathname: '/order/[id]', params: { id: order } };
   return null;

@@ -20,16 +20,17 @@ Branch: `claude/optimistic-cannon-iw9rm9` (repo zaki-arch22/delivery-app). Resum
 
 - Milestone "offline steps": job steps without network are saved on the phone and sent later (screen test with a simulated dead zone; refusal reported). 355 tests + 12 database rules green.
 
+- Milestone "push and build prep": PushBridge (register_device for the active profile/language, tap opens the right screen), incoming parcels card for registered recipients, staff console shows problem reasons in words, eas.json + app.config.js + mobile/BUILD.md. 358 tests + 12 database rules green.
+
 ## In progress
-- Push notifications inside the app (code + tests now; switching on needs the owner's Firebase project).
+- (none)
 
 ## Next, in order (matches CLAUDE.md section 9)
-1. Push in the app (register_device after login/switch/language change, open the right screen on tap).
-2. EAS build configuration ready for the owner's free Expo account.
-3. Owner actions (see pending questions).
+1. Owner actions (pending questions below), then: first Android build (APK) through Expo's cloud.
+2. Before launch list (CLAUDE.md section 9).
 
 ## Exact next action
-Push: add expo-notifications (bundled version), src/lib/push.ts (permission, device token, register_device with language; re-register on profile switch and language change; tap -> order/[id] or job), tests with the token source replaced.
+Waiting on the owner for the Expo token + network allowance (BUILD.md). Meanwhile: review and polish (accessibility labels, empty states, Arabic layout screenshots), keep everything green.
 
 ## Dev notes
 - Screen tests: `test/screens.tsx` (helpers, all routes), `test/http.ts` (test HTTP client; jest-expo replaces fetch). `renderRouter` turns on fake clocks: `open()` switches back to real ones. Test DB access goes through `psql` (pg stalls in that environment). Use `await fireEvent...` (testing library v14 is async); `toHaveTextContent('x')` is an EXACT match, use a regex; NEVER put `findBy...` inside `act(...)` (act holds updates back: deadlock); prices use non-breaking spaces (match with \s).

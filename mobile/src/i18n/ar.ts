@@ -261,5 +261,7 @@ export const ar: Record<Key, string> = {
   step_saved_offline: "لا توجد شبكة: تم الحفظ في الهاتف. سيُرسل تلقائيًا عند عودة الشبكة.",
   step_sync_failed: "تم رفض خطوة حُفظت دون شبكة: {err} اتصل بالدعم.",
   sync_pending: "في انتظار الشبكة لإرسالها…",
+  incoming_title: "طرد في الطريق إليك",
+  incoming_code: "أعطِ هذا الرمز للسائق عند الاستلام: {code}",
   map_credit: '© المساهمون في OpenStreetMap',
 };

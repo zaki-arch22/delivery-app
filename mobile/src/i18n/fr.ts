@@ -261,5 +261,7 @@ export const fr: Record<Key, string> = {
   step_saved_offline: "Pas de réseau : enregistré sur le téléphone. Ce sera envoyé automatiquement dès qu’il y aura du réseau.",
   step_sync_failed: "Une étape enregistrée sans réseau a été refusée : {err} Appelez le support.",
   sync_pending: "En attente de réseau pour l’envoyer…",
+  incoming_title: "Un colis est en route vers vous",
+  incoming_code: "Donnez ce code au livreur à la réception : {code}",
   map_credit: '© les contributeurs d’OpenStreetMap',
 };
