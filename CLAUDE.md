@@ -19,11 +19,11 @@ Built so far by Claude in a claude.ai chat (October 2026), then moved to Claude 
 ## 3. What exists (all tested)
 | Part | Folder | Technology | Status |
 |---|---|---|---|
-| Backend | `backend/` | NestJS (TypeScript), PostgreSQL 16 + PostGIS, Node 22 | complete for the current scope; 384 tests incl. 125 attacks and 12 road-distance tests + 12 database-rule checks; free test server files (`render.yaml`, `backend/deploy/render.md`) |
+| Backend | `backend/` | NestJS (TypeScript), PostgreSQL 16 + PostGIS, Node 22 | complete for the current scope; 411 tests incl. 125 attacks and 12 road-distance tests + 12 database-rule checks; free test server files (`render.yaml`, `backend/deploy/render.md`) |
 | Staff console | `staff-console/` | React 18 + Vite | complete; 13 tests against the real backend; matches the 23 staff functions one-to-one (incl. viewing driver photos) |
 | Mobile app | `mobile/` | React Native + Expo SDK 58 (React Native 0.88), Expo Router | foundation (`src/core`) + welcome/language, Google login (+ phone/SMS login, switched off), contact phone, profiles, driver sign-up with photos, settings, the whole SENDER path (map pins, details, price, searching, tracking, my orders, rating, problem) and the whole DRIVER path (online, offers, active job, return, cash, deliveries, steps saved offline), phone push wiring, incoming parcels for registered recipients; 33 tests against the real backend; proof chain (QR scan, parcel photo, refusal reasons, give back, call back, tracking link). First Android APK built by Expo's cloud (Oct 2026, before Google login and without a server) |
 
-- `bash scripts/dev-setup.sh` once (local test database), then `bash scripts/test-all.sh` runs everything (430 tests + 12 database rules). Run it after every change.
+- `bash scripts/dev-setup.sh` once (local test database), then `bash scripts/test-all.sh` runs everything (457 tests + 12 database rules). Run it after every change.
 - The real database ships EMPTY: schema files only, no data.
 
 ## 4. Product decisions (current)
