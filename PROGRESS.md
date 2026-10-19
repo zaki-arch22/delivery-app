@@ -64,5 +64,4 @@ OSRM real data: still blocked (download.geofabrik.de); not possible on Render fr
 
 ## Pending questions / owner actions
 - Owner: create Neon, Firebase, Render following backend/deploy/render.md; send the Render address and google-services.json.
-- Confirm locally the emergency numbers shown to drivers: 17 police, 14 civil protection (some sources say 1021), 1055 gendarmerie.
 - Later (when the server is up): the starting prices (base, per km, size and car extras, allowed range), set by the owner in the staff console.
