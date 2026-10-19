@@ -22,20 +22,19 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Milestone "push and build prep": PushBridge (register_device for the active profile/language, tap opens the right screen), incoming parcels card for registered recipients, staff console shows problem reasons in words, eas.json + app.config.js + mobile/BUILD.md. 358 tests + 12 database rules green.
 
+- Milestone "first Android build" (2026-10-19): Expo project @delivery_platform/mobile (id 85947c9a-3728-412f-939c-9cc15ab586c2, in app.json), robot role now Developer, build 0e2aaf5e-eedb-4fcf-89c7-39edd479b705 FINISHED: APK https://expo.dev/artifacts/eas/zcf33VsVJeK_S44Fus-Ix68z7U-5bhRjW-pfnomCT40.apk (keystore kept on Expo's servers). Points at a placeholder API (no server yet), so login cannot work. OpenFreeMap tiles verified for Algiers.
+
 ## In progress
 - (none)
 
 ## Next, in order (matches CLAUDE.md section 9)
 1. Owner actions (pending questions below), then: first Android build (APK) through Expo's cloud.
-2. Before launch list (CLAUDE.md section 9).
+2. Firebase push (owner's free project), then the before launch list (CLAUDE.md section 9).
 
 ## Exact next action
-When `EXPO_TOKEN` is present and `api.expo.dev` is reachable (`curl -sS -o /dev/null -w "%{http_code}" https://api.expo.dev/`):
-in `mobile/`: `npx eas-cli init --non-interactive`, save the printed project id as EXPO_PROJECT_ID (env var or app.config), then
-`npx eas-cli build -p android --profile preview --non-interactive` and give the owner the APK link (plain steps to install it).
-When `download.geofabrik.de` is reachable: build OSRM data for Algiers per backend/deploy/osrm.md into .local/osrm-algiers and test real road distances
-(e.g. Place des Martyrs -> Bab Ezzouar) against expectations; check tiles.openfreemap.org style loads.
-Until then: polish and review only; do not message the owner again.
+1. Wait for the owner's report on the APK (does it install and open; do screens, language switch and the map show). Fix anything found, rebuild with `npx eas-cli build -p android --profile preview --non-interactive --no-wait` in `mobile/`.
+2. Then guide the owner step by step through a free Firebase project (google-services.json) for phone push.
+3. When `download.geofabrik.de` is reachable: build OSRM data for Algiers per backend/deploy/osrm.md into .local/osrm-algiers and test real road distances (e.g. Place des Martyrs -> Bab Ezzouar).
 
 ## Dev notes
 - Screen tests: `test/screens.tsx` (helpers, all routes), `test/http.ts` (test HTTP client; jest-expo replaces fetch). `renderRouter` turns on fake clocks: `open()` switches back to real ones. Test DB access goes through `psql` (pg stalls in that environment). Use `await fireEvent...` (testing library v14 is async); `toHaveTextContent('x')` is an EXACT match, use a regex; NEVER put `findBy...` inside `act(...)` (act holds updates back: deadlock); prices use non-breaking spaces (match with \s).
@@ -48,5 +47,5 @@ Until then: polish and review only; do not message the owner again.
 - Real map data: YES, allowing download.geofabrik.de and tiles.openfreemap.org.
 
 ## Pending questions / owner actions
-- (2026-10-19) EXPO_TOKEN works and api.expo.dev is reachable, but the token's robot user "Claude" has the role **Viewer** on the Expo account `delivery_platform`, so `eas init` fails ("you can't create projects"). Owner: on expo.dev, account delivery_platform -> Settings -> Robot users (or Members) -> change "Claude" to **Developer** (free). Then retry the exact next action.
+- Owner: install the APK on an Android phone and report what works.
 - download.geofabrik.de is still blocked (connection reset); tiles.openfreemap.org now answers 200.
