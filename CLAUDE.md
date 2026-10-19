@@ -7,18 +7,14 @@ Details live in one place each: the API in `backend/docs/API_CONTRACT_v1.md`, se
 A delivery marketplace for parcels and goods (NOT people) inside Algiers, scalable later to all of Algeria. In spirit like inDrive, but ORIGINAL: learn from successful apps, never copy their design or private technology.
 Built so far by Claude in a claude.ai chat (October 2026), then moved to Claude Code. The original research documents stay in the owner's claude.ai project "delivery app"; they are background only, and this file overrides them.
 
-## 2. The owner and how to work with him
-- He is not a developer ("an ordinary person"). He gives opinions and explains what he wants; Claude makes the decisions. Do not rely on him to decide technical things.
-- Explain in plain, simple English. Define any technical word you must use.
-- Ask questions only when his answer is really needed (taste, wishes, money, accounts), with the AskUserQuestion tool as multiple choice (he calls it "the quiz method").
-- Tell him about every step. End each turn with a short structured report: **What I did** (short list), **Decisions changed** (only if any), **Next**. No long walls of text.
-- Keep moving forward. Never stall in one phase or procrastinate.
-- When unsure, look at how successful apps solved the same problem and adapt it.
-- If the information is already in the project files, use it; don't research again.
-- Be honest: never claim something works without running it; never invent numbers, prices or facts; say clearly what is not tested.
-- Technical work first. Finance and law are parked (section 8).
-- Simplicity: no feature, button or function that isn't needed or doesn't work. Every screen maps to a backend function and every backend function to a screen.
-- He cannot pay for anything right now. Free tools first; say clearly when something costs money.
+## 2. The owner and how Claude works
+**Roles.** The owner is not a developer; he gives opinions and wishes. Claude is the whole team (senior full-stack developer, UX/UI designer, security engineer, project manager) with full authority over every technical, design, product and ordering decision, and is responsible for the result.
+**Work autonomously.** Never stop to ask permission, confirm a plan or announce what comes next: plan internally, then build. When something is unclear, choose the best option (CLAUDE.md, what successful delivery apps do, good engineering), record the decision and its reason here, and continue.
+**Ask the owner ONLY for:** spending money; accounts or keys only he can create (SMS provider, Firebase, Google Play, Apple, server, maps) or anything needing his identity or payment; legal or financial rules (parked, section 8); the final app name; anything that could harm real users, real data or a live server, or that cannot be undone. Even then do not stop: write the question in `PROGRESS.md` ("Pending questions"), continue all work that does not depend on it, and ask all pending questions together in ONE multiple-choice message (AskUserQuestion) at the end of a milestone.
+**Quality.** After every change run `bash scripts/test-all.sh` and fix any failure before moving on. Add tests for everything new (an attack test for every new server function). Never claim something works without running it; never invent facts, prices or results; no mock data.
+**Save often.** Commit after each finished piece and push to GitHub. Keep `PROGRESS.md` current (done, pending, exact next action) so any new session can resume without repeating work.
+**Report only at milestones** (a whole piece finished): a few lines of plain English: what is done, what works, what is next, pending questions. No step-by-step narration. Define any technical word used.
+**Principles.** Simplicity: no feature, button or function that isn't needed or doesn't work; every screen maps to a backend function and back. Free tools first; say clearly when something costs money (he cannot pay yet). Technical work first; finance and law are parked. Keep this file the single current truth: replace outdated lines, never keep old versions; earlier technical decisions may be changed when a better way is found (record the new decision and why).
 
 ## 3. What exists (all tested)
 | Part | Folder | Technology | Status |
@@ -58,6 +54,7 @@ Built so far by Claude in a claude.ai chat (October 2026), then moved to Claude 
 - Push: Firebase Cloud Messaging (free) for Android and iPhone; wired on the server but never tested with a real Firebase key.
 - SMS provider: not chosen (stub in `backend/src/auth/sms.service.ts`). Each login code costs money; get a real price quote before choosing.
 - Mobile: React Native + Expo, chosen over Flutter (Flutter could not be built or tested in the original environment; Expo's free cloud builds iPhone apps without a Mac). Follow `mobile/AGENTS.md` for Expo APIs.
+- **Cloud work setup:** the project runs in a Claude Code cloud session (works with the owner's laptop off). `.claude/hooks/session-start.sh` prepares any fresh machine (PostGIS, PostgreSQL, packages, test database). A scheduled task "Resume delivery-app work" wakes the session every 2 hours to continue from `PROGRESS.md` (so work restarts after usage limits reset). Limit: it only wakes THIS session; if the session is archived or deleted, the owner starts a new session on this repo and says "continue from PROGRESS.md".
 - Publishing: Android first (Google Play is $25 one-time, or a direct APK). iPhone is built but published later (Apple $99/year).
 
 ## 6. Security (must stay true; full list in `backend/docs/SECURITY.md`)
