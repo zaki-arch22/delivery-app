@@ -15,7 +15,9 @@ export class Client {
   private access: string | null = null;
   private refreshing: Promise<boolean> | null = null;
   private listeners = new Set<Listener>();
-  constructor(readonly baseUrl: string, private store: KeyStore, private fetchFn: typeof fetch = (...a) => fetch(...a)) {}
+  // device: an id of this phone for this app (survives reinstalling). The server keeps only a fingerprint of it, to stop
+  // banned people from coming back with a new account (TRUST_AND_SAFETY.md).
+  constructor(readonly baseUrl: string, private store: KeyStore, private fetchFn: typeof fetch = (...a) => fetch(...a), private device: () => string | null = () => null) {}
 
   onSignedOut(f: Listener) { this.listeners.add(f); return () => this.listeners.delete(f); }
   get token() { return this.access; }
@@ -29,7 +31,7 @@ export class Client {
     const isFile = typeof Blob !== 'undefined' && body instanceof Blob;
     const type = isFile ? (body as Blob).type || 'image/jpeg' : 'application/json';
     try {
-      r = await this.fetchFn(this.baseUrl + path, { method: body === undefined ? 'GET' : 'POST', headers: { 'content-type': type, ...(auth && this.access ? { authorization: 'Bearer ' + this.access } : {}), ...headers }, body: body === undefined ? undefined : isFile ? (body as Blob) : JSON.stringify(body) });
+      r = await this.fetchFn(this.baseUrl + path, { method: body === undefined ? 'GET' : 'POST', headers: { 'content-type': type, ...(auth && this.access ? { authorization: 'Bearer ' + this.access } : {}), ...(this.device() ? { 'x-device': this.device()! } : {}), ...headers }, body: body === undefined ? undefined : isFile ? (body as Blob) : JSON.stringify(body) });
     } catch { throw new ApiError(0, 'NETWORK', 'No connection'); }
     const j: any = await r.json().catch(() => ({}));
     if (!r.ok) throw new ApiError(r.status, j.error ?? 'ERROR', j.message ?? '', Number(r.headers.get('retry-after') ?? 0));

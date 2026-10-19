@@ -8,6 +8,7 @@ import { deviceLang, isLang, isRtl, Key, Lang, translate } from '../i18n';
 import { apiUrl, wsUrl } from './config';
 import { tracking } from './tracker';
 import { photoBlob } from './photos';
+import { deviceId } from './device';
 
 export interface Services { client: Client; session: Session; store: KeyStore; realtime: Realtime | null; queue: StepQueue }
 interface AppCtx {
@@ -22,7 +23,7 @@ const Ctx = createContext<AppCtx | null>(null);
 const LANG_KEY = 'lang';
 
 export function makeServices(store: KeyStore = secureStore(), url = apiUrl(), fetchFn?: typeof fetch, WS: typeof WebSocket | null = typeof WebSocket === 'undefined' ? null : WebSocket, retryMs?: number): Services {
-  const client = new Client(url, store, fetchFn);
+  const client = new Client(url, store, fetchFn, deviceId);
   return { client, session: new Session(client), store, realtime: WS ? new Realtime(client, store, wsUrl(url), WS) : null, queue: new StepQueue(client, store, retryMs, photoBlob) };
 }
 
