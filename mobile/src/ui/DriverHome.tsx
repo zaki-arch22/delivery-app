@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useApp, useNotices } from '../lib/app';
@@ -26,10 +26,14 @@ export function DriverHome() {
   const fail = (e: unknown) => { const m = errorMessage(e); setMsg({ text: t(m.key, m.vars), warn: true }); };
   const send = useCallback((lat: number, lng: number) => api.location(lat, lng), [services]);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Only the LATEST refresh may change the screen: an older answer arriving late ("offline") must not undo a newer one.
+  const seq = useRef(0);
   const load = useCallback(async () => {
     if (!active) return;
+    const mine = ++seq.current;
     try {
       const [h, j] = await Promise.all([api.home(), api.job()]);
+      if (mine !== seq.current) return;
       setHome(h); setJob(j);
       if (h.online) { await tracking.ensure(send); setOffer(j ? null : await api.offer()); } else { tracking.stop(); setOffer(null); }
     } catch { /* offline: keep what is shown, the next check retries */ }

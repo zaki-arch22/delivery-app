@@ -12,13 +12,19 @@ export async function startTracking(send: (lat: number, lng: number) => Promise<
 }
 
 // One tracker for the whole app: it keeps running while the driver moves between screens.
-let stopFn: (() => void) | null = null, starting: Promise<boolean> | null = null;
+let stopFn: (() => void) | null = null, starting: Promise<boolean> | null = null, generation = 0;
 export const tracking = {
   get on() { return stopFn !== null; },
   ensure(send: (lat: number, lng: number) => Promise<unknown>): Promise<boolean> {
     if (stopFn) return Promise.resolve(true);
-    if (!starting) starting = startTracking(send).then(f => { stopFn = f; return f !== null; }).finally(() => { starting = null; });
+    if (!starting) {
+      const gen = generation;
+      starting = startTracking(send).then(f => {
+        if (gen !== generation) { f?.(); return false; }   // stopped while it was starting: do not leave it running
+        stopFn = f; return f !== null;
+      }).finally(() => { starting = null; });
+    }
     return starting;
   },
-  stop() { stopFn?.(); stopFn = null; },
+  stop() { generation++; stopFn?.(); stopFn = null; },
 };

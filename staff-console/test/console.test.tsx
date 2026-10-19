@@ -139,7 +139,7 @@ test('8. cash: correction, a handover that is too big is refused, a real one, an
   await u.clear(screen.getByLabelText('Amount (DA)')); await u.type(screen.getByLabelText('Amount (DA)'), '1500'); await u.click(screen.getAllByRole('button', { name: 'Record a handover' }).at(-1)!);
   expect(await screen.findByRole('status')).toHaveTextContent(/Receipt no\. \d+ · 1,500 DA/);
   expect(await screen.findByText('2,500 DA')).toBeInTheDocument();
-  const hrow = screen.getByText(/^Handover to staff/).closest('tr')!; await u.click(within(hrow).getByRole('button', { name: 'Reverse' }));
+  const hrow = (await screen.findByText(/^Handover to staff/)).closest('tr')!; await u.click(within(hrow).getByRole('button', { name: 'Reverse' }));
   d = await dialog(); await u.type(within(d).getByLabelText(/^Note/), 'Entered twice'); await u.click(within(d).getByRole('button', { name: 'Confirm' }));
   await waitFor(() => expect(within(screen.getByText(/^Handover to staff/).closest('tr')!).getByText('Reversed')).toBeInTheDocument());
   expect((await db.query(`SELECT sum(amount_da)::int b FROM cash_ledger`)).rows[0].b).toBe(4000);

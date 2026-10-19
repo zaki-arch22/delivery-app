@@ -197,6 +197,7 @@ test('a place we do not serve is refused with a clear message, and no order is m
 });
 
 test('after pickup the sender calls the parcel back: it returns to him, with a code and a QR for the driver', async () => {
+  await db.query(`UPDATE driver_details SET is_online=false`);   // only this test's driver may get the offer
   const phone = '+213555000001';
   await call('/send_code', { phone }); const v = await call('/verify_code', { phone, code: await devCode(phone), path: 'user' });
   const q = await call('/get_quote', { pickup: P, dropoff: D, size: 'small' }, v.token);
