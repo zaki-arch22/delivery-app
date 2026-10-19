@@ -1,7 +1,7 @@
 # CLAUDE.md: Algiers parcel-delivery platform
 
 This file is the single, current source of truth. Keep it that way: when a decision changes, EDIT the line (replace it), never append history.
-Details live in one place each: the API in `backend/docs/API_CONTRACT_v1.md`, security in `backend/docs/SECURITY.md`, how to run tests in `scripts/`.
+Details live in one place each: the API in `backend/docs/API_CONTRACT_v1.md`, security in `backend/docs/SECURITY.md`, the platform's rules (proofs, disputes, penalties) in `backend/docs/TRUST_AND_SAFETY.md`, how to run tests in `scripts/`.
 
 ## 1. The project
 A delivery marketplace for parcels and goods (NOT people) inside Algiers, scalable later to all of Algeria. In spirit like inDrive, but ORIGINAL: learn from successful apps, never copy their design or private technology.
@@ -37,15 +37,17 @@ Built so far by Claude in a claude.ai chat (October 2026), then moved to Claude 
 - **Price:** the system recommends a price (base + per km + size/car extras, rounded up to 10 DA). The user may set any price inside a staff-set range (min %/max % of recommended), and may RAISE it while searching. Drivers accept or decline; no driver counter-offers (they slow matching). The price LOCKS when a driver accepts. Why: renegotiation after acceptance is inDrive's top complaint. Price rules are versioned; each order keeps its version.
 - **Vehicle:** decided by parcel size (small/medium → motorbike, large → car). The user never picks.
 - **Matching:** automatic, one driver at a time, nearest eligible first, offer expires after 20 s, radius 3 km widening to 8 km after 60 s, order expires after 10 min. These are starting values (`backend/src/common/config.ts`), to be tuned with real data. A driver holds one job at a time.
+- **Trust and safety (owner's wish, Oct 2026):** every handover is proved by two people (pickup code + parcel photo from sender to driver; delivery code or QR from receiver to driver), positions are recorded, everything is in a history nobody can edit, rules with points give automatic TEMPORARY blocks, permanent bans only by staff, one appeal per penalty, banned accounts cannot come back (Google account, device, driver ID number). Full rules and the research behind them: `backend/docs/TRUST_AND_SAFETY.md`.
+- **Receiver tracking page:** the sender shares a secret link (WhatsApp/SMS from his phone); the receiver sees the map, time left, amount to pay, the code and QR, without an account. Why: GrabExpress/GoSend/Uber do this; receivers are mostly not app users.
 - **Delivery proof:** a 4-digit delivery code. The sender sees it in the app and gives it to the recipient; a recipient whose VERIFIED number belongs to a registered user also gets it by push (typed, unverified numbers never do). After 5 wrong codes the order locks; staff can unlock it. Staff can never see the code.
 - **Cash on delivery:** a permanent cash ledger per driver (never edited; corrections are new entries; a reversal works once). It records only the goods money (COD). Staff record handovers with numbered receipts. Each driver has a cash limit set at approval (0 = no COD orders); drivers over their limit get no COD offers.
-- **Failed delivery** (no answer / refused / wrong address): a return leg back to the sender starts automatically, plus a problem report for staff. Cancelling is allowed only before pickup.
+- **Failed delivery** (no answer / wrong address / refused: damaged, wrong item, not ordered, changed mind, cannot pay): a return leg back to the sender starts automatically, plus a problem report for staff. Cancelling is allowed only before pickup (late sender cancels and drivers giving a job back count as rule points); after pickup the sender may call the parcel back.
 - **Ratings:** 1–5 stars plus an optional comment, both directions, once per order. Everyone sees star averages; only staff read comments.
 - **Notifications:** push only (live WebSocket + phone push). Atomic: written in the same database transaction as the event. Missed ones replay on reconnect, never twice, one profile only. **No SMS except the login verification code (and that is off for now). No email** at launch.
 - **Languages:** Arabic (right-to-left), French, English everywhere, including push texts (wording must be reviewed by native speakers).
 - **No mock data**, anywhere. Every list has an empty state.
 - **Excluded:** food, groceries, warehousing, inter-wilaya network, international, dangerous or high-value goods.
-- **Removed to keep it simple** (the owner may bring any back): scheduled delivery, seller website / CSV import / labels / seller API, saved addresses, in-app chat, recipient web page, choosing a vehicle, email.
+- **Removed to keep it simple** (the owner may bring any back): scheduled delivery, seller website / CSV import / labels / seller API, saved addresses, in-app chat, choosing a vehicle, email.
 
 ## 5. Technical decisions
 - One well-organised backend (a "modular monolith"), not microservices; no Kubernetes. Redis is NOT used yet (rate limits are in memory, live events use PostgreSQL LISTEN/NOTIFY); add it only when running several servers.
@@ -87,8 +89,9 @@ Legal status of the platform and drivers, data-protection registration (ANPDP), 
 ## 9. Next steps, in order
 Order (Claude's decision): each server piece is built right before the screen that uses it.
 1. **Usable test app**: the owner creates Neon + Firebase + Render (`backend/deploy/render.md`); then the APK is rebuilt with the server address and Google login, and the owner opens the first zone and sets the first prices in the staff console.
-2. Phone push: Firebase service key into the Render setting `FIREBASE_SERVICE_ACCOUNT_JSON`.
-3. Before launch: real SMS provider (or keep Google only), real server (test `backend/deploy/`, including OSRM with real Algiers roads and the photo folder), a traffic-flood filter, a human security test, native-speaker review of texts, app name and logo.
+2. **Trust and safety**, in the build order of `backend/docs/TRUST_AND_SAFETY.md` (proof chain, rules engine, watchdogs), built while the owner sets up the accounts.
+3. Phone push: Firebase service key into the Render setting `FIREBASE_SERVICE_ACCOUNT_JSON`.
+4. Before launch: real SMS provider (or keep Google only), real server (test `backend/deploy/`, including OSRM with real Algiers roads and the photo folder), a traffic-flood filter, a human security test, native-speaker review of texts, app name and logo.
 
 ## 10. Accounts the owner does not have yet
 SMS provider, Google Play ($25 once) / Apple ($99 per year) developer accounts, a real server. Has: Expo (free). Being created (Oct 2026): Neon, Firebase, Render (all free). (No map key is needed.) Build without them. When one is needed, explain how to get it step by step and what it costs.
