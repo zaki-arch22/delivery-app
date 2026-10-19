@@ -258,5 +258,8 @@ export const fr: Record<Key, string> = {
   cash_adjustment: "Correction",
   no_cash_entries: "Aucun mouvement d’espèces.",
   no_active_job: "Aucune livraison en cours.",
+  step_saved_offline: "Pas de réseau : enregistré sur le téléphone. Ce sera envoyé automatiquement dès qu’il y aura du réseau.",
+  step_sync_failed: "Une étape enregistrée sans réseau a été refusée : {err} Appelez le support.",
+  sync_pending: "En attente de réseau pour l’envoyer…",
   map_credit: '© les contributeurs d’OpenStreetMap',
 };

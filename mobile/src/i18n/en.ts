@@ -258,6 +258,9 @@ export const en = {
   cash_adjustment: "Correction",
   no_cash_entries: "No cash movements yet.",
   no_active_job: "No delivery in progress.",
+  step_saved_offline: "No network: saved on the phone. It will be sent automatically as soon as there is network.",
+  step_sync_failed: "A step saved without network was refused: {err} Call support.",
+  sync_pending: "Waiting for network to send it…",
   map_credit: '© OpenStreetMap contributors',
 };
 export type Key = keyof typeof en;

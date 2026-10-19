@@ -18,15 +18,18 @@ Branch: `claude/optimistic-cannon-iw9rm9` (repo zaki-arch22/delivery-app). Resum
 
 - Milestone "driver path": driver home (online switch + position, live offer with countdown, today's numbers), job screen (pickup, call, maps, picked up, code + cash check, can't deliver -> return), my deliveries, cash; fixed a real bug (the start screen stacked "home" twice). 3 driver screen tests. 353 tests + 12 database rules green.
 
+- Milestone "offline steps": job steps without network are saved on the phone and sent later (screen test with a simulated dead zone; refusal reported). 355 tests + 12 database rules green.
+
 ## In progress
-- (none)
+- Push notifications inside the app (code + tests now; switching on needs the owner's Firebase project).
 
 ## Next, in order (matches CLAUDE.md section 9)
-1. Offline queue for driver job steps.
-2. First real phone build + push (both need free owner accounts: Expo, Firebase).
+1. Push in the app (register_device after login/switch/language change, open the right screen on tap).
+2. EAS build configuration ready for the owner's free Expo account.
+3. Owner actions (see pending questions).
 
 ## Exact next action
-Offline queue: in mobile/src/core, a small persistent queue (secure store or file) for update_job_step calls; the job screen marks the step as done locally and the queue retries until the server answers (repeated steps are safe on the server). Test it by making the server unreachable in a screen test.
+Push: add expo-notifications (bundled version), src/lib/push.ts (permission, device token, register_device with language; re-register on profile switch and language change; tap -> order/[id] or job), tests with the token source replaced.
 
 ## Dev notes
 - Screen tests: `test/screens.tsx` (helpers, all routes), `test/http.ts` (test HTTP client; jest-expo replaces fetch). `renderRouter` turns on fake clocks: `open()` switches back to real ones. Test DB access goes through `psql` (pg stalls in that environment). Use `await fireEvent...` (testing library v14 is async); `toHaveTextContent('x')` is an EXACT match, use a regex; NEVER put `findBy...` inside `act(...)` (act holds updates back: deadlock); prices use non-breaking spaces (match with \s).
@@ -34,3 +37,6 @@ Offline queue: in mobile/src/core, a small persistent queue (secure store or fil
 
 ## Pending questions / owner actions (ask together at the end of a milestone)
 - Optional, free: allow `download.geofabrik.de` and `tiles.openfreemap.org` in this cloud environment's network settings so maps and road data can be tested with real Algiers data.
+- Free Expo account (to build the Android app in Expo's cloud).
+- Free Firebase project (phone push).
+- Final app name (working name: Delivery / Livraison / توصيل).

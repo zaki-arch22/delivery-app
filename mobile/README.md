@@ -9,6 +9,7 @@ Follow `AGENTS.md` (Expo's own guidance) for any Expo or React Native API.
 - api.ts       the only way the app talks to the server; renews an expired login automatically and sends exactly ONE renewal even when many requests notice at once (the server treats a reused renewal key as theft)
 - session.ts   login by SMS code, first profile, second profile from Settings, switching, log out, log out of all devices, resuming after the app is reopened
 - realtime.ts  live notifications: reconnects with growing delays, picks up exactly what was missed, never shows anything twice, renews an expired key itself
+- queue.ts     driver job steps made without network are saved on the phone (secure vault) and sent in order when the network is back; a step the server refuses is reported to the driver, never retried forever
 
 ## Screens built and tested (src/app, Expo Router: every file there is a screen)
 - welcome: language switch (Arabic right-to-left, French, English) and the two paths
@@ -27,10 +28,10 @@ Shared pieces: `src/ui` (brand components, large buttons, never colour alone), `
 The server address is set when building: `EXPO_PUBLIC_API_URL=https://...` (release builds refuse anything but HTTPS).
 
 ## Not built yet
-Push notifications (needs the Firebase key), the offline queue for job steps. A real phone build has not been made yet (needs a free Expo account).
+Push notifications (needs the Firebase key). A real phone build has not been made yet (needs a free Expo account).
 
 ## Tests
-From the project root: `bash scripts/test-all.sh` (type check + 23 tests against the real backend: 7 for the foundation, 16 that drive the real screens like a person would (only the camera, the GPS, the phone dialer and the map drawing are replaced in tests)).
+From the project root: `bash scripts/test-all.sh` (type check + 25 tests against the real backend: 8 for the foundation, 17 that drive the real screens like a person would (only the camera, the GPS, the phone dialer and the map drawing are replaced in tests)).
 
 ## Accepted build-tool risks
 See `backend/docs/SECURITY.md`, section "Known, accepted risks".

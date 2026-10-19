@@ -2,12 +2,13 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { Client } from '../core/api';
 import { Session, SessionState } from '../core/session';
 import { Notice as LiveNotice, Realtime } from '../core/realtime';
+import { StepQueue } from '../core/queue';
 import { KeyStore, secureStore } from '../core/storage';
 import { deviceLang, isLang, isRtl, Key, Lang, translate } from '../i18n';
 import { apiUrl, wsUrl } from './config';
 import { tracking } from './tracker';
 
-export interface Services { client: Client; session: Session; store: KeyStore; realtime: Realtime | null }
+export interface Services { client: Client; session: Session; store: KeyStore; realtime: Realtime | null; queue: StepQueue }
 interface AppCtx {
   services: Services;
   ready: boolean;                 // the stored login (if any) has been checked
@@ -19,9 +20,9 @@ interface AppCtx {
 const Ctx = createContext<AppCtx | null>(null);
 const LANG_KEY = 'lang';
 
-export function makeServices(store: KeyStore = secureStore(), url = apiUrl(), fetchFn?: typeof fetch, WS: typeof WebSocket | null = typeof WebSocket === 'undefined' ? null : WebSocket): Services {
+export function makeServices(store: KeyStore = secureStore(), url = apiUrl(), fetchFn?: typeof fetch, WS: typeof WebSocket | null = typeof WebSocket === 'undefined' ? null : WebSocket, retryMs?: number): Services {
   const client = new Client(url, store, fetchFn);
-  return { client, session: new Session(client), store, realtime: WS ? new Realtime(client, store, wsUrl(url), WS) : null };
+  return { client, session: new Session(client), store, realtime: WS ? new Realtime(client, store, wsUrl(url), WS) : null, queue: new StepQueue(client, store, retryMs) };
 }
 
 // Holds the login state and the chosen language for the whole app. Tests pass their own services.
@@ -48,7 +49,7 @@ export function AppProvider({ services: given, children }: { services?: Services
   const activeId = state.active?.id ?? null;
   useEffect(() => {
     const rt = services.realtime; if (!rt) return;
-    if (activeId) rt.start(activeId).catch(() => {}); else rt.stop();
+    if (activeId) { rt.start(activeId).catch(() => {}); services.queue.flush().catch(() => {}); } else rt.stop();   // waiting job steps go out as soon as a driver is logged in
     return () => { rt.stop(); tracking.stop(); };   // a switch or logout takes the driver offline on the server too
   }, [services, activeId]);
 

@@ -258,5 +258,8 @@ export const ar: Record<Key, string> = {
   cash_adjustment: "تصحيح",
   no_cash_entries: "لا توجد حركات نقد بعد.",
   no_active_job: "لا يوجد توصيل جارٍ.",
+  step_saved_offline: "لا توجد شبكة: تم الحفظ في الهاتف. سيُرسل تلقائيًا عند عودة الشبكة.",
+  step_sync_failed: "تم رفض خطوة حُفظت دون شبكة: {err} اتصل بالدعم.",
+  sync_pending: "في انتظار الشبكة لإرسالها…",
   map_credit: '© المساهمون في OpenStreetMap',
 };

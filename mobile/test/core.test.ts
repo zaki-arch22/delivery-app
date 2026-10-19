@@ -103,3 +103,17 @@ test('7. live connection with an EXPIRED key: it renews the key and connects any
   await until(async () => { await db.query(`INSERT INTO notifications(profile_id,type,dedupe_key,push_state) VALUES ($1,'order.assigned',$2,'skipped') ON CONFLICT DO NOTHING`, [pid, 'x' + Math.floor(Date.now() / 1000)]); return got.length > 0; }, 12000);
   expect(got.length).toBeGreaterThan(0); rt.stop();
 });
+
+test('8. offline job-step queue: a step the server refuses is dropped and reported, never retried forever', async () => {
+  const { StepQueue } = require('../src/core/queue');
+  const app = await signUp('+213552000008', 'Queue Tester');
+  const q = new StepQueue(app.client, app.store, 200);
+  const events: any[] = []; q.onEvent((e: any) => events.push(e));
+  await q.send({ order_id: '00000000-0000-0000-0000-000000000000', step: 'picked_up' });   // a sender profile has no job: refused
+  expect(events).toHaveLength(1);
+  expect(events[0].sent).toBe(false);
+  expect(events[0].error.code).toBe('WRONG_PROFILE');
+  expect(await q.pending()).toEqual([]);
+  expect(await app.store.get('job_steps')).toBe('[]');                                   // nothing left on the phone
+  q.stop();
+});

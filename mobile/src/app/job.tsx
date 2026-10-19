@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { ApiError } from '../core/api';
@@ -23,8 +23,23 @@ export default function JobScreen() {
   const [failing, setFailing] = useState(false), [reason, setReason] = useState<Reason | null>(null);
   const [msg, setMsg] = useState<{ text: string; warn?: boolean } | null>(null), [busy, setBusy] = useState<string | null>(null);
   const [cancelled, setCancelled] = useState(false);
+  const [unsent, setUnsent] = useState(false);   // a step is saved on the phone, waiting for network
 
-  const load = useCallback(() => api.job().then(setJob).catch(() => {}), [services]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // The server's view of the job, plus any step saved on the phone that has not reached the server yet.
+  const load = useCallback(async () => {
+    try {
+      const j = await api.job();
+      const waiting = j ? await services.queue.pending(j.id) : [];
+      setUnsent(waiting.length > 0);
+      if (j && waiting.some(w => w.step === 'delivered')) { setDone(j); setJob(null); return; }
+      if (j && j.status === 'assigned' && waiting.some(w => w.step === 'picked_up')) { setJob({ ...j, status: 'picked_up', next_step: 'delivered' }); return; }
+      setJob(j);
+    } catch { /* no network: keep what is shown */ }
+  }, [services]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => services.queue.onEvent(e => {
+    services.queue.pending().then(p => setUnsent(p.length > 0));
+    if (!e.sent) setMsg({ text: t('step_sync_failed', { err: err(e.error) }), warn: true });
+  }) as unknown as () => void, [services]);   // eslint-disable-line react-hooks/exhaustive-deps
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useNotices(n => { if (n.kind === 'job.cancelled') { setCancelled(true); load(); } else if (n.kind === 'job.updated') load(); });
 
@@ -34,13 +49,22 @@ export default function JobScreen() {
     const m = errorMessage(e); return t(m.key, m.vars);
   };
   async function run(k: string, f: () => Promise<void>) { setBusy(k); setMsg(null); try { await f(); } catch (e) { setMsg({ text: err(e), warn: true }); } finally { setBusy(null); } }
+  // A job step: sent at once when there is network; without network it is saved on the phone and sent later.
+  async function step(item: { step: 'picked_up' | 'delivered'; delivery_code?: string; cash_collected_da?: number }, sent: () => Promise<void>, offline: () => void) {
+    try { await sent(); }
+    catch (e) {
+      if (!(e instanceof ApiError) || e.status !== 0) throw e;
+      if (await services.queue.send({ order_id: job!.id, ...item })) { await load(); return; }
+      setUnsent(true); offline(); setMsg({ text: t('step_saved_offline') });
+    }
+  }
 
-  const pickedUp = () => job && run('pickup', async () => { setJob((await api.pickedUp(job.id)).job); });
+  const pickedUp = () => job && run('pickup', () => step({ step: 'picked_up' }, async () => { setJob((await api.pickedUp(job.id)).job); }, () => setJob({ ...job, status: 'picked_up', next_step: 'delivered' })));
   const deliver = () => job && run('deliver', async () => {
     if (!/^\d{4}$/.test(code)) { setMsg({ text: t('code_4'), warn: true }); return; }
     if (job.cash_to_collect_da > 0 && !cashOk) { setMsg({ text: t('cash_confirm_needed'), warn: true }); return; }
-    await api.delivered(job.id, code, job.cash_to_collect_da);
-    setDone(job); setJob(null); setCode(''); setCashOk(false);
+    const finish = () => { setDone(job); setJob(null); setCode(''); setCashOk(false); };
+    await step({ step: 'delivered', delivery_code: code, cash_collected_da: job.cash_to_collect_da }, async () => { await api.delivered(job.id, code, job.cash_to_collect_da); finish(); }, finish);
   });
   const fail = () => job && reason && run('fail', async () => {
     const ret = await api.fail(job.id, reason);
@@ -54,6 +78,8 @@ export default function JobScreen() {
     <Screen testID="screen-job">
       {done ? (<>
         <T kind="title" testID="job-done">{t('job_delivered')}</T>
+        {unsent ? <Notice testID="unsent" text={t('sync_pending')} /> : null}
+        {msg ? <Notice testID="job-msg" warn={msg.warn} text={msg.text} /> : null}
         {done.leg === 'delivery' ? <Button testID="rate-sender" kind="secondary" label={t('rate_sender')} onPress={() => router.push({ pathname: '/rate/[id]', params: { id: done.id } })} /> : null}
       </>) : <Notice testID="job-none" warn={cancelled} text={cancelled ? t('job_cancelled') : t('no_active_job')} />}
       <Button testID="back-home" label={t('back_home')} onPress={() => router.replace('/home')} />
@@ -68,6 +94,7 @@ export default function JobScreen() {
     <Screen testID="screen-job">
       <Button kind="plain" label={'‹ ' + t('back_home')} onPress={() => router.replace('/home')} />
       <T kind="muted">{job.ref}</T>
+      {unsent ? <Notice testID="unsent" text={t('sync_pending')} /> : null}
       <T kind="title" testID="job-step">{t(job.leg === 'return' ? 'job_return' : toPickup ? 'job_to_pickup' : 'job_to_dropoff')}</T>
       <View style={s.mapBox}>
         <AppMap start={target} zoom={14} pins={[{ id: 'A', at: { lat: job.pickup_lat, lng: job.pickup_lng }, kind: 'pickup', label: t('pickup') }, { id: 'B', at: { lat: job.dropoff_lat, lng: job.dropoff_lng }, kind: 'dropoff', label: t('dropoff') }]} />

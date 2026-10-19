@@ -68,7 +68,7 @@ export async function uploadDocs(token: string) {
   return out;
 }
 // The live connection uses the `ws` package (Node), exactly like the core tests.
-export const svc = (store = memoryStore()) => makeServices(store, API, nodeFetch, require('ws'));
+export const svc = (store = memoryStore(), fetchFn: typeof fetch = nodeFetch) => makeServices(store, API, fetchFn, require('ws'), 500);
 
 export async function loginThroughScreens(phoneTyped: string, path: 'user' | 'driver') {
   await fireEvent.press(await screen.findByTestId('path-' + path));

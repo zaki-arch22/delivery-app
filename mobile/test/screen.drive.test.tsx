@@ -22,8 +22,8 @@ let sender = '', n = 0;
 const rx = (text: string) => new RegExp(text.replace(/[\u00a0 ]/g, '\\s'));
 
 // Driver home, online (tests can run alone or in order).
-async function driverOnlineHome() {
-  await open(svc());
+async function driverOnlineHome(services = svc()) {
+  await open(services);
   await loginThroughScreens('0556000002', 'driver');
   const st = await screen.findByTestId('online-state');
   if (/offline/.test(JSON.stringify(st.props.children))) await act(async () => { await fireEvent.press(screen.getByTestId('toggle-online')); });
@@ -136,4 +136,36 @@ test('the sender cancels after the driver accepted: the driver is told; going of
   const el_toggle_online = await screen.findByTestId('toggle-online'); await act(async () => { await fireEvent.press(el_toggle_online); });
   await waitFor(() => expect(screen.getByTestId('online-state')).toHaveTextContent(/You are offline/));
   expect((await db.query(`SELECT is_online FROM driver_details`)).rows[0].is_online).toBe(false);
+});
+
+test('no network in the middle of a job: steps are saved on the phone and sent when the network is back', async () => {
+  const net = { down: false };
+  const flaky: typeof fetch = ((u: any, i: any) => net.down ? Promise.reject(new TypeError('Network request failed')) : nodeFetch(u, i)) as any;
+  await driverOnlineHome(svc(undefined, flaky));
+  const o = await newOrder();
+  expect(await screen.findByTestId('offer-card', {}, { timeout: 15000 })).toBeTruthy();
+  await act(async () => { await fireEvent.press(screen.getByTestId('accept-offer')); });
+  const pick = await screen.findByTestId('picked-up');
+  const status = async () => (await db.query(`SELECT status FROM orders WHERE id=$1`, [o.id])).rows[0].status;
+
+  net.down = true;                                                                         // the driver enters a dead zone
+  await act(async () => { await fireEvent.press(pick); });
+  await waitFor(() => expect(screen.getByTestId('job-step')).toHaveTextContent(/Deliver the parcel/));   // the driver can go on
+  expect(screen.getByTestId('unsent')).toHaveTextContent(/Waiting for network/);
+  expect(screen.getByTestId('job-msg')).toHaveTextContent(/saved on the phone/);
+  expect(await status()).toBe('assigned');                                                  // not on the server yet
+
+  net.down = false;                                                                        // network is back: sent by itself
+  await waitFor(async () => expect(await status()).toBe('picked_up'), { timeout: 8000 });
+  await waitFor(() => expect(screen.queryByTestId('unsent')).toBeNull());
+
+  const code = (await db.query(`SELECT delivery_code FROM orders WHERE id=$1`, [o.id])).rows[0].delivery_code as string;
+  net.down = true;
+  await fireEvent.changeText(screen.getByTestId('code-input'), code);
+  await act(async () => { await fireEvent.press(screen.getByTestId('delivered')); });
+  expect(await screen.findByTestId('job-done')).toBeTruthy();
+  expect(screen.getByTestId('unsent')).toBeTruthy();
+  expect(await status()).toBe('picked_up');
+  net.down = false;
+  await waitFor(async () => expect(await status()).toBe('delivered'), { timeout: 8000 });
 });
