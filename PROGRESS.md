@@ -1,7 +1,7 @@
 # PROGRESS.md: where the work stands (read this first when resuming)
 
 Rules: CLAUDE.md is the source of truth for decisions; this file tracks work only. Update it after every finished piece, commit, push.
-Branch: `claude/optimistic-cannon-iw9rm9` (repo zaki-arch22/delivery-app). Resume: `git pull`, the SessionStart hook prepares the machine (or run `bash .claude/hooks/session-start.sh` with CLAUDE_CODE_REMOTE=true), then `bash scripts/test-all.sh` must be green before new work.
+Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9rm9`) (repo zaki-arch22/delivery-app). Resume: `git pull`, the SessionStart hook prepares the machine (or run `bash .claude/hooks/session-start.sh` with CLAUDE_CODE_REMOTE=true), then `bash scripts/test-all.sh` must be green before new work.
 
 ## Done
 - Project imported from the claude.ai chat; all suites green (288 tests + 10 database rules).
@@ -48,4 +48,5 @@ Until then: polish and review only; do not message the owner again.
 - Real map data: YES, allowing download.geofabrik.de and tiles.openfreemap.org.
 
 ## Pending questions / owner actions
-- (none until the first build is done)
+- (2026-10-19) EXPO_TOKEN works and api.expo.dev is reachable, but the token's robot user "Claude" has the role **Viewer** on the Expo account `delivery_platform`, so `eas init` fails ("you can't create projects"). Owner: on expo.dev, account delivery_platform -> Settings -> Robot users (or Members) -> change "Claude" to **Developer** (free). Then retry the exact next action.
+- download.geofabrik.de is still blocked (connection reset); tiles.openfreemap.org now answers 200.
