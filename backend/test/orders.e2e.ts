@@ -14,10 +14,10 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 async function until<T>(fn: () => Promise<T | null | undefined | false>, ms = 15000): Promise<T | null> { const t = Date.now(); while (Date.now() - t < ms) { const v = await fn(); if (v) return v as T; await sleep(300); } return null; }
 
 async function login(phone: string, path: 'user' | 'driver') { await api('/send_code', { phone }); const c = (await api('/dev/last_code?phone=' + encodeURIComponent(phone))).b.code; return (await api('/verify_code', { phone, code: c, path })).b; }
-async function makeUser(phone: string, name: string) { const l = await login(phone, 'user'); return (await api('/add_profile', { type: 'user', display_name: name }, l.token)).b.token as string; }
+async function makeUser(phone: string, name: string) { const l = await login(phone, 'user'); return (await api('/add_profile', { accept_rules: true, type: 'user', display_name: name }, l.token)).b.token as string; }
 async function makeDriver(phone: string, name: string, lat: number, lng: number, vehicle = 'motorbike', limit: number | null = null) {
   const l = await login(phone, 'driver');
-  const r = await api('/add_profile', { type: 'driver', display_name: name, documents: await driverDocs(B, l.token, vehicle) }, l.token);
+  const r = await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: name, documents: await driverDocs(B, l.token, vehicle) }, l.token);
   const id = r.b.active_profile.id;
   await pool.query(`UPDATE profiles SET status='active' WHERE id=$1`, [id]);
   await pool.query(`UPDATE driver_details SET cash_limit_da=$2 WHERE profile_id=$1`, [id, limit]);
@@ -41,7 +41,7 @@ const offerFor = (t: string) => until(async () => (await api('/get_current_offer
   const D2 = await makeDriver('+213550200002', 'Driver Two', 36.7628, 3.0588, 'motorbike', null);     // ~1 km
   const D3 = await makeDriver('+213550200003', 'Driver Three', 36.7990, 3.0588, 'motorbike', null);   // ~5 km (outside first radius)
   // Amina is ALSO a driver (second profile on the same number), online right at the pickup point
-  const lA = await login('+213550100001', 'user'); const selfD = await api('/add_profile', { type: 'driver', display_name: 'Amina Driver', documents: await driverDocs(B, lA.token) }, lA.token);
+  const lA = await login('+213550100001', 'user'); const selfD = await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Amina Driver', documents: await driverDocs(B, lA.token) }, lA.token);
   await pool.query(`UPDATE profiles SET status='active' WHERE id=$1`, [selfD.b.active_profile.id]);
   await api('/set_online', { online: true }, selfD.b.token); await api('/update_location', P, selfD.b.token);
 

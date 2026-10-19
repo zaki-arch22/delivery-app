@@ -61,9 +61,9 @@ beforeAll(async () => {
   await db.query(`INSERT INTO zones(name, area, is_open) VALUES ('test-algiers', ST_GeogFromText('MULTIPOLYGON(((2.9 36.6, 3.3 36.6, 3.3 36.9, 2.9 36.9, 2.9 36.6)))'), true)`);
   await db.query(`INSERT INTO pricing_rules(base_da, per_km_da, medium_extra_da, large_extra_da, car_extra_da, min_percent, max_percent, active) VALUES (100, 30, 50, 150, 100, 80, 150, true)`); // TEST numbers only
   const u = await login('+213556000001', 'user');
-  sender = (await call('/add_profile', { type: 'user', display_name: 'Leila Sender' }, u.token)).token;
+  sender = (await call('/add_profile', { accept_rules: true, type: 'user', display_name: 'Leila Sender' }, u.token)).token;
   const d = await login('+213556000002', 'driver');
-  const p = await call('/add_profile', { type: 'driver', display_name: 'Karim Rider', documents: await uploadDocs(d.token) }, d.token);
+  const p = await call('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Karim Rider', documents: await uploadDocs(d.token) }, d.token);
   await db.query(`UPDATE profiles SET status='active' WHERE id=$1`, [p.active_profile.id]);
   await db.query(`UPDATE driver_details SET cash_limit_da=100000 WHERE profile_id=$1`, [p.active_profile.id]);
 });

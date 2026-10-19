@@ -3,6 +3,8 @@ export const fail = (status: number, error: string, message: string) => new Http
 export const bad = (error: string, message: string) => fail(400, error, message);
 export const PHONE = /^\+[0-9]{8,15}$/;
 export const isInt = (v: any) => Number.isInteger(v);
+// A database row id: a positive whole number small enough for the database (bigger ones would crash the query).
+export const isId = (v: any) => Number.isSafeInteger(v) && v > 0;
 
 export function point(p: any, name: string) {
   const lat = p?.lat, lng = p?.lng;

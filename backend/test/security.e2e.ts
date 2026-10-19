@@ -22,9 +22,9 @@ async function api(path: string, body?: any, token?: string, headers: any = {}) 
 }
 async function login(phone: string, path: 'user' | 'driver' = 'user') { await api('/send_code', { phone }); const c = (await api('/dev/last_code?phone=' + encodeURIComponent(phone))).b.code; return (await api('/verify_code', { phone, code: c, path })).b; }
 const docs = { id_photo_url: 'a', licence_photo_url: 'b', vehicle_photo_url: 'c', vehicle: 'motorbike' };
-async function makeUser(phone: string, name: string) { const l = await login(phone); const r = await api('/add_profile', { type: 'user', display_name: name }, l.token); return { token: r.b.token as string, id: r.b.active_profile.id as string, refresh: l.refresh_token as string }; }
+async function makeUser(phone: string, name: string) { const l = await login(phone); const r = await api('/add_profile', { accept_rules: true, type: 'user', display_name: name }, l.token); return { token: r.b.token as string, id: r.b.active_profile.id as string, refresh: l.refresh_token as string }; }
 async function makeDriver(phone: string, name: string, lat: number, lng: number) {
-  const l = await login(phone, 'driver'); const r = await api('/add_profile', { type: 'driver', display_name: name, documents: await driverDocs(HTTP, l.token) }, l.token); const id = r.b.active_profile.id;
+  const l = await login(phone, 'driver'); const r = await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: name, documents: await driverDocs(HTTP, l.token) }, l.token); const id = r.b.active_profile.id;
   await pool.query(`UPDATE profiles SET status='active' WHERE id=$1`, [id]); await pool.query(`UPDATE driver_details SET cash_limit_da=50000 WHERE profile_id=$1`, [id]);
   await api('/set_online', { online: true }, r.b.token); await api('/update_location', { lat, lng }, r.b.token); return { token: r.b.token as string, id: id as string };
 }
@@ -140,12 +140,12 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
   // ===== SEC11 injection payloads and garbage =====
   const inj = `'; DROP TABLE orders; --`; const oi = await order(A.token, 'sec-order-0002', { recipient_name: inj, pickup_address: { street: inj, notes: '<script>alert(1)</script>' } });
   ok('SEC11 SQL/script payloads are stored as harmless text; the tables are intact', oi.recipient_name === inj && (await pool.query(`SELECT count(*)::int n FROM orders`)).rows[0].n >= 2);
-  ok('SEC11 hidden text-direction tricks in names are refused', (await api('/add_profile', { type: 'driver', display_name: 'Eve\u202Elive', documents: docs }, (await login('+213550970001')).token)).b.error !== undefined);
+  ok('SEC11 hidden text-direction tricks in names are refused', (await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Eve\u202Elive', documents: docs }, (await login('+213550970001')).token)).b.error !== undefined);
   const ST = (await api('/staff_login', { email: 'nofactor@test.example', password: PW, code: '1' })).b.token; // none: no token; build a real staff token below
   const sid = await insStaff('fuzz@test.example'); const stTok = (await api('/staff_login', { email: 'fuzz@test.example', password: PW, code: code('fuzz@test.example') })).b.token as string;
   const q = (await api('/list_all_orders?q=' + encodeURIComponent("%' OR 1=1 --"), undefined, stTok)); ok('SEC11 an injection attempt in the staff search returns nothing, not everything', q.s === 200 && q.b.orders.length === 0, q.b);
-  const userRoutes = ['get_quote', 'create_order', 'cancel_order', 'raise_price', 'recall_order', 'report_problem', 'submit_rating', 'register_device', 'add_profile', 'switch_profile'], driverRoutes = ['set_online', 'update_location', 'accept_offer', 'decline_offer', 'update_job_step', 'report_delivery_failure', 'release_job'];
-  const staffRoutes = ['approve_driver', 'reject_driver', 'suspend_profile', 'unsuspend_profile', 'staff_order_action', 'resolve_problem', 'record_cash_handover', 'add_cash_adjustment', 'create_zone', 'set_zone_open', 'create_pricing_version'];
+  const userRoutes = ['appeal_violation', 'get_quote', 'create_order', 'cancel_order', 'raise_price', 'recall_order', 'report_problem', 'submit_rating', 'register_device', 'add_profile', 'switch_profile'], driverRoutes = ['set_online', 'update_location', 'accept_offer', 'decline_offer', 'update_job_step', 'report_delivery_failure', 'release_job'];
+  const staffRoutes = ['approve_driver', 'reject_driver', 'suspend_profile', 'unsuspend_profile', 'staff_order_action', 'resolve_problem', 'record_cash_handover', 'add_cash_adjustment', 'create_zone', 'set_zone_open', 'create_pricing_version', 'add_violation', 'decide_violation', 'block_profile', 'lift_sanction', 'ban_account'];
   const junk: any[] = [{}, { a: [1, 2] }, { order_id: { $ne: null } }, { order_id: "' OR 1=1", offer_id: 'abc', id: -1, quote_id: 'x', profile_id: 5, amount_da: 1e30, offered_da: 'NaN', lat: 'a', lng: [], online: 'yes', stars: 99, type: [], name: 'x'.repeat(5000), polygon: 'x', email: {}, which: 1 }, { order_id: '00000000-0000-0000-0000-000000000000', step: 'delivered', delivery_code: 12, cash_collected_da: 'x' }];
   const sweep = async (routes: string[], tok: string) => { let five = 0, n = 0; const bad: string[] = []; for (const r of routes) for (const bdy of junk) { const x = await api('/' + r, bdy, tok, { 'x-forwarded-for': fresh() }); n++; if (x.s >= 500) { five++; bad.push(r + ' ' + JSON.stringify(bdy).slice(0, 40)); } } return { five, n, bad }; };
   const fu = await sweep(userRoutes, (await makeUser('+213550980001', 'Fuzz User')).token), fd = await sweep(driverRoutes, D2.token), fs = await sweep(staffRoutes, stTok);
@@ -295,6 +295,28 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
     const page = await raw('/t/' + etk);
     ok('SEC19 the page is the same static file for every order (no data written into it)', !(await page.text()).includes('onerror') && /script-src 'self'/.test(page.headers.get('content-security-policy') ?? ''));
     await api('/cancel_order', { order_id: evil.id }, A.token);
+  }
+
+  // ===== SEC20 rules engine: only staff can judge, nobody can rewrite or dodge =====
+  {
+    const someone = (await pool.query(`SELECT id FROM profiles LIMIT 1`)).rows[0].id;
+    let refused = 0;
+    for (const [path, body] of [['add_violation', { profile_id: someone, rule: 'behaviour', points: 3, note: 'self-made punishment' }], ['decide_violation', { id: 1, decision: 'cancel', note: 'I forgive myself' }], ['block_profile', { profile_id: someone, hours: 1, reason: 'competitor' }], ['lift_sanction', { id: 1, note: 'free me' }], ['ban_account', { profile_id: someone, reason: 'I want my rival gone' }]] as [string, any][])
+      if ((await api('/' + path, body, A.token)).b.error === 'STAFF_ONLY') refused++;
+    ok('SEC20 an app login can never record, decide, block, lift or ban', refused === 5, refused);
+    ok('SEC20 staff lists and records refuse app logins', (await api('/list_violations', undefined, A.token)).b.error === 'STAFF_ONLY' && (await api('/get_profile_record?profile_id=' + someone, undefined, A.token)).b.error === 'STAFF_ONLY');
+    ok('SEC20 my record needs a login', (await api('/my_record')).s === 401 && (await api('/appeal_violation', { id: 1, text: 'let me in please' })).s === 401);
+    let odd = 0; for (const id of ['1 OR 1=1', -1, 1e20, '../1', { a: 1 }]) { const r = await api('/appeal_violation', { id, text: 'strange id attempt here' }, A.token); if (r.s >= 400 && r.s < 500) odd++; }
+    ok('SEC20 strange ids on an appeal are refused cleanly', odd === 5, odd);
+    let big = 0; for (const [path, body, tok] of [['accept_offer', { offer_id: 1e20 }, D1.token], ['decline_offer', { offer_id: 1e20 }, D1.token], ['appeal_violation', { id: 1e20, text: 'a number too big for the db' }, A.token]] as [string, any, string][])
+      if ((await api('/' + path, body, tok)).s === 400) big++;
+    ok('SEC20 a number too big for the database is refused (it used to crash the query)', big === 3, big);
+    const before = (await pool.query(`SELECT count(*)::int n FROM account_devices`)).rows[0].n;
+    for (const dev of ["'; DROP TABLE accounts; --", 'x'.repeat(500), '<script>', '']) await api('/refresh_token', { refresh_token: 'nope' }, undefined, { 'x-device': dev });
+    await login('+213550950001', 'user');   // a normal login without a device header
+    ok('SEC20 garbage in the device header is ignored, never stored', (await pool.query(`SELECT count(*)::int n FROM account_devices WHERE device_hash !~ '^[0-9a-f]{64}$'`)).rows[0].n === 0 && (await pool.query(`SELECT count(*)::int n FROM account_devices`)).rows[0].n === before);
+    let rewrite = 0; try { await appPool.query(`DELETE FROM violations`); } catch { rewrite++; } try { await appPool.query(`UPDATE sanctions SET until = now()`); } catch { rewrite++; }
+    ok('SEC20 even the app\'s own database login cannot delete rule breaks or shorten sanctions behind staff\'s back', rewrite === 2 || (await appPool.query(`SELECT count(*)::int n FROM sanctions`)).rows[0].n === 0, rewrite);
   }
 
   // ===== SEC15 evidence trail and code hygiene =====

@@ -66,6 +66,13 @@ test('sender sign-up: bad number, wrong code, then code -> name -> home; reopeni
   expect(await screen.findByTestId('name-input-error')).toBeTruthy();
   await fireEvent.changeText(screen.getByTestId('name-input'), 'Lina Haddad');
   await fireEvent.press(screen.getByTestId('create-profile'));
+  expect(await screen.findByTestId('name-input-error')).toHaveTextContent(/Accept the platform rules/);   // the rules must be accepted
+  await fireEvent.press(screen.getByTestId('read-rules'));
+  expect(await screen.findByTestId('screen-rules')).toBeTruthy();
+  expect(screen.getAllByText(/Prohibited goods/).length).toBeGreaterThan(0);
+  await fireEvent.press(screen.getByText('‹ Back'));
+  await fireEvent.press(await screen.findByTestId('accept-rules'));
+  await fireEvent.press(screen.getByTestId('create-profile'));
   expect(await screen.findByText('Hello, Lina Haddad')).toBeTruthy();
   const rows = await db.query(`SELECT p.type, p.display_name FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE a.phone='+213553000001'`);
   expect(rows.rows).toEqual([{ type: 'user', display_name: 'Lina Haddad' }]);         // exactly one profile, the chosen path
@@ -98,8 +105,8 @@ test('driver with both profiles: pending status shown, switch to the sender prof
   const phone = '+213553000003';
   await nodeFetch(API + '/send_code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ phone }) });
   const v = await (await nodeFetch(API + '/verify_code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ phone, code: await devCode(phone), path: 'driver' }) })).json() as any;
-  const d = await (await nodeFetch(API + '/add_profile', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + v.token }, body: JSON.stringify({ type: 'driver', display_name: 'Karim Driver', documents: await uploadDocs(v.token) }) })).json() as any;
-  await nodeFetch(API + '/add_profile', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + d.token }, body: JSON.stringify({ type: 'user', display_name: 'Karim Sender' }) });
+  const d = await (await nodeFetch(API + '/add_profile', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + v.token }, body: JSON.stringify({ accept_rules: true, national_id: '123456789012', type: 'driver', display_name: 'Karim Driver', documents: await uploadDocs(v.token) }) })).json() as any;
+  await nodeFetch(API + '/add_profile', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + d.token }, body: JSON.stringify({ accept_rules: true, type: 'user', display_name: 'Karim Sender' }) });
 
   await open(svc());
   await loginThroughScreens('0553000003', 'driver');
@@ -163,6 +170,7 @@ test('Google login, sender: picker closed -> nothing happens; then Google -> pho
   await fireEvent.press(screen.getByTestId('save-phone'));
   await screen.findByTestId('screen-new-user');
   expect(screen.getByTestId('name-input').props.value).toBe('Sara Benali');            // name offered by Google, can be changed
+  await fireEvent.press(screen.getByTestId('accept-rules'));
   await fireEvent.press(screen.getByTestId('create-profile'));
   expect(await screen.findByText('Hello, Sara Benali')).toBeTruthy();
   const rows = await db.query(`SELECT a.phone, a.phone_verified, p.type FROM accounts a JOIN profiles p ON p.account_id=a.id WHERE a.google_sub='g-mobile-sender'`);
@@ -199,4 +207,34 @@ test('Google login: someone who left before giving the phone number is asked for
   await fireEvent.press(await screen.findByTestId('path-user'));
   await fireEvent.press(await screen.findByTestId('login-google'));
   await screen.findByTestId('screen-contact-phone');
+});
+
+test('my record: a rule break with its reason, an appeal sent once, the block shown', async () => {
+  await db.query(`DELETE FROM otp_codes`);   // this test number has logged in many times already (5 codes per hour protection)
+  const store = memoryStore();
+  await open(svc(store));
+  await loginThroughScreens('0553000001', 'user');
+  await screen.findByText('Hello, Lina Haddad');
+  const pid = (await db.query(`SELECT p.id FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE a.phone='+213553000001' AND p.type='user'`)).rows[0].id;
+  await fireEvent.press(screen.getByTestId('open-settings'));
+  await fireEvent.press(await screen.findByTestId('open-record'));
+  expect(await screen.findByTestId('record-empty')).toHaveTextContent(/No rule broken/);
+  await db.query(`INSERT INTO violations(profile_id, rule, points, note, source) VALUES ($1, 'late_cancel', 1, 'Cancelled after a driver had accepted', 'system')`, [pid]);
+  await db.query(`INSERT INTO sanctions(profile_id, kind, level, until, reason, source) VALUES ($1, 'block', 5, now() + interval '1 day', 'test block', 'system')`, [pid]);
+  await fireEvent.press(screen.getByText('‹ Back'));
+  await fireEvent.press(await screen.findByTestId('open-record'));
+  expect(await screen.findByTestId('record-points')).toHaveTextContent(/1 points in the last 90 days/);
+  expect(screen.getByTestId('record-block')).toHaveTextContent(/blocked until/);
+  expect(screen.getByText(/Sender cancels late/)).toBeTruthy();
+  const vid = (await db.query(`SELECT id FROM violations WHERE profile_id=$1`, [pid])).rows[0].id;
+  await fireEvent.press(screen.getByTestId('appeal-' + vid));
+  await fireEvent.changeText(screen.getByTestId('appeal-text'), 'short');
+  await act(async () => { await fireEvent.press(screen.getByTestId('appeal-send')); });
+  expect(await screen.findByTestId('record-msg')).toHaveTextContent(/at least 10 characters/);
+  await fireEvent.changeText(screen.getByTestId('appeal-text'), 'The driver never came, I waited 20 minutes.');
+  await act(async () => { await fireEvent.press(screen.getByTestId('appeal-send')); });
+  expect(await screen.findByTestId('record-msg')).toHaveTextContent(/Appeal sent/);
+  await waitFor(() => expect(screen.queryByTestId('appeal-' + vid)).toBeNull());       // one appeal only
+  expect((await db.query(`SELECT status FROM violations WHERE id=$1`, [vid])).rows[0].status).toBe('appealed');
+  await db.query(`UPDATE sanctions SET lifted_at=now(), lift_note='test' WHERE profile_id=$1`, [pid]);
 });

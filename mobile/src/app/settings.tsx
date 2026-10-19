@@ -5,13 +5,14 @@ import { useApp } from '../lib/app';
 import { errorMessage } from '../lib/errors';
 import { Button, Field, Gap, Notice, Screen, T } from '../ui/kit';
 import { LanguageSwitch } from '../ui/LanguageSwitch';
+import { RulesAccept } from '../ui/RulesAccept';
 
 // Settings (contract A): language, switch or add the other profile, log out, log out of all devices.
 export default function Settings() {
   const { t, services, state } = useApp();
   const [msg, setMsg] = useState<{ text: string; warn?: boolean } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState(false), [rules, setRules] = useState(false);
   const [name, setName] = useState(state.active?.display_name ?? '');
   const active = state.active;
   const other = active?.type === 'user' ? 'driver' : 'user';
@@ -22,7 +23,8 @@ export default function Settings() {
   const switchProfile = () => run('switch', async () => { await services.session.switchProfile(other); router.replace('/home'); });
   const addUser = () => run('add', async () => {
     const n = name.trim(); if (n.length < 2 || n.length > 60) { setMsg({ text: t('name_invalid'), warn: true }); return; }
-    await services.session.addProfile('user', n); router.replace('/home');
+    if (!rules) { setMsg({ text: t('rules_needed'), warn: true }); return; }
+    await services.session.addProfile('user', n, true); router.replace('/home');
   });
   const logout = () => run('logout', async () => { await services.session.logout(); router.replace('/welcome'); });
   const logoutAll = () => Alert.alert(t('logout_all_confirm'), t('logout_all_sub'), [
@@ -44,11 +46,14 @@ export default function Settings() {
         : other === 'driver' ? <Button testID="add-driver" kind="secondary" label={t('add_driver_profile')} onPress={() => router.push('/driver-signup')} />
         : adding ? (<>
             <Field testID="add-name" label={t('name_label')} value={name} onChangeText={setName} maxLength={60} />
+            <RulesAccept value={rules} onChange={setRules} />
             <Button testID="add-user-confirm" label={t('create_profile')} busy={busy === 'add'} onPress={addUser} />
           </>)
         : <Button testID="add-user" kind="secondary" label={t('add_user_profile')} onPress={() => setAdding(true)} />}
       {msg ? <Notice text={msg.text} warn={msg.warn} /> : null}
       <Gap n={6} />
+      {active ? <Button testID="open-record" kind="secondary" label={t('record_title')} onPress={() => router.push('/record')} /> : null}
+      <Button testID="open-rules" kind="plain" label={t('rules_title')} onPress={() => router.push('/rules')} />
       <Button testID="logout" kind="secondary" busy={busy === 'logout'} label={t('logout')} onPress={logout} />
       <Button testID="logout-all" kind="danger" busy={busy === 'all'} label={t('logout_all')} sub={t('logout_all_sub')} onPress={logoutAll} />
     </Screen>

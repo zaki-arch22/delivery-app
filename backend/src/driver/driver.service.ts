@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { timingSafeEqual } from 'crypto';
 import { Db } from '../db/db.service';
-import { bad, fail, isInt, point, uuid } from '../common/errors';
+import { bad, fail, isId, isInt, point, uuid } from '../common/errors';
 import { notify } from '../notify/notify';
 import { createReturnLeg } from '../orders/return-leg';
 import { Documents } from '../documents/documents.service';
 import { Matching } from '../orders/matching.service';
 import { cfg } from '../common/config';
+import { assertCanWork, recordViolation } from '../trust/rules';
 
 // Why a parcel could not be delivered. "refused_*" = the receiver refused it at the door (TRUST_AND_SAFETY.md, step 6).
 export const FAIL_REASONS = ['no_answer', 'wrong_address', 'refused_damaged', 'refused_wrong_item', 'refused_not_ordered', 'refused_changed_mind', 'refused_cannot_pay'];
@@ -34,6 +35,7 @@ export class DriverService {
 
   async setOnline(driverId: string, online: any) {
     if (typeof online !== 'boolean') throw bad('BAD_INPUT', 'online must be true or false');
+    if (online) await assertCanWork((s, p) => this.db.query(s, p), driverId);   // a blocked driver cannot start working
     if (!online) {
       const job = await this.db.one(`SELECT 1 FROM orders WHERE driver_profile_id=$1 AND status IN ('assigned','picked_up')`, [driverId]);
       if (job) throw fail(409, 'ON_JOB', 'Finish your current job before going offline');
@@ -73,7 +75,8 @@ export class DriverService {
   }
 
   async accept(driverId: string, offerId: any) {
-    if (!isInt(offerId)) throw bad('BAD_ID', 'offer_id must be a number');
+    if (!isId(offerId)) throw bad('BAD_ID', 'offer_id must be a number');
+    await assertCanWork((s, p) => this.db.query(s, p), driverId);
     return this.db.tx(async q => {
       const [f] = await q(`UPDATE offers SET status='accepted' WHERE id=$1 AND driver_profile_id=$2 AND status='offered' AND expires_at > now() RETURNING order_id`, [offerId, driverId]);
       if (!f) throw fail(409, 'OFFER_GONE', 'This offer is no longer available');
@@ -90,7 +93,7 @@ export class DriverService {
   }
 
   async decline(driverId: string, offerId: any) {
-    if (!isInt(offerId)) throw bad('BAD_ID', 'offer_id must be a number');
+    if (!isId(offerId)) throw bad('BAD_ID', 'offer_id must be a number');
     const r = await this.db.one(`UPDATE offers SET status='declined' WHERE id=$1 AND driver_profile_id=$2 AND status='offered' RETURNING order_id`, [offerId, driverId]);
     if (!r) throw fail(409, 'OFFER_GONE', 'This offer is no longer available');
     await this.db.query(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'offer_declined',$2,'{}')`, [r.order_id, driverId]);
@@ -179,6 +182,8 @@ export class DriverService {
       await q(`UPDATE orders SET status='failed' WHERE id=$1`, [o.id]);
       await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'delivery_failed',$2,$3)`, [o.id, driverId, { reason: b.reason, note, evidence_photo: evidence, distance_m: m }]);
       await q(`INSERT INTO problem_reports(order_id, reporter_profile_id, reason, note) VALUES ($1,$2,$3,$4)`, [o.id, driverId, `delivery_failed:${b.reason}`, note]);
+      // "I never ordered this": a sign of a fake order by the sender (he may appeal; staff decide).
+      if (b.reason === 'refused_not_ordered' && o.leg === 'delivery') await recordViolation(q, { profile: o.user_profile_id, rule: 'not_ordered_refusal', order: o.id, note: 'The receiver said he never ordered this parcel', source: 'system' });
       await notify(q, { profile: o.user_profile_id, kind: 'order.failed', order: o.id, dedupe: `order:${o.id}:failed`, data: { ref: o.ref, reason: b.reason } });
       if (o.leg === 'return') return null;       // a failed return goes to staff, no second return
       return createReturnLeg(q, o, { profile: driverId });
@@ -200,6 +205,7 @@ export class DriverService {
       await q(`UPDATE orders SET status='searching', driver_profile_id=NULL, locked_da=NULL, assigned_at=NULL, search_started_at=now() WHERE id=$1`, [o.id]);
       await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'released_by_driver',$2,$3)`, [o.id, driverId, { reason: b.reason, note, evidence_photo: evidence }]);
       if (b.reason === 'unsafe_or_prohibited') await q(`INSERT INTO problem_reports(order_id, reporter_profile_id, reason, note) VALUES ($1,$2,'driver_refused:unsafe_or_prohibited',$3)`, [o.id, driverId, note]);
+      else await recordViolation(q, { profile: driverId, rule: 'driver_released', order: o.id, note: `Gave the job back: ${b.reason}`, source: 'system' });
       await notify(q, { profile: o.user_profile_id, kind: 'order.driver_released', order: o.id, dedupe: `order:${o.id}:released:${Date.now()}`, data: { ref: o.ref } });
     });
     await this.matching.offerNext(b.order_id);

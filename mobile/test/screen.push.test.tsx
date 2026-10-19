@@ -21,6 +21,7 @@ test('no Firebase in the build yet: nothing is registered and the app works norm
   await open(svc());
   await loginThroughScreens('0557000001', 'user');
   await fireEvent.changeText(await screen.findByTestId('name-input'), 'Hana Sender');
+  await fireEvent.press(screen.getByTestId('accept-rules'));
   await fireEvent.press(screen.getByTestId('create-profile'));
   await screen.findByTestId('send-parcel');
   expect((await db.query(`SELECT count(*)::int n FROM device_tokens`)).rows[0].n).toBe(0);
@@ -41,7 +42,7 @@ test('registered for the active profile and language; language change and profil
 
   // A driver profile on the same number: after switching, this phone's pushes belong to the driver profile only.
   const up = async (kind: string) => (await (await nodeFetch(API + '/upload_document?kind=' + kind, { method: 'POST', headers: { authorization: 'Bearer ' + s.client.token, 'content-type': 'image/jpeg' }, body: require('fs').readFileSync(require('path').join(__dirname, '../../backend/test/fixtures/photo.jpg')) })).json() as any).document_id;
-  await act(async () => { await s.session.addProfile('driver', 'Hana Driver', { vehicle: 'motorbike', id_photo: await up('id_photo'), licence_photo: await up('licence_photo'), vehicle_photo: await up('vehicle_photo') }); });
+  await act(async () => { await s.session.addProfile('driver', 'Hana Driver', true, { vehicle: 'motorbike', id_photo: await up('id_photo'), licence_photo: await up('licence_photo'), vehicle_photo: await up('vehicle_photo') }, '100000000002'); });
   await waitFor(async () => expect(await device()).toEqual([{ type: 'driver', language: 'en' }]));
   await act(async () => { await s.session.switchProfile('user'); });
   await waitFor(async () => expect(await device()).toEqual([{ type: 'user', language: 'en' }]));
@@ -58,7 +59,7 @@ test('a registered recipient sees the incoming parcel and its code on the home s
   // Someone else sends a parcel to Hana's number.
   await call('/send_code', { phone: '+213557000002' });
   const v = await call('/verify_code', { phone: '+213557000002', code: await devCode('+213557000002'), path: 'user' });
-  const other = (await call('/add_profile', { type: 'user', display_name: 'Yanis Sender' }, v.token)).token;
+  const other = (await call('/add_profile', { accept_rules: true, type: 'user', display_name: 'Yanis Sender' }, v.token)).token;
   const send = async (key: string) => {
     const q = await call('/get_quote', { pickup: { lat: 36.7538, lng: 3.0588 }, dropoff: { lat: 36.765, lng: 3.07 }, size: 'small' }, other);
     return call('/create_order', { quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: { street: 'Rue C' }, dropoff_address: { street: 'Rue D' }, recipient_name: 'Hana', recipient_phone: '+213557000001', payer: 'sender' }, other, { 'idempotency-key': key });

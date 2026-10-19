@@ -44,6 +44,12 @@ test('new driver: name, vehicle, three photos, send for approval -> waiting for 
   await addPhoto('licence_photo', 'library');
   await addPhoto('vehicle_photo');
   expect(await screen.findAllByText(/✓ Photo received/)).toHaveLength(3);
+  await fireEvent.press(screen.getByTestId('submit-driver'));
+  expect(await screen.findByTestId('signup-error')).toHaveTextContent(/number written on your national ID card/);
+  await fireEvent.changeText(screen.getByTestId('nid-input'), '1099 8877 6655 4433');      // only digits are kept
+  await fireEvent.press(screen.getByTestId('submit-driver'));
+  expect(await screen.findByTestId('signup-error')).toHaveTextContent(/Accept the platform rules/);
+  await fireEvent.press(screen.getByTestId('accept-rules'));
 
   await act(async () => { await fireEvent.press(screen.getByTestId('submit-driver')); });
   expect(await screen.findByText('Hello, Yacine Rider')).toBeTruthy();
@@ -51,6 +57,7 @@ test('new driver: name, vehicle, three photos, send for approval -> waiting for 
   const row = await db.query(`SELECT p.status, d.vehicle, (SELECT count(*)::int FROM documents x WHERE x.profile_id=p.id) docs
     FROM profiles p JOIN driver_details d ON d.profile_id=p.id JOIN accounts a ON a.id=p.account_id WHERE a.phone='+213554000001'`);
   expect(row.rows).toEqual([{ status: 'pending_approval', vehicle: 'motorbike', docs: 3 }]);
+  expect((await db.query(`SELECT d.national_id_last3, p.rules_version FROM driver_details d JOIN profiles p ON p.id=d.profile_id JOIN accounts a ON a.id=p.account_id WHERE a.phone='+213554000001'`)).rows).toEqual([{ national_id_last3: '433', rules_version: 1 }]);
 });
 
 test('a sender adds a driver profile from Settings (same photos flow), and keeps the sender profile', async () => {
@@ -58,6 +65,7 @@ test('a sender adds a driver profile from Settings (same photos flow), and keeps
   await open(s);
   await loginThroughScreens('0554000002', 'user');
   await fireEvent.changeText(await screen.findByTestId('name-input'), 'Sara Seller');
+  await fireEvent.press(screen.getByTestId('accept-rules'));
   await fireEvent.press(screen.getByTestId('create-profile'));
   await screen.findByText('Hello, Sara Seller');
   await fireEvent.press(screen.getByTestId('open-settings'));
@@ -67,6 +75,8 @@ test('a sender adds a driver profile from Settings (same photos flow), and keeps
   await fireEvent.press(screen.getByTestId('vehicle-car'));
   for (const k of ['id_photo', 'licence_photo', 'vehicle_photo']) await addPhoto(k);
   expect(await screen.findAllByText(/✓ Photo received/)).toHaveLength(3);
+  await fireEvent.changeText(screen.getByTestId('nid-input'), '109988776655');
+  await fireEvent.press(screen.getByTestId('accept-rules'));
   await act(async () => { await fireEvent.press(screen.getByTestId('submit-driver')); });
   expect(await screen.findByTestId('driver-status')).toHaveTextContent(/waiting for approval/);
   const me = await s.client.call('/get_me');

@@ -5,6 +5,7 @@ import { useApp } from '../lib/app';
 import { errorMessage } from '../lib/errors';
 import { photoBlob, pickPhoto } from '../lib/photos';
 import { color, font, minTouch, radius, space } from '../lib/theme';
+import { RulesAccept } from '../ui/RulesAccept';
 import { Button, Field, Gap, Notice, Screen, T } from '../ui/kit';
 import type { Key } from '../i18n';
 
@@ -18,6 +19,7 @@ export default function DriverSignup() {
   const { t, services, state } = useApp();
   const [name, setName] = useState(state.active?.display_name ?? state.googleName ?? '');
   const [vehicle, setVehicle] = useState<'motorbike' | 'car' | null>(null);
+  const [nid, setNid] = useState(''), [rules, setRules] = useState(false);
   const [slots, setSlots] = useState<Record<Kind, Slot>>({ id_photo: {}, licence_photo: {}, vehicle_photo: {} });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,9 +41,11 @@ export default function DriverSignup() {
     if (n.length < 2 || n.length > 60) { setError(t('name_invalid')); return; }
     if (!vehicle) { setError(t('vehicle_missing')); return; }
     if (!KINDS.every(k => slots[k].id)) { setError(t('photos_missing')); return; }
+    if (!/^\d{9,18}$/.test(nid)) { setError(t('nid_invalid')); return; }
+    if (!rules) { setError(t('rules_needed')); return; }
     setBusy(true); setError(null);
     try {
-      await services.session.addProfile('driver', n, { vehicle, id_photo: slots.id_photo.id!, licence_photo: slots.licence_photo.id!, vehicle_photo: slots.vehicle_photo.id! });
+      await services.session.addProfile('driver', n, true, { vehicle, id_photo: slots.id_photo.id!, licence_photo: slots.licence_photo.id!, vehicle_photo: slots.vehicle_photo.id! }, nid);
       router.dismissAll(); router.replace('/home');
     } catch (e) { setError(msg(e)); }
     finally { setBusy(false); }
@@ -87,6 +91,8 @@ export default function DriverSignup() {
         );
       })}
       {error ? <Notice testID="signup-error" warn text={error} /> : null}
+      <Field testID="nid-input" label={t('nid_label')} hint={t('nid_hint')} value={nid} onChangeText={v => { setNid(v.replace(/\D/g, '').slice(0, 18)); setError(null); }} keyboardType="number-pad" maxLength={18} />
+      <RulesAccept value={rules} onChange={v => { setRules(v); setError(null); }} />
       <Button testID="submit-driver" label={t('submit_driver')} busy={busy} onPress={submit} />
     </Screen>
   );

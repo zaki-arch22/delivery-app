@@ -29,6 +29,8 @@ import Problem from '../src/app/problem/[id]';
 import JobScreen from '../src/app/job';
 import Jobs from '../src/app/jobs';
 import Cash from '../src/app/cash';
+import Rules from '../src/app/rules';
+import RecordScreen from '../src/app/record';
 
 export const API = process.env.API_URL!;
 if (!/_test$/.test(process.env.TEST_DATABASE_URL ?? '')) throw new Error('test database only');
@@ -56,7 +58,7 @@ export function routes(services: Services) {
       <AppProvider services={services}><PushBridge /><Stack screenOptions={{ headerShown: false }} /></AppProvider>
     </SafeAreaProvider>
   );
-  return { _layout: Layout, index: Start, welcome: Welcome, login: Login, 'contact-phone': ContactPhone, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup, 'new-order': NewOrder, 'order-details': OrderDetails, 'order/[id]': OrderScreen, orders: Orders, 'rate/[id]': Rate, 'problem/[id]': Problem, job: JobScreen, jobs: Jobs, cash: Cash };
+  return { _layout: Layout, index: Start, welcome: Welcome, login: Login, 'contact-phone': ContactPhone, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup, 'new-order': NewOrder, 'order-details': OrderDetails, 'order/[id]': OrderScreen, orders: Orders, 'rate/[id]': Rate, 'problem/[id]': Problem, job: JobScreen, jobs: Jobs, cash: Cash, rules: Rules, record: RecordScreen };
 }
 export async function open(services: Services) {
   const r = await renderRouter(routes(services), { initialUrl: '/' });

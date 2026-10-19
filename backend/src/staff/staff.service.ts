@@ -6,7 +6,7 @@ import { SecurityLog } from '../security/security-log.service';
 import { unseal } from '../security/crypto';
 import { verifyTotp } from '../security/totp';
 import { hashPassword, verifyPassword } from '../auth/password';
-import { address, bad, fail, isInt, nat, point, text, uuid } from '../common/errors';
+import { address, bad, fail, isId, isInt, nat, point, text, uuid } from '../common/errors';
 import { inOpenZone } from '../geo/zones';
 import { createReturnLeg } from '../orders/return-leg';
 
@@ -216,7 +216,7 @@ export class StaffService {
   }
 
   async resolveProblem(staff: string, b: any) {
-    if (!isInt(b?.id)) throw bad('BAD_ID', 'id is required');
+    if (!isId(b?.id)) throw bad('BAD_ID', 'id is required');
     if (!['in_progress', 'resolved'].includes(b?.status)) throw bad('BAD_STATUS', 'status must be in_progress or resolved');
     const resolution = b.status === 'resolved' ? text(b?.resolution, 'resolution', 3, 1000) : null;
     await this.db.tx(async q => {

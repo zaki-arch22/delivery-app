@@ -25,9 +25,9 @@ class Sock {
   close() { this.ws.close(); }
 }
 async function login(phone: string, path: 'user' | 'driver') { await api('/send_code', { phone }); const c = (await api('/dev/last_code?phone=' + encodeURIComponent(phone))).b.code; return (await api('/verify_code', { phone, code: c, path })).b; }
-async function makeUser(phone: string, name: string) { const l = await login(phone, 'user'); const r = await api('/add_profile', { type: 'user', display_name: name }, l.token); return { token: r.b.token as string, id: r.b.active_profile.id as string }; }
+async function makeUser(phone: string, name: string) { const l = await login(phone, 'user'); const r = await api('/add_profile', { accept_rules: true, type: 'user', display_name: name }, l.token); return { token: r.b.token as string, id: r.b.active_profile.id as string }; }
 async function makeDriver(phone: string, name: string, lat: number, lng: number, online = true) {
-  const l = await login(phone, 'driver'); const r = await api('/add_profile', { type: 'driver', display_name: name, documents: await driverDocs(HTTP, l.token) }, l.token); const id = r.b.active_profile.id;
+  const l = await login(phone, 'driver'); const r = await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: name, documents: await driverDocs(HTTP, l.token) }, l.token); const id = r.b.active_profile.id;
   await pool.query(`UPDATE profiles SET status='active' WHERE id=$1`, [id]);
   if (online) { await api('/set_online', { online: true }, r.b.token); await api('/update_location', { lat, lng }, r.b.token); }
   return { token: r.b.token as string, id: id as string };
@@ -113,7 +113,7 @@ const profileOf = async (id: number) => (await pool.query(`SELECT profile_id FRO
 
   // N11 two profiles on ONE phone number never see each other's notifications
   const A = await makeUser('+213550500001', 'Adam Seller'); const l2 = await login('+213550500001', 'user');
-  const addD = await api('/add_profile', { type: 'driver', display_name: 'Adam Driver', documents: await driverDocs(HTTP, l2.token) }, l2.token); const AD = { token: addD.b.token as string, id: addD.b.active_profile.id as string };
+  const addD = await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Adam Driver', documents: await driverDocs(HTTP, l2.token) }, l2.token); const AD = { token: addD.b.token as string, id: addD.b.active_profile.id as string };
   await pool.query(`UPDATE profiles SET status='active' WHERE id=$1`, [AD.id]); await api('/set_online', { online: true }, AD.token); await api('/update_location', P, AD.token);
   const sAU = new Sock(A.token), sAD = new Sock(AD.token); await until(() => sAU.ready && sAD.ready);
   const O6 = await order(U1.token, 'notify-order-006');
@@ -164,7 +164,7 @@ const profileOf = async (id: number) => (await pool.query(`SELECT profile_id FRO
   await api('/cancel_order', { order_id: O11.id }, A.token);
   { // A Google account only TYPED this number (not verified): it must not receive anyone's delivery code.
     const g = (await api('/login_google', { id_token: googleToken('g-notify-1'), path: 'user' })).b.token;
-    await api('/set_phone', { phone: '+213770088888' }, g); await api('/add_profile', { type: 'user', display_name: 'Claims A Number' }, g);
+    await api('/set_phone', { phone: '+213770088888' }, g); await api('/add_profile', { accept_rules: true, type: 'user', display_name: 'Claims A Number' }, g);
     const O13 = await order(U1.token, 'notify-order-013', '+213770088888'); await sleep(800);
     ok('N14 a number that was only typed (not verified) never receives the delivery code', (await pool.query(`SELECT 1 FROM notifications WHERE type='order.incoming' AND order_id=$1`, [O13.id])).rowCount === 0);
     await api('/cancel_order', { order_id: O13.id }, U1.token);

@@ -38,6 +38,14 @@ export function errorMessage(e: unknown): { key: Key; vars?: Record<string, numb
     case 'TOO_MANY_UPLOADS': return { key: 'err_too_many_uploads' };
     case 'BAD_DOCUMENT': case 'DRIVER_DOCS_MISSING': return { key: 'err_bad_document' };
     case 'SESSION_ENDED': case 'BAD_TOKEN': return { key: 'err_session' };
+    case 'PROFILE_BLOCKED': return { key: 'err_blocked' };
+    case 'ACCOUNT_BANNED': return { key: 'banned' };
+    case 'DEVICE_BANNED': return { key: 'err_device_banned' };
+    case 'RULES_REQUIRED': return { key: 'rules_needed' };
+    case 'BAD_NATIONAL_ID': return { key: 'nid_invalid' };
+    case 'ID_ALREADY_USED': return { key: 'err_nid_used' };
+    case 'ID_BANNED': return { key: 'err_nid_banned' };
+    case 'CANNOT_APPEAL': return { key: 'err_cannot_appeal' };
     default: return { key: 'err_generic' };
   }
 }

@@ -30,6 +30,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Trust phase 1 "proof chain" (2026-10-19, owner's wish, rules in backend/docs/TRUST_AND_SAFETY.md): server (pickup code + parcel photo + positions, refusal reasons with evidence, release_job, recall_order, receiver tracking page /t/<token> with map/ETA/code/QR, recipient_history, inspection) and app (QR scanner, Qr drawing, job screen, sender order screen with pickup QR, share link, photos, history, recall; details with inspection + receiver history). Fixed: tracking-page map pin error (seen in a real browser check). 457 tests + 12 database rules green.
 
+- Trust phase 2 "rules engine" (2026-10-19): violations with points (automatic: driver gives back a job, late cancel, "never ordered" refusal; staff: far confirmation, wrong item, damage, behaviour, prohibited goods), levels (3 warning, 5 = 24 h, 8 = 7 days, 12 = until staff), blocks stop new work only, appeals (once, 30 days) decided by staff, staff blocks/lifts, bans (Google, device, national ID, verified phone cannot return), linked accounts by device, rules accepted at sign-up, national ID for drivers; app: Rules screen, My record with appeals; staff console: Rules page. Fixed: huge ids crashed queries. Development build with camera + device id: https://expo.dev/artifacts/eas/OIqHv3Prv_Gtc8Lbr-SPphRLhUtbvcW1TzkhU6VXTd0.apk. 512 tests + 12 database rules green.
+
 ## In progress
 - (none)
 

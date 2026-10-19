@@ -7,12 +7,13 @@ import { Problems } from './pages/Problems';
 import { Drivers } from './pages/Drivers';
 import { Cash } from './pages/Cash';
 import { Ratings } from './pages/Ratings';
+import { Trust } from './pages/Trust';
 import { Zones } from './pages/Zones';
 import { Prices } from './pages/Prices';
 
-export type Page = 'orders' | 'problems' | 'drivers' | 'cash' | 'ratings' | 'zones' | 'prices';
+export type Page = 'orders' | 'problems' | 'trust' | 'drivers' | 'cash' | 'ratings' | 'zones' | 'prices';
 export interface Nav { go: (p: Page, opts?: { orderId?: string; driverId?: string }) => void }
-const PAGES: Page[] = ['orders', 'problems', 'drivers', 'cash', 'ratings', 'zones', 'prices'];
+const PAGES: Page[] = ['orders', 'problems', 'trust', 'drivers', 'cash', 'ratings', 'zones', 'prices'];
 const IDLE_MS = 15 * 60 * 1000;
 
 export function LangSwitch() {
@@ -80,6 +81,7 @@ export function App() {
         <div className="topbar"><span className="muted">{staff.name}</span><LangSwitch /></div>
         {page === 'orders' && <Orders nav={nav} openId={orderId} />}
         {page === 'problems' && <Problems nav={nav} />}
+        {page === 'trust' && <Trust nav={nav} />}
         {page === 'drivers' && <Drivers nav={nav} />}
         {page === 'cash' && <Cash driverId={driverId} />}
         {page === 'ratings' && <Ratings nav={nav} />}

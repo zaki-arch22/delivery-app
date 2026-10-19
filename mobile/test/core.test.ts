@@ -27,7 +27,7 @@ const expired = (tok: string) => {
 const newApp = (store = memoryStore()) => { let refreshCalls = 0; const f: typeof fetch = (u, i) => { if (String(u).endsWith('/refresh_token')) refreshCalls++; return fetch(u, i); }; const c = new Client(API, store, f); return { store, client: c, session: new Session(c), refreshes: () => refreshCalls }; };
 async function signUp(phone: string, name: string, app = newApp()) {
   await app.session.sendCode(phone); const s = await app.session.verifyCode(phone, await devCode(phone), 'user');
-  expect(s.needsProfile).toBe('user'); await app.session.addProfile('user', name); return app;
+  expect(s.needsProfile).toBe('user'); await app.session.addProfile('user', name, true); return app;
 }
 
 beforeAll(async () => { await db.query(`TRUNCATE otp_codes, sessions, notifications, device_tokens, driver_details, profiles, accounts, security_events CASCADE`); });
@@ -64,7 +64,7 @@ test('4. a second profile from Settings, and switching between the two', async (
   const photo = () => new Blob([readFileSync(join(__dirname, '../../backend/test/fixtures/photo.jpg'))], { type: 'image/jpeg' });
   const docs = { vehicle: 'motorbike', id_photo: await app.session.uploadDocument('id_photo', photo()), licence_photo: await app.session.uploadDocument('licence_photo', photo()), vehicle_photo: await app.session.uploadDocument('vehicle_photo', photo()) };
   expect(docs.id_photo).toMatch(/^[0-9a-f-]{36}$/);
-  await app.session.addProfile('driver', 'Karim Driver', docs);
+  await app.session.addProfile('driver', 'Karim Driver', true, docs, '100000000001');
   expect(app.session.state.active?.type).toBe('driver'); expect(app.session.state.profiles.length).toBe(2);
   await app.session.switchProfile('user');
   expect(app.session.state.active?.type).toBe('user');

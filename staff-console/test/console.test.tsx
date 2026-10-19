@@ -74,8 +74,8 @@ test('4. prices: empty warning, live example, save', async () => {
 });
 
 test('5. drivers: a new driver waits; staff approve with a cash limit', async () => {
-  const l = await login('+213551010001', 'user'); user = await call('/add_profile', { type: 'user', display_name: '<img src=x onerror=alert(1)>' }, l.token);
-  const ld = await login('+213551020001', 'driver'); driver = await call('/add_profile', { type: 'driver', display_name: 'Driver Console', documents: await driverDocs(ld.token) }, ld.token);
+  const l = await login('+213551010001', 'user'); user = await call('/add_profile', { accept_rules: true, type: 'user', display_name: '<img src=x onerror=alert(1)>' }, l.token);
+  const ld = await login('+213551020001', 'driver'); driver = await call('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Driver Console', documents: await driverDocs(ld.token) }, ld.token);
   await u.click(nav().getByRole('button', { name: 'Drivers' }));
   const row = (await screen.findByText('Driver Console')).closest('tr')!;
   await u.click(within(row).getByRole('button', { name: 'ID card: Show photo' }));

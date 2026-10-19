@@ -30,7 +30,7 @@ const dropoffOf = async (orderId: string) => (await db.query(`SELECT ST_Y(dropof
 async function driverOnline(phone: string, at: { lat: number; lng: number }) {
   await call('/send_code', { phone });
   const v = await call('/verify_code', { phone, code: await devCode(phone), path: 'driver' });
-  const d = await call('/add_profile', { type: 'driver', display_name: 'Rachid Rider', documents: await uploadDocs(v.token) }, v.token);
+  const d = await call('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Rachid Rider', documents: await uploadDocs(v.token) }, v.token);
   await db.query(`UPDATE profiles SET status='active' WHERE id=$1`, [d.active_profile.id]);
   await db.query(`UPDATE driver_details SET cash_limit_da=100000 WHERE profile_id=$1`, [d.active_profile.id]);
   await call('/set_online', { online: true }, d.token); await call('/update_location', at, d.token);
@@ -41,6 +41,7 @@ async function sender(phone: string, name = 'Nora Sender') {
   await loginThroughScreens(phone, 'user');
   if (await screen.findByTestId('name-input', {}, { timeout: 1500 }).catch(() => null)) {
     await fireEvent.changeText(screen.getByTestId('name-input'), name);
+    await fireEvent.press(screen.getByTestId('accept-rules'));
     await fireEvent.press(screen.getByTestId('create-profile'));
   }
   await screen.findByTestId('send-parcel');

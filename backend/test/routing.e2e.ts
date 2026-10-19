@@ -15,7 +15,7 @@ async function api(path: string, body?: any, token?: string) {
 async function user(phone: string) {
   await api('/send_code', { phone }); const code = (await api('/dev/last_code?phone=' + encodeURIComponent(phone))).b.code;
   const l = (await api('/verify_code', { phone, code, path: 'user' })).b;
-  return (await api('/add_profile', { type: 'user', display_name: 'Routing Test' }, l.token)).b.token as string;
+  return (await api('/add_profile', { accept_rules: true, type: 'user', display_name: 'Routing Test' }, l.token)).b.token as string;
 }
 // Two corners of the test grid: the shortest road path is 4 blocks east + 4 blocks north.
 const A = { lat: 36.74, lng: 3.04 }, Z = { lat: 36.76, lng: 3.06 };

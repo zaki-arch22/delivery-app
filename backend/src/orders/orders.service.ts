@@ -12,6 +12,7 @@ import { createReturnLeg } from './return-leg';
 import { cfg } from '../common/config';
 import { limiter, limitsOff } from '../security/limiter';
 import { Documents } from '../documents/documents.service';
+import { assertCanWork, recordViolation } from '../trust/rules';
 
 const code4 = () => String(randomInt(0, 10000)).padStart(4, '0');
 export const RECALL_REASONS = ['buyer_cancelled', 'wrong_parcel', 'wrong_address', 'other'];
@@ -26,6 +27,7 @@ export class OrdersService {
   constructor(private db: Db, private routing: Routing, private matching: Matching, private documents: Documents) {}
 
   async getQuote(userId: string, b: any) {
+    await assertCanWork((s, p) => this.db.query(s, p), userId);   // a blocked profile cannot start new orders
     const pickup = point(b?.pickup, 'pickup'), dropoff = point(b?.dropoff, 'dropoff');
     if (!SIZES.includes(b?.size)) throw bad('BAD_SIZE', 'size must be small, medium or large');
     if (!(await inOpenZone(this.db, pickup)) || !(await inOpenZone(this.db, dropoff))) throw fail(422, 'ZONE_CLOSED', 'We do not serve this area yet');
@@ -40,6 +42,7 @@ export class OrdersService {
     if (!key || key.length < 8 || key.length > 64) throw bad('IDEMPOTENCY_KEY_REQUIRED', 'Idempotency-Key header (8-64 chars) is required');
     const again = await this.db.one(`SELECT id FROM orders WHERE user_profile_id=$1 AND idempotency_key=$2`, [userId, key]);
     if (again) return this.viewForUser(again.id, userId);
+    await assertCanWork((s, p) => this.db.query(s, p), userId);
 
     const quote = typeof b?.quote_id === 'string' && /^[0-9a-f-]{36}$/i.test(b.quote_id) ? await this.db.one(`SELECT data FROM quotes WHERE id=$1 AND user_profile_id=$2 AND expires_at > now()`, [b.quote_id, userId]) : null;
     if (!quote) throw fail(410, 'QUOTE_EXPIRED', 'Price expired, request a new one');
@@ -119,6 +122,7 @@ export class OrdersService {
       // "Late" = a driver had accepted more than LATE_CANCEL_S ago (he may already be on his way). The rules count it.
       const late = o.status === 'assigned' && o.since_assigned > cfg.lateCancelS();
       await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'cancelled',$2,$3)`, [orderId, userId, { from: o.status, reason: txt, late }]);
+      if (late) await recordViolation(q, { profile: userId, rule: 'late_cancel', order: orderId, note: 'Cancelled after a driver had accepted and was on his way', source: 'system' });
       return true;
     });
     return r && this.viewForUser(orderId, userId);

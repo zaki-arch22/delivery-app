@@ -9,6 +9,11 @@ import { notify } from '../notify/notify';
 import { newCode, newRefresh, safeEq, sha, signAccess } from './tokens';
 import { Documents, KINDS } from '../documents/documents.service';
 import { UUID } from '../common/errors';
+import { idHash, RULES_VERSION } from '../trust/rules';
+
+// The phone's id for this app (sent by the app as X-Device). Only its fingerprint is kept.
+export const deviceOf = (h: any): string | null => typeof h === 'string' && /^[A-Za-z0-9_-]{4,128}$/.test(h) ? idHash('device', h) : null;
+const NATIONAL_ID = /^\d{9,18}$/;
 
 type PType = 'user' | 'driver';
 const PHONE = /^\+[0-9]{8,15}$/;
@@ -64,7 +69,7 @@ export class AuthService {
     return { ok: true };
   }
 
-  async verifyCode(phone: string, code: string, path: PType, ip: string) {
+  async verifyCode(phone: string, code: string, path: PType, ip: string, device: string | null = null) {
     if (!smsLoginOn()) throw methodOff();
     if (!PHONE.test(phone ?? '') || !/^\d{6}$/.test(code ?? '')) throw bad('BAD_INPUT', 'Phone or code format is wrong');
     if (path !== 'user' && path !== 'driver') throw bad('BAD_PATH', 'path must be user or driver');
@@ -78,19 +83,25 @@ export class AuthService {
     const won = await this.db.one(`UPDATE otp_codes SET consumed = true WHERE id=$1 AND NOT consumed RETURNING id`, [otp.id]);
     if (!won) throw new UnauthorizedException({ error: 'CODE_EXPIRED', message: 'Request a new code' });
 
+    await this.refuseBanned([['phone', idHash('phone', phone)]], ip);
+    const existing = await this.db.one(`SELECT id FROM accounts WHERE phone=$1 AND phone_verified`, [phone]);
+    if (!existing) await this.refuseBannedDevice(device, ip);
     const acc = await this.db.one(`INSERT INTO accounts(phone) VALUES ($1) ON CONFLICT (phone) WHERE phone_verified DO UPDATE SET phone = EXCLUDED.phone RETURNING id`, [phone]);
-    return this.startLogin(acc.id, path, ip);
+    return this.startLogin(acc.id, path, ip, device);
   }
 
   // Google sign-in: the app sends Google's signed proof; one Google account = one account here.
-  async loginGoogle(idToken: string, path: PType, ip: string) {
+  async loginGoogle(idToken: string, path: PType, ip: string, device: string | null = null) {
     if (!googleLoginOn()) throw methodOff();
     if (typeof idToken !== 'string' || idToken.length < 20 || idToken.length > 4096) throw bad('BAD_INPUT', 'Google sign-in proof is missing');
     if (path !== 'user' && path !== 'driver') throw bad('BAD_PATH', 'path must be user or driver');
     let g; try { g = await this.google.verify(idToken); }
     catch { this.sec.event('google_token_rejected', ip); throw new UnauthorizedException({ error: 'GOOGLE_REJECTED', message: 'Google sign-in failed. Please try again.' }); }
+    await this.refuseBanned([['google', idHash('google', g.sub)]], ip);
+    const existing = await this.db.one(`SELECT id FROM accounts WHERE google_sub=$1`, [g.sub]);
+    if (!existing) await this.refuseBannedDevice(device, ip);   // a banned phone cannot open a NEW account
     const acc = await this.db.one(`INSERT INTO accounts(google_sub, phone_verified) VALUES ($1, false) ON CONFLICT (google_sub) DO UPDATE SET google_sub = EXCLUDED.google_sub RETURNING id`, [g.sub]);
-    return { ...(await this.startLogin(acc.id, path, ip)), google_name: g.name };
+    return { ...(await this.startLogin(acc.id, path, ip, device)), google_name: g.name };
   }
 
   // The contact number of a Google account (typed, not verified: there is no SMS yet). A VERIFIED number is never overwritten.
@@ -101,7 +112,26 @@ export class AuthService {
     return { ok: true, phone: r.phone, phone_verified: r.phone_verified };
   }
 
-  private async startLogin(accountId: string, path: PType, ip: string) {
+  // Banned identifiers can never log in again (TRUST_AND_SAFETY.md: bans).
+  private async refuseBanned(ids: [string, string][], ip: string) {
+    for (const [kind, h] of ids) if (await this.db.one(`SELECT 1 FROM banned_identifiers WHERE kind=$1 AND value_hash=$2`, [kind, h])) {
+      this.sec.event('banned_identifier_login', ip, { kind });
+      throw new ForbiddenException({ error: 'ACCOUNT_BANNED', message: 'This account is closed.' });
+    }
+  }
+  private async refuseBannedDevice(device: string | null, ip: string) {
+    if (device && await this.db.one(`SELECT 1 FROM banned_identifiers WHERE kind='device' AND value_hash=$1`, [device])) {
+      this.sec.event('banned_device_new_account', ip);
+      throw new ForbiddenException({ error: 'DEVICE_BANNED', message: 'New accounts cannot be opened on this phone.' });
+    }
+  }
+  // Remember which phones an account uses (fingerprints only), so that a ban covers them.
+  async seenDevice(accountId: string, device: string | null) {
+    if (device) await this.db.query(`INSERT INTO account_devices(account_id, device_hash) VALUES ($1,$2) ON CONFLICT (account_id, device_hash) DO UPDATE SET last_seen=now()`, [accountId, device]);
+  }
+
+  private async startLogin(accountId: string, path: PType, ip: string, device: string | null = null) {
+    await this.seenDevice(accountId, device);
     const acc = await this.db.one(`SELECT id, phone FROM accounts WHERE id=$1`, [accountId]);
     const profiles = await this.profiles(acc.id);
     const chosen = profiles.find(p => p.type === path) ?? null;
@@ -118,7 +148,7 @@ export class AuthService {
   }
 
   // Refresh tokens ROTATE on every use. Presenting an OLD one means it was copied: the whole session is killed at once.
-  async refresh(refreshToken: string, ip: string) {
+  async refresh(refreshToken: string, ip: string, device: string | null = null) {
     const old = sha(typeof refreshToken === 'string' ? refreshToken : ''), next = newRefresh();
     const s = await this.db.one(
       `UPDATE sessions SET prev_refresh_hash = refresh_hash, refresh_hash=$2, last_ip=$3, expires_at = now() + interval '60 days'
@@ -131,6 +161,7 @@ export class AuthService {
       }
       throw new UnauthorizedException({ error: 'SESSION_ENDED', message: 'Login again' });
     }
+    await this.seenDevice(s.account_id, device);
     return { token: signAccess({ sid: s.id, acc: s.account_id, pid: s.active_profile_id, typ: null }), refresh_token: next };
   }
 
@@ -140,8 +171,9 @@ export class AuthService {
     return { account: acc, profiles, active_profile: profiles.find(p => p.id === activeId) ?? null };
   }
 
-  async addProfile(accountId: string, sid: string, activeProfileId: string | null, type: PType, displayName: string, docs?: any) {
+  async addProfile(accountId: string, sid: string, activeProfileId: string | null, type: PType, displayName: string, docs?: any, acceptRules?: any, nationalId?: any) {
     if (type !== 'user' && type !== 'driver') throw bad('BAD_TYPE', 'type must be user or driver');
+    if (acceptRules !== true) throw bad('RULES_REQUIRED', 'Read and accept the platform rules first');
     const name = (displayName ?? '').trim();
     if (name.length < 2 || name.length > 60 || CONTROL.test(name)) throw bad('BAD_NAME', 'Name must be 2 to 60 characters, without control characters');
     if (type === 'driver') {
@@ -149,6 +181,10 @@ export class AuthService {
       const d = docs ?? {};
       if (!KINDS.every(k => typeof d[k] === 'string' && UUID.test(d[k])) || !['motorbike', 'car'].includes(d.vehicle))
         throw bad('DRIVER_DOCS_MISSING', 'ID photo, licence photo, vehicle photo and vehicle type are required');
+      // One person = one driver profile: the national ID number (from the ID card, checked by staff against the photo).
+      if (typeof nationalId !== 'string' || !NATIONAL_ID.test(nationalId)) throw bad('BAD_NATIONAL_ID', 'Enter the number written on your national ID card (9 to 18 digits)');
+      if (await this.db.one(`SELECT 1 FROM banned_identifiers WHERE kind='national_id' AND value_hash=$1`, [idHash('national_id', nationalId)])) throw new ForbiddenException({ error: 'ID_BANNED', message: 'This ID card cannot be used to drive with us.' });
+      if (await this.db.one(`SELECT 1 FROM driver_details WHERE national_id_hash=$1`, [idHash('national_id', nationalId)])) throw new ConflictException({ error: 'ID_ALREADY_USED', message: 'A driver profile already exists for this ID card.' });
     }
     // The 2nd profile is created only from inside the first one (Settings). A session with no profile may create only the FIRST.
     // Drivers and senders call each other, so every profile needs a contact number first (set_phone for Google accounts).
@@ -162,11 +198,11 @@ export class AuthService {
       const ex = await client.query(`SELECT 1 FROM profiles WHERE account_id=$1 AND type=$2`, [accountId, type]);
       if (ex.rowCount) throw new ConflictException({ error: 'PROFILE_EXISTS', message: `You already have a ${type} profile` });
       const status = type === 'user' ? 'active' : 'pending_approval';
-      const p = await client.query(`INSERT INTO profiles(account_id,type,display_name,status) VALUES ($1,$2,$3,$4) RETURNING id`, [accountId, type, name, status]);
+      const p = await client.query(`INSERT INTO profiles(account_id,type,display_name,status,rules_version) VALUES ($1,$2,$3,$4,$5) RETURNING id`, [accountId, type, name, status, RULES_VERSION]);
       if (type === 'driver') {
         await this.documents.attach((s, v = []) => client.query(s, v).then(x => x.rows), accountId, p.rows[0].id, docs);
-        await client.query(`INSERT INTO driver_details(profile_id,id_photo_doc,licence_photo_doc,vehicle,vehicle_photo_doc) VALUES ($1,$2,$3,$4,$5)`,
-          [p.rows[0].id, docs.id_photo, docs.licence_photo, docs.vehicle, docs.vehicle_photo]);
+        await client.query(`INSERT INTO driver_details(profile_id,id_photo_doc,licence_photo_doc,vehicle,vehicle_photo_doc,national_id_hash,national_id_last3) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [p.rows[0].id, docs.id_photo, docs.licence_photo, docs.vehicle, docs.vehicle_photo, idHash('national_id', nationalId), nationalId.slice(-3)]);
       }
       await client.query('COMMIT');
       await this.profileChanged(sid, p.rows[0].id);

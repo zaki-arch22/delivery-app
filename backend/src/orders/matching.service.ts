@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { Db } from '../db/db.service';
 import { cfg } from '../common/config';
 import { notify } from '../notify/notify';
+import { NOT_BLOCKED_SQL } from '../trust/rules';
 
 // Offers an order to ONE driver at a time (nearest eligible first). If the driver declines or does not answer,
 // the next one is offered. The radius widens after a while. The order expires if nobody takes it in time.
@@ -56,6 +57,7 @@ export class Matching implements OnModuleInit, OnModuleDestroy {
             AND p.account_id <> (SELECT account_id FROM profiles WHERE id = o.user_profile_id)
             AND NOT EXISTS (SELECT 1 FROM offers f WHERE f.order_id = o.id AND f.driver_profile_id = p.id)
             AND NOT EXISTS (SELECT 1 FROM orders j WHERE j.driver_profile_id = p.id AND j.status IN ('assigned','picked_up'))
+            AND ${NOT_BLOCKED_SQL('p.id')}
             AND NOT EXISTS (SELECT 1 FROM offers g WHERE g.driver_profile_id = p.id AND g.status='offered' AND g.expires_at > now())
             AND (o.cod_amount_da = 0 OR (d.cash_limit_da IS NOT NULL AND
                  COALESCE((SELECT sum(amount_da) FROM cash_ledger c WHERE c.driver_profile_id = p.id), 0) + o.cod_amount_da <= d.cash_limit_da))

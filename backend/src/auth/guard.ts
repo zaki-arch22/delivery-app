@@ -14,6 +14,8 @@ export const Public = () => SetMetadata('public', true);
 export const Access = (kind: 'account' | 'user' | 'driver' | 'staff') => SetMetadata('access', kind);
 
 export interface Who { sid: string; accountId: string; profileId: string | null; type: 'user' | 'driver' | null; status: string | null }
+// A banned account may still read its record, appeal, and log out.
+const BANNED_ALLOWED = new Set(['/get_me', '/my_record', '/appeal_violation', '/logout', '/logout_everywhere']);
 const tooMany = () => new HttpException({ error: 'RATE_LIMITED', message: 'Too many requests. Try again later.' }, 429);
 
 @Injectable()
@@ -41,7 +43,8 @@ export class AuthGuard implements CanActivate {
     // One query: the session must be alive, and the profile's CURRENT type/status is read from the database,
     // so a suspension or approval takes effect immediately, never from stale token data.
     const row = await this.db.one(
-      `SELECT s.account_id, s.active_profile_id, p.type, p.status FROM sessions s
+      `SELECT s.account_id, s.active_profile_id, p.type, p.status,
+              EXISTS (SELECT 1 FROM sanctions b WHERE b.account_id = s.account_id AND b.kind='ban' AND b.lifted_at IS NULL) AS banned FROM sessions s
        LEFT JOIN profiles p ON p.id = s.active_profile_id
        WHERE s.id=$1 AND NOT s.revoked AND s.expires_at > now()`, [c.sid]);
     if (!row || row.account_id !== c.acc) throw new UnauthorizedException({ error: 'SESSION_ENDED', message: 'Login again' });
@@ -49,6 +52,7 @@ export class AuthGuard implements CanActivate {
     if ((c.pid ?? null) !== (row.active_profile_id ?? null)) { this.sec.event('stale_profile_token', ip, { path }, { account: c.acc }); throw new UnauthorizedException({ error: 'PROFILE_CHANGED', message: 'Profile was switched; use the newest token' }); }
     const who: Who = { sid: c.sid, accountId: row.account_id, profileId: row.active_profile_id, type: row.type, status: row.status };
     req.who = who;
+    if (row.banned && !BANNED_ALLOWED.has(path)) throw new ForbiddenException({ error: 'ACCOUNT_BANNED', message: 'This account is closed.' });
     if (need === 'account') return true;
     if (who.type !== need) { this.sec.event('wrong_profile_type', ip, { need, have: who.type, path }, { account: who.accountId }); throw new ForbiddenException({ error: 'WRONG_PROFILE', message: `This needs the ${need} profile active` }); }
     if (who.status !== 'active') throw new ForbiddenException({ error: 'PROFILE_NOT_ACTIVE', message: `Profile is ${who.status}` });

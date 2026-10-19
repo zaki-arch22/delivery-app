@@ -52,8 +52,9 @@ export class Session {
   }
 
   // The FIRST profile right after login, or the SECOND one from Settings.
-  async addProfile(type: Path, displayName: string, documents?: Record<string, string>) {
-    const r = await this.client.call('/add_profile', { type, display_name: displayName, documents });
+  // acceptRules: the person ticked "I accept the platform rules". nationalId: drivers only (one person = one driver profile).
+  async addProfile(type: Path, displayName: string, acceptRules: boolean, documents?: Record<string, string>, nationalId?: string) {
+    const r = await this.client.call('/add_profile', { type, display_name: displayName, documents, accept_rules: acceptRules, national_id: nationalId });
     await this.client.setSession(r.token);
     this.set({ profiles: r.profiles, active: r.active_profile, needsProfile: null, notice: null });
     return this.state;

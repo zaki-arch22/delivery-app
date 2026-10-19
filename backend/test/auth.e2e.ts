@@ -24,11 +24,11 @@ const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL! });
   let tok = r.b.token; const refresh = r.b.refresh_token;
   ok('account-level token is refused on user area', (await api('/dev/only_user', undefined, tok)).b.error === 'WRONG_PROFILE');
   // 2. create user profile
-  r = await api('/add_profile', { type: 'user', display_name: 'Karim Seller' }, tok); tok = r.b.token;
+  r = await api('/add_profile', { accept_rules: true, type: 'user', display_name: 'Karim Seller' }, tok); tok = r.b.token;
   ok('user profile created and active', r.s === 200 && r.b.active_profile.type === 'user' && r.b.active_profile.status === 'active');
   ok('user token works in user area', (await api('/dev/only_user', undefined, tok)).b.ok === 'user area');
   ok('user token REFUSED in driver area', (await api('/dev/only_driver', undefined, tok)).b.error === 'WRONG_PROFILE');
-  ok('duplicate profile refused (409)', (await api('/add_profile', { type: 'user', display_name: 'Again' }, tok)).s === 409);
+  ok('duplicate profile refused (409)', (await api('/add_profile', { accept_rules: true, type: 'user', display_name: 'Again' }, tok)).s === 409);
   // 2b. RULE: picking the other path at login must NOT create a second profile
   r = await login(phone, 'driver');
   ok('returning user picks "driver" at login: lands in the profile they HAVE', r.b.active_profile?.type === 'user' && r.b.needs_profile === null);
@@ -36,8 +36,8 @@ const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL! });
   ok('...and NO driver profile was created behind their back', r.b.profiles.length === 1 && (await pool.query(`SELECT 1 FROM profiles WHERE type='driver' AND account_id=(SELECT id FROM accounts WHERE phone=$1)`, [phone])).rowCount === 0);
   ok('new number picking a path gets only that one profile', (await login('+213660000077', 'driver')).b.needs_profile === 'driver');
   // 3. same number becomes a driver too (from Settings, while logged in to the first profile)
-  ok('driver profile without documents refused', (await api('/add_profile', { type: 'driver', display_name: 'Karim Driver' }, tok)).b.error === 'DRIVER_DOCS_MISSING');
-  r = await api('/add_profile', { type: 'driver', display_name: 'Karim Driver', documents: await driverDocs(B, tok) }, tok); tok = r.b.token;
+  ok('driver profile without documents refused', (await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Karim Driver' }, tok)).b.error === 'DRIVER_DOCS_MISSING');
+  r = await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Karim Driver', documents: await driverDocs(B, tok) }, tok); tok = r.b.token;
   ok('driver profile created on the SAME number, pending approval', r.s === 200 && r.b.active_profile.type === 'driver' && r.b.active_profile.status === 'pending_approval' && r.b.profiles.length === 2);
   ok('pending driver cannot use driver area', (await api('/dev/only_driver', undefined, tok)).b.error === 'PROFILE_NOT_ACTIVE');
   // 4. switching, no new SMS
@@ -98,17 +98,17 @@ const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL! });
     const all = await pool.query(`SELECT id, kind FROM documents WHERE account_id=(SELECT id FROM accounts WHERE phone=$1)`, [P1]);
     for (const row of all.rows) mine[row.kind] = row.id;
     const other = await driverDocs(B, t2);
-    r = await api('/add_profile', { type: 'driver', display_name: 'Thief Driver', documents: { ...mine, id_photo: other.id_photo } }, t1);
+    r = await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Thief Driver', documents: { ...mine, id_photo: other.id_photo } }, t1);
     ok('U4 someone else\'s photo cannot be used', r.b.error === 'BAD_DOCUMENT', JSON.stringify(r.b));
-    r = await api('/add_profile', { type: 'driver', display_name: 'Mixed Driver', documents: { ...mine, id_photo: mine.licence_photo, licence_photo: mine.id_photo } }, t1);
+    r = await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Mixed Driver', documents: { ...mine, id_photo: mine.licence_photo, licence_photo: mine.id_photo } }, t1);
     ok('U4 a photo in the wrong place (licence as ID) is refused', r.b.error === 'BAD_DOCUMENT');
     ok('U4 a refused sign-up leaves no profile behind', (await pool.query(`SELECT 1 FROM profiles WHERE account_id=(SELECT id FROM accounts WHERE phone=$1)`, [P1])).rowCount === 0);
-    r = await api('/add_profile', { type: 'driver', display_name: 'Real Driver', documents: mine }, t1);
+    r = await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Real Driver', documents: mine }, t1);
     ok('U5 driver sign-up with the three photos works', r.s === 200 && r.b.active_profile.status === 'pending_approval');
     const linked = await pool.query(`SELECT count(*)::int n FROM documents WHERE profile_id=$1`, [r.b.active_profile.id]);
     ok('U5 the three photos are now tied to that driver profile', linked.rows[0].n === 3);
     const t3 = (await login('+213660000303', 'driver')).b.token;
-    r = await api('/add_profile', { type: 'driver', display_name: 'Copy Driver', documents: mine }, t3);
+    r = await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Copy Driver', documents: mine }, t3);
     ok('U6 photos already used by a driver cannot be reused', r.b.error === 'BAD_DOCUMENT');
     let refused = 0; try { await pool.query(`DELETE FROM documents WHERE id=$1`, [mine.id_photo]); } catch { refused++; }
     try { await pool.query(`UPDATE documents SET profile_id=NULL WHERE id=$1`, [mine.id_photo]); } catch { refused++; }
@@ -124,11 +124,11 @@ const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL! });
     ok('G2 new Google account: logged in, asked for a phone number and a profile', r.s === 200 && r.b.needs_phone === true && r.b.needs_profile === 'user' && r.b.active_profile === null && !!r.b.refresh_token, JSON.stringify(r.b));
     ok('G2 the Google name is offered to prefill the profile name', r.b.google_name === 'Test Person');
     let t = r.b.token;
-    ok('G3 no profile before a phone number (drivers and senders must be able to call)', (await api('/add_profile', { type: 'user', display_name: 'Nadia' }, t)).b.error === 'PHONE_REQUIRED');
+    ok('G3 no profile before a phone number (drivers and senders must be able to call)', (await api('/add_profile', { accept_rules: true, type: 'user', display_name: 'Nadia' }, t)).b.error === 'PHONE_REQUIRED');
     ok('G4 a badly written phone number is refused', (await api('/set_phone', { phone: '0551 12 34 56' }, t)).b.error === 'BAD_PHONE');
     r = await api('/set_phone', { phone: '+213551000111' }, t);
     ok('G4 phone number saved as NOT verified', r.s === 200 && r.b.phone === '+213551000111' && r.b.phone_verified === false);
-    r = await api('/add_profile', { type: 'user', display_name: 'Nadia' }, t);
+    r = await api('/add_profile', { accept_rules: true, type: 'user', display_name: 'Nadia' }, t);
     ok('G5 then the profile is created', r.s === 200 && r.b.active_profile.type === 'user');
     r = await api('/login_google', { id_token: googleToken('g-100001'), path: 'user' });
     ok('G6 the same Google account logs in again: same account, straight into the profile', r.s === 200 && r.b.needs_phone === false && r.b.active_profile?.display_name === 'Nadia' && r.b.needs_profile === null);

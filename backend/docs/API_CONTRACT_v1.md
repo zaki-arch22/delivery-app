@@ -5,7 +5,7 @@ Rules
 - All requests need `Authorization: Bearer <token>` except the ones marked PUBLIC.
 - The token holds: account id, ACTIVE profile id, profile type (`user` or `driver`) or `staff`. A function marked USER refuses a driver token, and the reverse.
 - Money = whole dinars (integer). Times = ISO 8601 UTC. Phone = international format (+213...).
-- Errors: `{ "error": "CODE", "message": "..." }` with HTTP 400/401/403/404/409.
+- Errors: `{ "error": "CODE", "message": "..." }` with HTTP 400/401/403/404/409. A blocked profile gets PROFILE_BLOCKED (403, with until and reason) when starting new work (quote, order, going online, accepting); a banned account gets ACCOUNT_BANNED everywhere except get_me, my_record, appeal_violation, logout. The app sends `X-Device` (the phone's id for this app); only its fingerprint is stored.
 - `Idempotency-Key` header is required on create_order (a repeated key returns the first order, never a second one).
 
 ## A. Account and profiles (user app and driver path share these)
@@ -19,10 +19,12 @@ Rules
 | refresh_token | PUBLIC | refresh_token | token, refresh_token |
 | switch_profile | ACCOUNT | type | token, active_profile (needs the profile to exist) |
 | upload_document | ACCOUNT | query `kind` (`id_photo`\|`licence_photo`\|`vehicle_photo`); the BODY is the photo itself (Content-Type image/jpeg, image/png or image/webp, max 6 MB) | document_id, kind. The photo is checked by decoding it, redrawn as a clean JPEG (hidden data removed, max 2000 px) and kept privately. Errors: IMAGE_ONLY 415, TOO_LARGE 413, BAD_IMAGE, IMAGE_TOO_SMALL (under 300 px), TOO_MANY_UPLOADS 429 (10 unused photos per account; unused photos are deleted after a day) |
-| add_profile | ACCOUNT (first profile) or the active profile (second profile, from Settings only) | type, display_name (+ for a driver: documents {vehicle `motorbike`\|`car`, id_photo, licence_photo, vehicle_photo} = the three document_ids) | profile (driver starts `pending_approval`). BAD_DOCUMENT if a photo is someone else's, in the wrong place, or already used |
+| add_profile | ACCOUNT (first profile) or the active profile (second profile, from Settings only) | type, display_name, accept_rules (must be true: RULES_REQUIRED) (+ for a driver: national_id (9-18 digits; one ID card = one driver profile: ID_ALREADY_USED; banned: ID_BANNED), documents {vehicle `motorbike`\|`car`, id_photo, licence_photo, vehicle_photo} = the three document_ids) | profile (driver starts `pending_approval`). BAD_DOCUMENT if a photo is someone else's, in the wrong place, or already used |
 | get_me | ACCOUNT | - | account {id, phone, phone_verified, google}, profiles[], active_profile |
 | logout | ACCOUNT | - | ok |
 | logout_everywhere | ACCOUNT | - | sessions_ended (ends every device and live connection; for a lost phone) |
+| my_record | ACCOUNT (active profile; works while blocked) | - | points_90d, levels, rule_points, active_block {kind, until, reason}, violations[] {id, rule, points, order_ref, note, status, appeal_text, decision_note, can_appeal, counts}, sanctions[] |
+| appeal_violation | ACCOUNT (works while blocked) | id, text (10-1000) | status appealed (once per rule break, within 30 days; CANNOT_APPEAL) |
 
 Login methods: Google login is on when the server has the app's Google client ids; SMS login stays in the code but is OFF until an SMS provider is chosen (LOGIN_SMS=1). One Google account = one account; one verified phone number = one account (they are separate accounts). A Google account must call set_phone before add_profile (PHONE_REQUIRED): drivers and senders need to call each other. An unverified number is a contact number only: not unique, never used to find a person.
 
@@ -93,6 +95,13 @@ Staff use a separate login (email and password, created with `npm run create-adm
 | get_driver_cash | profile_id | balance, limit, ledger entries |
 | record_cash_handover | driver_profile_id, amount_da, note? | permanent entry with a receipt number; cannot exceed the cash held; two simultaneous handovers cannot both succeed; the driver gets a push with the receipt number |
 | add_cash_adjustment | driver_profile_id, note (required), amount_da or reverses_id | a correction as a NEW entry; a reversal is the exact opposite and can happen only once |
+| list_violations | status?, profile_id?, page | rule breaks (appealed first) with appeal text and decisions |
+| add_violation | profile_id, rule (`far_confirmation`\|`wrong_item`\|`damaged_by_driver`\|`behaviour`\|`prohibited_goods`\|`other`), points (only behaviour/other: 1-12; the others are fixed), order_id?, note | id, points_90d (levels apply automatically) |
+| decide_violation | id, decision (`uphold` only after an appeal \| `cancel`), note (shown to the person) | sanctions_lifted (cancelling removes the points and lifts automatic sanctions no longer deserved) |
+| list_sanctions | active?, page | warnings, blocks, bans |
+| block_profile / lift_sanction | profile_id, hours (1-2160 or null = until staff decide), reason / id, note | the block stops NEW work only; a job in progress can finish |
+| ban_account | profile_id, reason (10+) | sessions_ended. A person's decision: all profiles stop, every session ends, the Google account, devices, driver ID number and verified phone cannot open a new account |
+| get_profile_record | profile_id | profile, points_90d, active_block, devices, linked_profiles (other accounts that used the same phone), violations, sanctions |
 | create_zone / list_zones / set_zone_open | name + GeoJSON polygon / - / zone_id, open | zones start CLOSED; opening is a separate step |
 | get_pricing / create_pricing_version | - / base_da, per_km_da, medium_extra_da, large_extra_da, car_extra_da, min_percent, max_percent | a new version replaces the active one; existing orders keep theirs |
 

@@ -65,6 +65,7 @@ echo "   refused: $REFUSED of 12 expected; final balance check: $BAL"
 start_server 3399 orders RATE_LIMIT_DISABLED=1 OFFER_TTL_S=3 SEARCH_WINDOW_S=15 WIDEN_AFTER_S=6
 run "backend: orders, matching, cash, ratings" orders "$B" env $T npx ts-node test/orders.e2e.ts
 wipe; run "backend: accounts and profiles" auth "$B" env $T npx ts-node test/auth.e2e.ts
+wipe; run "backend: rules and sanctions" trust "$B" env $T npx ts-node test/trust.e2e.ts
 
 # 3. Notifications.
 start_server 3399 notify RATE_LIMIT_DISABLED=1 OFFER_TTL_S=3 SEARCH_WINDOW_S=60 WIDEN_AFTER_S=30
