@@ -7,3 +7,5 @@ dist/
 # Real server secrets
 *.env
 !backend/deploy/env.example
+# Local app settings on a developer laptop (server address)
+.env*.local

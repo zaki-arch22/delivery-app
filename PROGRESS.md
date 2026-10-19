@@ -26,6 +26,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Milestone "Google login + free test server" (2026-10-19, owner's choices): Google login on server and app (login_methods, login_google, set_phone; SMS login off), contact phone screen, name prefilled; render.yaml + render-start.sh (Neon-like database tested: non-superuser owner, restarts), staff console at /staff/, photos in the database; owner guide backend/deploy/render.md. Fixed 3 bugs (double notification on reconnect, limited-role password refresh on Neon, compiled server in the wrong folder). 400 tests + 12 database rules green.
 
+- Live work setup (2026-10-19, owner's wish: Windows laptop + Android phone): expo-dev-client, EAS profile `development` (build 8f1f018d-3dc3-479e-9264-03a0c9283082), guide mobile/LIVE_DEV.md.
+
 ## In progress
 - (none)
 
