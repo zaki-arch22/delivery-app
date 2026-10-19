@@ -3,6 +3,7 @@ import { api, qs } from '../api';
 import { fmtDate, fmtNum, t, tx, useLang, Key } from '../i18n';
 import { ActionDialog, addressText, Empty, ErrorBox, Field, Loading, Modal, Pager, Pill, Status, useLoad } from '../ui';
 import type { Nav } from '../App';
+import { DocPhoto } from './Drivers';
 
 const STATUSES = ['searching', 'assigned', 'picked_up', 'delivered', 'failed', 'cancelled', 'expired'];
 
@@ -93,8 +94,9 @@ export function OrderDetail({ id, onClose }: { id: string; nav: Nav; onClose: ()
             <tr key={e.id}><td className="num">{fmtDate(e.created_at)}</td><td><strong>{String(e.type).replace(/_/g, ' ')}</strong></td><td>{e.staff ? `${t('col.by')} ${e.staff}` : e.actor ?? ''}</td><td className="muted wrap-text">{Object.keys(e.data ?? {}).length ? JSON.stringify(e.data).slice(0, 160) : ''}</td></tr>))}</tbody></table></div>
         </section>
         {data.offers.length > 0 && <section><h3>{t('detail.offers')}</h3><div className="table-wrap"><table><tbody>{data.offers.map((f: any) => <tr key={f.id}><td>#{f.rank}</td><td>{f.driver}</td><td>{f.status}</td><td className="num">{fmtDate(f.offered_at)}</td></tr>)}</tbody></table></div></section>}
-        {data.problems.length > 0 && <section><h3>{t('detail.problems')}</h3>{data.problems.map((p: any) => <p key={p.id}><Status s={p.status} /> <strong>{p.reason}</strong> <span className="wrap-text">{p.note}</span>{p.resolution && <span className="muted"> → {p.resolution}</span>}</p>)}</section>}
+        {data.problems.length > 0 && <section><h3>{t('detail.problems')}</h3>{data.problems.map((p: any) => <p key={p.id}><Status s={p.status} /> <strong>{tx('reason.' + p.reason, p.reason)}</strong> <span className="wrap-text">{p.note}</span>{p.resolution && <span className="muted"> → {p.resolution}</span>}</p>)}</section>}
         {data.ratings.length > 0 && <section><h3>{t('detail.ratings')}</h3>{data.ratings.map((r: any, i: number) => <p key={i}><strong>{'★'.repeat(r.stars)}</strong> {r.rater} → {r.rated} <span className="wrap-text">{r.comment}</span></p>)}</section>}
+        {data.photos?.length > 0 && <section><h3>{t('detail.photos')}</h3><div className="docs">{data.photos.map((p: any) => <DocPhoto key={p.id} id={p.id} label={tx('doc.' + p.kind, p.kind)} />)}</div></section>}
         {data.cash.length > 0 && <section><h3>{t('detail.cash')}</h3>{data.cash.map((c: any) => <p key={c.id} className="num">{tx('cash.' + c.type)} · {fmtNum(c.amount_da)} {t('common.da')}</p>)}</section>}
       </>)}
       {act && o && (

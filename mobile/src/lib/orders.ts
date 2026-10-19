@@ -30,7 +30,7 @@ export const orders = (c: Client) => ({
   cancel: (id: string, reason: string) => c.call<Order>('/cancel_order', { order_id: id, reason }),
   raise: (id: string, price: number) => c.call<Order>('/raise_price', { order_id: id, new_offered_da: price }),
   rate: (id: string, stars: number, comment?: string) => c.call('/submit_rating', { order_id: id, stars, comment: comment || undefined }),
-  problem: (id: string, reason: string, note?: string) => c.call('/report_problem', { order_id: id, reason, note: note || undefined }),
+  problem: (id: string, reason: string, note?: string, photos: string[] = []) => c.call('/report_problem', { order_id: id, reason, note: note || undefined, photos }),
   recall: (id: string, reason: RecallReason) => c.call<Order>('/recall_order', { order_id: id, reason }),
   recipientHistory: (phone: string) => c.call<RecipientHistory>('/recipient_history?phone=' + encodeURIComponent(phone)),
 });

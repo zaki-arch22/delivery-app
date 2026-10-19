@@ -47,7 +47,7 @@ export class StaffService {
 
   // ---------- drivers ----------
   pendingDrivers() {
-    return this.db.query(`SELECT p.id, p.display_name, a.phone, d.vehicle, json_build_object('id_photo', d.id_photo_doc, 'licence_photo', d.licence_photo_doc, 'vehicle_photo', d.vehicle_photo_doc) AS documents, p.created_at
+    return this.db.query(`SELECT p.id, p.display_name, a.phone, d.vehicle, json_build_object('id_photo', d.id_photo_doc, 'licence_photo', d.licence_photo_doc, 'vehicle_photo', d.vehicle_photo_doc, 'selfie', (SELECT s.id FROM documents s WHERE s.profile_id=p.id AND s.kind='selfie_photo' ORDER BY s.created_at DESC LIMIT 1)) AS documents, p.created_at
       FROM profiles p JOIN accounts a ON a.id=p.account_id JOIN driver_details d ON d.profile_id=p.id WHERE p.type='driver' AND p.status='pending_approval' ORDER BY p.created_at`).then(drivers => ({ drivers }));
   }
 
@@ -150,10 +150,11 @@ export class StaffService {
       this.db.query(`SELECT e.id, e.type, e.data, e.created_at, p.display_name AS actor, s.name AS staff FROM order_events e LEFT JOIN profiles p ON p.id=e.actor_profile_id LEFT JOIN staff_users s ON s.id=e.actor_staff_id WHERE e.order_id=$1 ORDER BY e.id`, [oid]),
       this.db.query(`SELECT f.id, f.rank, f.status, f.offered_at, f.expires_at, p.display_name AS driver FROM offers f JOIN profiles p ON p.id=f.driver_profile_id WHERE f.order_id=$1 ORDER BY f.id`, [oid]),
       this.db.query(`SELECT r.stars, r.comment, r.created_at, a.display_name AS rater, b.display_name AS rated FROM ratings r JOIN profiles a ON a.id=r.rater_profile_id JOIN profiles b ON b.id=r.rated_profile_id WHERE r.order_id=$1`, [oid]),
-      this.db.query(`SELECT id, reason, note, status, resolution, created_at, resolved_at FROM problem_reports WHERE order_id=$1 ORDER BY id`, [oid]),
+      this.db.query(`SELECT id, reason, note, status, resolution, created_at, resolved_at, reporter_kind, photos FROM problem_reports WHERE order_id=$1 ORDER BY id`, [oid]),
       this.db.query(`SELECT id, type, amount_da, note, created_at FROM cash_ledger WHERE order_id=$1 ORDER BY id`, [oid]),
     ]);
-    return { order, events: ids(events, 'id'), offers: ids(offers, 'id'), ratings, problems: ids(problems, 'id'), cash: ids(ledger, 'id') };
+    const photos = await this.db.query(`SELECT id, kind, created_at FROM documents WHERE order_id=$1 ORDER BY created_at`, [oid]);
+    return { order, events: ids(events, 'id'), offers: ids(offers, 'id'), ratings, problems: ids(problems, 'id'), cash: ids(ledger, 'id'), photos };
   }
 
   async orderAction(staff: string, b: any) {
@@ -210,7 +211,7 @@ export class StaffService {
   async listProblems(f: any) {
     const rows = await this.db.query(
       `SELECT r.id, r.reason, r.note, r.status, r.resolution, r.created_at, o.id AS order_id, o.ref, p.display_name AS reporter, COALESCE(p.type::text, r.reporter_kind) AS reporter_type, a.phone AS reporter_phone
-       FROM problem_reports r JOIN orders o ON o.id=r.order_id LEFT JOIN profiles p ON p.id=r.reporter_profile_id LEFT JOIN accounts a ON a.id=p.account_id
+       FROM problem_reports r LEFT JOIN orders o ON o.id=r.order_id LEFT JOIN profiles p ON p.id=r.reporter_profile_id LEFT JOIN accounts a ON a.id=p.account_id
        WHERE ($1::text IS NULL OR r.status::text=$1) ORDER BY r.id DESC LIMIT 50 OFFSET $2`, [f.status ?? null, (page(f.page) - 1) * 50]);
     return { page: page(f.page), problems: ids(rows, 'id') };
   }

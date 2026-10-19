@@ -15,6 +15,12 @@ export const cfg = {
   proofRadiusM: () => n('PROOF_RADIUS_M', 300),   // pickup/delivery confirmed farther than this from the point = a case for staff
   lateCancelS: () => n('LATE_CANCEL_S', 180),     // a sender cancel later than this after a driver accepted counts as "late"
   trackingHours: () => n('TRACKING_HOURS', 24),   // the receiver's tracking link works until this long after the order ends
+  watchMs: () => n('WATCH_MS', 60_000),           // how often the safety nets look for silent drivers and late parcels
+  silentMin: () => n('SILENT_MIN', 20),           // a driver carrying a parcel without a position for this long = a case
+  overdueMin: () => n('OVERDUE_MIN', 180),        // a parcel not delivered this long after pickup = a case
+  pickupLateMin: () => n('PICKUP_LATE_MIN', 60),  // accepted but not picked up after this long = a case
+  reportHours: () => n('REPORT_HOURS', 24),       // a problem can be reported until this long after the order ends
+  selfieDays: () => n('SELFIE_DAYS', 7),          // a driver takes a new selfie before going online at least this often (0 = off)
 };
 export const cfgN = {
   pushTickMs: () => n('PUSH_TICK_MS', 1000),

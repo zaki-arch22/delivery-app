@@ -154,9 +154,9 @@ const BOX = { type: 'Polygon', coordinates: [[[2.9, 36.6], [3.3, 36.6], [3.3, 36
   const O5 = await order(U.token, 'staff-o5'); const of5 = await sD1.kind('offer.new', 4000, m => m.data.ref === O5.ref); await api('/accept_offer', { offer_id: of5.data.offer_id }, D1.token);
   await PR.pickup(O5.id, U.token, D1.token); const fl = await api('/report_delivery_failure', { order_id: O5.id, reason: 'no_answer' }, D1.token);
   await api('/update_job_step', { location: await PR.dropoff(fl.b.job.id, U.token), order_id: fl.b.job.id, step: 'delivered', delivery_code: (await api('/get_order?id=' + fl.b.job.id, undefined, U.token)).b.delivery_code }, D1.token);
-  await api('/report_problem', { order_id: O1.id, reason: 'Parcel was damaged', note: 'Box crushed' }, U.token);
+  await api('/report_problem', { order_id: O1.id, reason: 'damaged', note: 'Box crushed' }, U.token);
   const pl = (await S('/list_problems?status=open')).b.problems;
-  ok('S6 problems from drivers AND users reach staff, newest first', pl.some((p: any) => p.reason === 'delivery_failed:no_answer' && p.reporter_type === 'driver') && pl.some((p: any) => p.reporter_type === 'user' && p.reason === 'Parcel was damaged'), pl);
+  ok('S6 problems from drivers AND users reach staff, newest first', pl.some((p: any) => p.reason === 'delivery_failed:no_answer' && p.reporter_type === 'driver') && pl.some((p: any) => p.reporter_type === 'user' && p.reason === 'damaged'), pl);
   const pid = pl.find((p: any) => p.reporter_type === 'user').id;
   ok('S6 resolving needs a written resolution', (await S('/resolve_problem', { id: pid, status: 'resolved' })).s === 400);
   ok('S6 mark in progress', (await S('/resolve_problem', { id: pid, status: 'in_progress' })).s === 200);

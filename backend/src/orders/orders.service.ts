@@ -16,9 +16,10 @@ import { assertCanWork, recordViolation } from '../trust/rules';
 
 const code4 = () => String(randomInt(0, 10000)).padStart(4, '0');
 export const RECALL_REASONS = ['buyer_cancelled', 'wrong_parcel', 'wrong_address', 'other'];
+export const PROBLEM_REASONS = ['driver_late', 'damaged', 'not_delivered', 'wrong_item', 'missing_item', 'driver_behaviour', 'price', 'other'];
 // What the sender sees in the order's history (everything that happened, without internal ids).
 const USER_EVENTS = ['created', 'price_raised', 'assigned', 'released_by_driver', 'reassigned', 'pickup_code_wrong', 'picked_up', 'flag_far_away', 'code_wrong',
-  'delivered', 'delivery_failed', 'recalled_by_sender', 'returned_by_support', 'cancelled', 'cancelled_by_support', 'expired', 'recipient_expecting', 'recipient_reported', 'address_corrected', 'return_created'];
+  'delivered', 'delivery_failed', 'recalled_by_sender', 'returned_by_support', 'cancelled', 'cancelled_by_support', 'expired', 'recipient_expecting', 'recipient_reported', 'address_corrected', 'return_created', 'flag_check', 'emergency'];
 
 const SIZES = ['small', 'medium', 'large'];
 
@@ -172,12 +173,22 @@ export class OrdersService {
     return { page: p, orders: await Promise.all(rows.map(r => this.viewForUser(r.id, userId))) };
   }
 
-  async reportProblem(userId: string, orderId: string, reason: any, note: any) {
+  // A problem with up to 3 evidence photos, until 24 h after the order ended (TRUST_AND_SAFETY.md, step 7).
+  async reportProblem(userId: string, orderId: string, reason: any, note: any, photos: any = []) {
     uuid(orderId, 'order_id');
-    if (typeof reason !== 'string' || !reason.trim() || reason.length > 100) throw bad('BAD_REASON', 'reason is required (up to 100 characters)');
-    const o = await this.db.one(`SELECT 1 FROM orders WHERE id=$1 AND user_profile_id=$2`, [orderId, userId]);
-    if (!o) throw fail(404, 'NOT_FOUND', 'Order not found');
-    return this.db.one(`INSERT INTO problem_reports(order_id, reporter_profile_id, reason, note) VALUES ($1,$2,$3,$4) RETURNING id, status, created_at`, [orderId, userId, reason.trim(), typeof note === 'string' ? note.slice(0, 1000) : null]);
+    if (!PROBLEM_REASONS.includes(reason)) throw bad('BAD_REASON', `reason must be one of ${PROBLEM_REASONS.join(', ')}`);
+    if (!Array.isArray(photos) || photos.length > 3) throw bad('BAD_PHOTOS', 'photos must be a list of up to 3 photo ids');
+    return this.db.tx(async q => {
+      const [o] = await q(`SELECT o.id, p.account_id, o.ended_at < now() - make_interval(hours => $3) AS too_late FROM orders o JOIN profiles p ON p.id=o.user_profile_id WHERE o.id=$1 AND o.user_profile_id=$2`, [orderId, userId, cfg.reportHours()]);
+      if (!o) throw fail(404, 'NOT_FOUND', 'Order not found');
+      if (o.too_late) throw fail(409, 'REPORT_TOO_LATE', `Problems can be reported until ${cfg.reportHours()} hours after the order ends`);
+      const [c] = await q(`SELECT count(*)::int n FROM problem_reports WHERE order_id=$1 AND reporter_profile_id=$2`, [orderId, userId]);
+      if (c.n >= 5) throw fail(429, 'TOO_MANY_REPORTS', 'This order already has several reports; our team will contact you');
+      const ids: string[] = [];
+      for (const p of photos) ids.push(await this.documents.attachToOrder(q, o.account_id, orderId, p, 'evidence_photo'));
+      const [r] = await q(`INSERT INTO problem_reports(order_id, reporter_profile_id, reason, note, photos) VALUES ($1,$2,$3,$4,$5) RETURNING id, status, created_at`, [orderId, userId, reason, typeof note === 'string' ? note.slice(0, 1000) : null, ids]);
+      return { ...r, id: Number(r.id), photos: ids.length };
+    });
   }
 
   async viewForUser(orderId: string, userId: string) {

@@ -46,6 +46,22 @@ export class TrustService {
     return { ok: true, status: 'appealed' };
   }
 
+  // Emergency (the button on the job screen): a case at the top of staff's list, with where the phone was. The person is
+  // also offered the public emergency numbers on the phone itself. At most 5 per hour per profile.
+  async emergency(profileId: string | null, b: any) {
+    if (!profileId) throw fail(403, 'NO_PROFILE', 'Create your profile first');
+    const oid = b?.order_id ? uuid(b.order_id, 'order_id') : null;
+    const loc = b?.location && typeof b.location.lat === 'number' && typeof b.location.lng === 'number' && Math.abs(b.location.lat) <= 90 && Math.abs(b.location.lng) <= 180 ? b.location : null;
+    return this.db.tx(async q => {
+      const [c] = await q(`SELECT count(*)::int n FROM problem_reports WHERE reporter_profile_id=$1 AND reason='emergency' AND created_at > now() - interval '1 hour'`, [profileId]);
+      if (c.n >= 5) throw fail(429, 'TOO_MANY_ALERTS', 'Our team already has your alerts. Call the emergency numbers if you are in danger.');
+      if (oid) { const [o] = await q(`SELECT 1 FROM orders WHERE id=$1 AND (user_profile_id=$2 OR driver_profile_id=$2)`, [oid, profileId]); if (!o) throw fail(404, 'NOT_FOUND', 'Order not found'); }
+      const [r] = await q(`INSERT INTO problem_reports(order_id, reporter_profile_id, reason, note) VALUES ($1,$2,'emergency',$3) RETURNING id`, [oid, profileId, loc ? `Position: ${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}` : 'Position unknown']);
+      if (oid) await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'emergency',$2,$3)`, [oid, profileId, { location: loc }]);
+      return { ok: true, id: Number(r.id) };
+    });
+  }
+
   // ---------- staff ----------
   async listViolations(f: any) {
     const status = ['active', 'appealed', 'upheld', 'cancelled'].includes(f?.status) ? f.status : null;
@@ -184,8 +200,10 @@ export class TrustService {
        FROM account_devices d1 JOIN account_devices d2 ON d2.device_hash=d1.device_hash AND d2.account_id <> d1.account_id
        JOIN profiles p2 ON p2.account_id=d2.account_id WHERE d1.account_id=$1 LIMIT 20`, [p.account_id]);
     const { account_id, ...profile } = p; void account_id;
+    const [docs] = await q(`SELECT d.id_photo_doc id_photo, (SELECT s.id FROM documents s WHERE s.profile_id=$1 AND s.kind='selfie_photo' ORDER BY s.created_at DESC LIMIT 1) selfie,
+        (SELECT s.created_at FROM documents s WHERE s.profile_id=$1 AND s.kind='selfie_photo' ORDER BY s.created_at DESC LIMIT 1) selfie_at FROM profiles p LEFT JOIN driver_details d ON d.profile_id=p.id WHERE p.id=$1`, [pid]);
     return {
-      profile, points_90d: await pointsOf(q, pid), active_block: await activeBlock(q, pid),
+      profile, documents: docs, points_90d: await pointsOf(q, pid), active_block: await activeBlock(q, pid),
       devices: (await q(`SELECT count(*)::int n FROM account_devices WHERE account_id=$1`, [p.account_id]))[0].n,
       linked_profiles: linked, violations: (await this.listViolations({ profile_id: pid })).violations,
       sanctions: (await q(`SELECT id, kind, level, until, reason, source, lifted_at, lift_note, created_at FROM sanctions WHERE profile_id=$1 OR account_id=$2 ORDER BY id DESC LIMIT 50`, [pid, p.account_id])).map((s: any) => ({ ...s, id: Number(s.id) })),

@@ -38,6 +38,7 @@ export class AuthController {
 
   // The person's own rule record, and appeals. Allowed even while blocked or banned (they can always see why and answer).
   @Access('account') @Get('my_record') record(@Req() r: any) { return this.trust.myRecord(who(r).profileId); }
+  @Access('account') @Post('emergency') @HttpCode(200) emergency(@Req() r: any, @Body() b: any) { return this.trust.emergency(who(r).profileId, b); }
   @Access('account') @Post('appeal_violation') @HttpCode(200) appeal(@Req() r: any, @Body() b: any) { return this.trust.appeal(who(r).profileId, b); }
 
   @Access('account') @Post('logout_everywhere') @HttpCode(200)

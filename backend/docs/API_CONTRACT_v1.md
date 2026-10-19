@@ -23,6 +23,7 @@ Rules
 | get_me | ACCOUNT | - | account {id, phone, phone_verified, google}, profiles[], active_profile |
 | logout | ACCOUNT | - | ok |
 | logout_everywhere | ACCOUNT | - | sessions_ended (ends every device and live connection; for a lost phone) |
+| emergency | ACCOUNT (active profile) | order_id?, location? | ok (a staff case at the top, with the position; 5 per hour) |
 | my_record | ACCOUNT (active profile; works while blocked) | - | points_90d, levels, rule_points, active_block {kind, until, reason}, violations[] {id, rule, points, order_ref, note, status, appeal_text, decision_note, can_appeal, counts}, sanctions[] |
 | appeal_violation | ACCOUNT (works while blocked) | id, text (10-1000) | status appealed (once per rule break, within 30 days; CANNOT_APPEAL) |
 
@@ -45,7 +46,7 @@ add_profile rule: the FIRST profile is created right after login (path choice). 
 | Searching | raise_price (negotiation, upward only) | order id, new_offered_da | order (only while `searching`, only upward, inside max_da) |
 | My orders | list_orders | page | orders[] (own only) |
 | Rate | submit_rating | order id, stars 1-5, comment? | ok (delivered orders only, once) |
-| Problem | report_problem | order id, reason, note? | report |
+| Problem | report_problem | order id, reason (`driver_late`\|`damaged`\|`not_delivered`\|`wrong_item`\|`missing_item`\|`driver_behaviour`\|`price`\|`other`), note?, photos? (up to 3 document ids, kind `evidence_photo`) | report (until 24 h after the order ended: REPORT_TOO_LATE; 5 per order) |
 Live updates: see section G (one WebSocket per logged-in profile). Driver location while a job is active is read with get_order (polled every few seconds) until live location sharing is added.
 
 ## B2. Receiver (no account: the secret link is the key)
@@ -68,6 +69,7 @@ Live updates: see section G (one WebSocket per logged-in profile). Driver locati
 | Active job | get_job | - | the current job incl. pickup/dropoff, cash to collect, inspection, recipient_expecting_at, needs_pickup_code (never the pickup or delivery code) |
 | Active job | update_job_step | order id, step (`picked_up`\|`delivered`), location {lat,lng} (always: where the phone is), pickup_code + parcel_photo (document id, kind `parcel_photo`) for picked_up, delivery_code (typed or read from the receiver's QR `DLV1:<ref>:<code>`) + method (`code`\|`qr`) + cash_collected_da (if cash order) for delivered | job. PICKUP_CODE_WRONG / PICKUP_LOCKED (5 wrong), PHOTO_REQUIRED, BAD_DOCUMENT, CODE_WRONG / CODE_LOCKED. Confirmed more than 300 m from the point: allowed, but a staff case opens |
 | Can't deliver | report_delivery_failure | order id, reason (`no_answer`\|`wrong_address`\|`refused_damaged`\|`refused_wrong_item`\|`refused_not_ordered`\|`refused_changed_mind`\|`refused_cannot_pay`), evidence_photo (kind `evidence_photo`; required for damaged and wrong item), note?, location? | job (original -> `failed`, a `return` leg is created; staff get a case) |
+| Home | submit_selfie | document_id (kind `selfie_photo`) | ok. Going online without a selfie from the last 7 days: SELFIE_REQUIRED (428) |
 | Active job | release_job | order id, reason (`vehicle_problem`\|`emergency`\|`sender_unreachable`\|`parcel_not_ready`\|`parcel_too_big`\|`unsafe_or_prohibited` (+ evidence_photo)\|`other`), note? | job null (only before pickup; the order searches again at the same price, never offered to him again) |
 | Earnings | list_jobs | page | jobs[] |
 | Cash | get_cash_balance | - | balance_da, entries[] |

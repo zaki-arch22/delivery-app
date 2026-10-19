@@ -40,7 +40,7 @@ trap 'stop_server; stop_helper' EXIT
 start_server() {
   local port="$1" name="$2"; shift 2; stop_server
   if port_busy "$port"; then echo "port $port is already used by another program: stop it first"; exit 1; fi
-  ( cd "$ROOT/backend" && exec setsid env DATABASE_URL="$TEST_APP_URL" TEST_HOOKS=1 LOGIN_SMS=1 PORT="$port" PUSH_TICK_MS=300 RETRY_BASE_S=0.3 TICK_MS=500 "$@" npx ts-node src/main.ts >"$LOG/server-$name.log" 2>&1 ) &
+  ( cd "$ROOT/backend" && exec setsid env DATABASE_URL="$TEST_APP_URL" TEST_HOOKS=1 LOGIN_SMS=1 SELFIE_DAYS=0 PORT="$port" PUSH_TICK_MS=300 RETRY_BASE_S=0.3 TICK_MS=500 "$@" npx ts-node src/main.ts >"$LOG/server-$name.log" 2>&1 ) &
   SERVER_PID=$!
   for _ in $(seq 1 60); do curl -s -m 2 -o /dev/null "http://127.0.0.1:$port/get_me" -H 'x-forwarded-for: 127.0.0.9' && return 0; sleep 1; done
   echo "server did not start, see $LOG/server-$name.log"; exit 1

@@ -129,7 +129,7 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
   ok('SEC10 another user cannot READ my order', (await api('/get_order?id=' + O.id, undefined, Bb.token)).s === 404);
   ok('SEC10 another user cannot CANCEL my order', (await api('/cancel_order', { order_id: O.id }, Bb.token)).s === 404);
   ok('SEC10 another user cannot RAISE my order\'s price', (await api('/raise_price', { order_id: O.id, new_offered_da: O.max_da }, Bb.token)).s === 404);
-  ok('SEC10 another user cannot file a problem on my order', (await api('/report_problem', { order_id: O.id, reason: 'x' }, Bb.token)).s === 404);
+  ok('SEC10 another user cannot file a problem on my order', (await api('/report_problem', { order_id: O.id, reason: 'damaged' }, Bb.token)).s === 404);
   ok('SEC10 another user does not see my order in their list', (await api('/list_orders', undefined, Bb.token)).b.orders.length === 0);
   const offer = (await api('/get_current_offer', undefined, D1.token)).b.offer;
   ok('SEC10 a driver cannot accept an offer that was made to ANOTHER driver', (await api('/accept_offer', { offer_id: offer.offer_id }, D2.token)).s === 409);
@@ -317,6 +317,18 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
     ok('SEC20 garbage in the device header is ignored, never stored', (await pool.query(`SELECT count(*)::int n FROM account_devices WHERE device_hash !~ '^[0-9a-f]{64}$'`)).rows[0].n === 0 && (await pool.query(`SELECT count(*)::int n FROM account_devices`)).rows[0].n === before);
     let rewrite = 0; try { await appPool.query(`DELETE FROM violations`); } catch { rewrite++; } try { await appPool.query(`UPDATE sanctions SET until = now()`); } catch { rewrite++; }
     ok('SEC20 even the app\'s own database login cannot delete rule breaks or shorten sanctions behind staff\'s back', rewrite === 2 || (await appPool.query(`SELECT count(*)::int n FROM sanctions`)).rows[0].n === 0, rewrite);
+  }
+
+  // ===== SEC21 safety nets: emergency, selfie, evidence photos cannot be abused =====
+  {
+    ok('SEC21 the emergency alert needs a login', (await api('/emergency', {})).s === 401);
+    let odd = 0; for (const loc of [{ lat: 'x', lng: 1 }, { lat: 999, lng: 999 }, 'here', ['36', '3']]) { const r = await api('/emergency', { location: loc }, A.token); if (r.s === 200) odd++; }
+    ok('SEC21 strange positions are accepted as "unknown", never stored as given', odd === 4 && (await pool.query(`SELECT count(*)::int n FROM problem_reports WHERE reason='emergency' AND note NOT IN ('Position unknown')`)).rows[0].n === 0);
+    ok('SEC21 an emergency on a made-up order id is refused', (await api('/emergency', { order_id: 'nope' }, A.token)).s === 400);
+    ok('SEC21 the selfie route is for drivers only', (await api('/submit_selfie', { document_id: '00000000-0000-0000-0000-000000000000' }, A.token)).b.error === 'WRONG_PROFILE');
+    ok('SEC21 a made-up selfie id is refused', (await api('/submit_selfie', { document_id: "' OR 1=1 --" }, D1.token)).b.error === 'BAD_DOCUMENT');
+    let bad = 0; for (const ph of ['x', [{}], [1, 2], ['../../etc/passwd']]) { const r = await api('/report_problem', { order_id: O.id, reason: 'other', photos: ph }, A.token); if (r.s >= 400 && r.s < 500) bad++; }
+    ok('SEC21 garbage in evidence photos is refused cleanly', bad === 4, bad);
   }
 
   // ===== SEC15 evidence trail and code hygiene =====

@@ -24,10 +24,11 @@ import { DocumentsController } from './documents/documents.controller';
 import { UserOrdersController, DriverController, RatingsController, TrackingController } from './orders/orders.controller';
 import { Tracking } from './orders/tracking';
 import { TrustService } from './trust/trust.service';
+import { Watchdog } from './trust/watchdog';
 
 @Module({
   imports: [DbModule],
   controllers: [AuthController, NotifyController, StaffController, ...(process.env.TEST_HOOKS === '1' ? [DevController] : []), UserOrdersController, DriverController, RatingsController, TrackingController, DocumentsController],
-  providers: [SecurityLog, Maintenance, AuthService, Sms, Google, Realtime, PushService, StaffService, Routing, Matching, OrdersService, RatingsService, DriverService, Documents, Tracking, TrustService, { provide: APP_GUARD, useClass: AuthGuard }],
+  providers: [SecurityLog, Maintenance, AuthService, Sms, Google, Realtime, PushService, StaffService, Routing, Matching, OrdersService, RatingsService, DriverService, Documents, Tracking, TrustService, Watchdog, { provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule {}

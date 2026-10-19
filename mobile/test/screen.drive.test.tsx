@@ -236,3 +236,27 @@ test('no network in the middle of a job: steps are saved on the phone and sent w
   net.down = false;
   await waitFor(async () => expect(await status()).toBe('delivered'), { timeout: 8000 });
 });
+
+test('the weekly selfie before going online, and the emergency button on a job', async () => {
+  await call('/dev/config', { key: 'SELFIE_DAYS', value: 7 });
+  await db.query(`DELETE FROM otp_codes`);
+  await db.query(`UPDATE driver_details SET is_online=false`);
+  await open(svc());
+  await loginThroughScreens('0556000002', 'driver');
+  expect(await screen.findByTestId('online-state')).toHaveTextContent(/You are offline/);
+  await act(async () => { await fireEvent.press(screen.getByTestId('toggle-online')); });
+  await waitFor(() => expect(screen.getByTestId('online-state')).toHaveTextContent(/You are online/));   // the selfie was taken and sent, then online
+  const pid = (await db.query(`SELECT p.id FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE a.phone='+213556000002' AND p.type='driver'`)).rows[0].id;
+  expect((await db.query(`SELECT count(*)::int n FROM documents WHERE profile_id=$1 AND kind='selfie_photo'`, [pid])).rows[0].n).toBe(1);
+  await call('/dev/config', { key: 'SELFIE_DAYS', value: 0 });
+
+  const o = await newOrder();
+  expect(await screen.findByTestId('offer-card', {}, { timeout: 15000 })).toBeTruthy();
+  await act(async () => { await fireEvent.press(screen.getByTestId('accept-offer')); });
+  await fireEvent.press(await screen.findByTestId('sos'));
+  expect(screen.getByTestId('sos-17')).toBeTruthy(); expect(screen.getByTestId('sos-1055')).toBeTruthy();
+  await act(async () => { await fireEvent.press(screen.getByTestId('sos-team')); });
+  expect(await screen.findByTestId('job-msg')).toHaveTextContent(/Our team has been alerted/);
+  expect((await db.query(`SELECT note FROM problem_reports WHERE order_id=$1 AND reason='emergency'`, [o.id])).rows[0].note).toMatch(/36\.754/);
+  await call('/cancel_order', { order_id: o.id }, sender);
+});

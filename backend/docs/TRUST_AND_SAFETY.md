@@ -18,10 +18,10 @@ repeat offenders are stopped.
 | Buyers refuse cash-on-delivery parcels (Algeria: 20-40 % returns) | Algerian sellers: confirm the buyer before sending | Receiver can press "I am expecting this parcel" on the tracking page; senders see a receiver number's past deliveries/refusals (counts only) |
 | Receiver says "wrong item / damaged" after accepting | Flipkart Open-Box: inspect BEFORE giving the code; giving the code = accepting | Seller chooses "may open before paying" or "outside check only"; the page says clearly: give the code only when satisfied |
 | Banned people come back with a new account | inDrive: manual + automatic re-registration checks; device fingerprints | Banned Google account, phone device, driver ID-card number are blocked for new accounts |
-| Driver lends his account to someone else | inDrive: periodic photo checks | (planned) selfie check before going online; vehicle photo at sign-up already |
+| Driver lends his account to someone else | inDrive: periodic photo checks | a selfie before going online, once a week, kept next to the ID photo for staff to compare (no automatic face matching: that needs a paid service); vehicle photo at sign-up |
 | Unfair automatic bans with no explanation | Gig workers' main complaint (Uber/DoorDash); California law: written reason + human appeal | Automatic blocks are TEMPORARY only; every penalty shows its reason and evidence; one appeal per penalty; permanent bans only by a person |
 | Dangerous or illegal goods | Uber: prohibited-items list, driver may refuse | Prohibited list accepted at sign-up; driver may refuse at pickup without penalty (reason + photo) |
-| Emergencies on the road | inDrive: SOS button | (planned) "Emergency" button on the job screen: calls 17/14 and alerts staff |
+| Emergencies on the road | inDrive: SOS button | "Emergency" button on the driver's job screen: alerts staff at once with the position, and calls 17 (police), 14 (civil protection), 1055 (gendarmerie); numbers to be confirmed locally |
 
 ## The life of an order (who proves what)
 1. **Sender creates the order**: pickup, drop-off, receiver name and phone, size, cash to collect, inspection choice, price.
@@ -87,7 +87,10 @@ a staff member decides and the answer is shown. Cancelled penalties remove their
 - Device and ID-card numbers are stored only as fingerprints (one-way codes), never as the numbers themselves, except the last 3 ID digits for staff.
 - Phone numbers typed by Google accounts are not verified: they never decide anything on their own.
 
-## Build order
+## Built (Oct 2026)
 1. Proof chain: tracking link + receiver page, pickup code + parcel photo, delivery QR, positions recorded, refusal reasons, driver gives job back, sender calls parcel back, inspection choice, "I am expecting it", receiver-number history.
-2. Rules engine: points, automatic blocks, warnings, appeals, bans (account, Google, device, ID-card number), rules accepted at sign-up, staff console screens.
-3. Watchdogs and evidence: silent-driver and overdue alerts, problem reports with photos and categories within 24 h, emergency button, selfie check before going online.
+2. Rules engine: points, automatic blocks, warnings, appeals, bans (account, Google, device, ID-card number), rules accepted at sign-up, staff console page.
+3. Safety nets: silent-driver, overdue and late-pickup cases; problem reports with up to 3 photos within 24 h; emergency button; weekly selfie before going online.
+
+## Not built (needs money or a decision)
+- Automatic face matching of selfies (paid services), Google Play Integrity checks (needs the Google Play account, $25), insurance or compensation for lost goods (finance and law are parked).

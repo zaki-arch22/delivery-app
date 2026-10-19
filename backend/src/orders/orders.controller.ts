@@ -37,7 +37,7 @@ export class UserOrdersController {
   @Access('user') @Post('recall_order') @HttpCode(200) recall(@Req() r: any, @Body() b: any) { return this.o.recall(pid(r), b?.order_id, b?.reason); }
   @Access('user') @Get('recipient_history') history(@Req() r: any, @Query('phone') p: string) { return this.o.recipientHistory(pid(r), p); }
   @Access('user') @Get('get_order_photo') async photo(@Req() r: any, @Query('order_id') o: string, @Query('id') id: string, @Res() res: any) { jpeg(res, await this.o.photo(pid(r), o, id)); }
-  @Access('user') @Post('report_problem') @HttpCode(200) problem(@Req() r: any, @Body() b: any) { return this.o.reportProblem(pid(r), b?.order_id, b?.reason, b?.note); }
+  @Access('user') @Post('report_problem') @HttpCode(200) problem(@Req() r: any, @Body() b: any) { return this.o.reportProblem(pid(r), b?.order_id, b?.reason, b?.note, b?.photos ?? []); }
 }
 
 // ---------- DRIVER path ----------
@@ -52,6 +52,7 @@ export class DriverController {
   @Access('driver') @Post('decline_offer') @HttpCode(200) decline(@Req() r: any, @Body() b: any) { return this.d.decline(pid(r), b?.offer_id); }
   @Access('driver') @Get('get_job') async job(@Req() r: any) { return { job: await this.d.job(pid(r)) }; }
   @Access('driver') @Post('update_job_step') @HttpCode(200) step(@Req() r: any, @Body() b: any) { return this.d.step(pid(r), b); }
+  @Access('driver') @Post('submit_selfie') @HttpCode(200) selfie(@Req() r: any, @Body() b: any) { return this.d.submitSelfie(pid(r), b?.document_id); }
   @Access('driver') @Post('release_job') @HttpCode(200) release(@Req() r: any, @Body() b: any) { return this.d.releaseJob(pid(r), b); }
   @Access('driver') @Post('report_delivery_failure') @HttpCode(200) failure(@Req() r: any, @Body() b: any) { return this.d.failDelivery(pid(r), b); }
   @Access('driver') @Get('list_jobs') jobs(@Req() r: any, @Query('page') p: string) { return this.d.jobs(pid(r), p); }

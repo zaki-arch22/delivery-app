@@ -44,7 +44,7 @@ function Pending() {
 }
 
 // One document photo: loaded only when staff ask for it (each view is audited on the server), opened large on click.
-function DocPhoto({ id, label }: { id?: string; label: string }) {
+export function DocPhoto({ id, label }: { id?: string; label: string }) {
   const [src, setSrc] = useState<string | null>(null), [err, setErr] = useState<string | null>(null), [big, setBig] = useState(false);
   useEffect(() => () => { if (src) URL.revokeObjectURL(src); }, [src]);
   if (!id) return <span className="muted">—</span>;

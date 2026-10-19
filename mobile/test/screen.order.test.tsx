@@ -12,6 +12,10 @@ jest.mock('expo-location', () => ({
   Accuracy: { Balanced: 3 },
 }));
 
+// The phone camera is replaced by a fixed test picture (evidence photos).
+const mockPhoto = require('fs').readFileSync(require('path').join(__dirname, '../../backend/test/fixtures/photo.jpg'));
+jest.mock('../src/lib/photos', () => ({ pickPhoto: jest.fn(async () => ({ uri: 'file:///test/evidence.jpg' })), photoBlob: jest.fn(async () => new Blob([mockPhoto], { type: 'image/jpeg' })) }));
+
 const call = async (path: string, body?: any, token?: string) => (await (await nodeFetch(API + path, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}) }, body: body ? JSON.stringify(body) : undefined })).json()) as any;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const P = { lat: 36.7538, lng: 3.0588 }, D = { lat: 36.7650, lng: 3.0700 };
@@ -154,9 +158,11 @@ test('a full order: pins, details, price, searching, raise, driver, delivered, r
   // A problem report reaches staff.
   await fireEvent.press(screen.getByTestId('report-problem'));
   await fireEvent.press(await screen.findByTestId('reason-damaged'));
+  await act(async () => { await fireEvent.press(screen.getByTestId('add-photo')); });
+  expect(screen.getByTestId('photo-count')).toHaveTextContent(/1 photo/);
   await act(async () => { await fireEvent.press(screen.getByTestId('send-problem')); });
   expect(await screen.findByTestId('problem-msg')).toHaveTextContent(/Our team will look at it/);
-  expect((await db.query(`SELECT reason FROM problem_reports`)).rows).toEqual([{ reason: 'damaged' }]);
+  expect((await db.query(`SELECT reason, cardinality(photos) n FROM problem_reports WHERE reporter_kind='profile'`)).rows).toEqual([{ reason: 'damaged', n: 1 }]);
 });
 
 test('cancel before pickup; the order list shows both orders', async () => {

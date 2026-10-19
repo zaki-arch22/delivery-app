@@ -148,5 +148,59 @@ const points = async (pid: string) => (await pool.query(`SELECT COALESCE(sum(poi
   let viaApp = 0; try { await pool.query(`UPDATE violations SET status='cancelled' WHERE id=${v1} AND status='upheld'`); } catch { viaApp++; }
   ok('R7 status can only move forward (active -> appealed -> decided)', (await pool.query(`SELECT count(*)::int n FROM violations WHERE status='upheld'`)).rows[0].n === 0 || viaApp === 1);
 
+  // ===== W1 weekly selfie before going online (the approved person is the one working) =====
+  await api('/dev/config', { key: 'SELFIE_DAYS', value: 7 });
+  await api('/set_online', { online: false }, D2.token);
+  let w = await api('/set_online', { online: true }, D2.token);
+  ok('W1 without a recent selfie a driver cannot go online', w.s === 428 && w.b.error === 'SELFIE_REQUIRED', w);
+  ok('W1 someone else\'s photo cannot be his selfie', (await api('/submit_selfie', { document_id: (await upload(HTTP, U.token, 'selfie_photo')).b.document_id }, D2.token)).b.error === 'BAD_DOCUMENT');
+  ok('W1 a parcel photo cannot be a selfie', (await api('/submit_selfie', { document_id: (await upload(HTTP, D2.token, 'parcel_photo')).b.document_id }, D2.token)).b.error === 'BAD_DOCUMENT');
+  const selfie = (await upload(HTTP, D2.token, 'selfie_photo')).b.document_id;
+  ok('W1 with a fresh selfie he goes online', (await api('/submit_selfie', { document_id: selfie }, D2.token)).s === 200 && (await api('/set_online', { online: true }, D2.token)).s === 200);
+  ok('W1 staff see the selfie next to the ID photo to compare', (await api('/get_profile_record?profile_id=' + D2.id, undefined, ST)).b.documents.selfie === selfie);
+  await api('/dev/config', { key: 'SELFIE_DAYS', value: 0 });
+  await api('/update_location', { lat: 36.7590, lng: 3.0590 }, D2.token);
+
+  // ===== W2 safety nets: silent driver, overdue parcel, pickup too late (cases, never punishment) =====
+  await pool.query(`UPDATE driver_details SET is_online=false WHERE profile_id<>$1`, [D2.id]);
+  o = await order(U.token, 'trust-key-w2'); f = await offerFor(D2.token); await api('/accept_offer', { offer_id: f.offer_id }, D2.token);
+  await pool.query(`UPDATE orders SET assigned_at = now() - interval '2 hours' WHERE id=$1`, [o.id]);
+  await api('/dev/watchdog', {});
+  ok('W2 a pickup far too late opens a staff case', (await pool.query(`SELECT 1 FROM problem_reports WHERE order_id=$1 AND reason='check:pickup_late' AND reporter_kind='system'`, [o.id])).rowCount === 1);
+  await PR.pickup(o.id, U.token, D2.token);
+  await pool.query(`UPDATE driver_details SET last_location_at = now() - interval '30 minutes' WHERE profile_id=$1`, [D2.id]);
+  await api('/dev/watchdog', {}); await api('/dev/watchdog', {});
+  ok('W2 a driver silent for 30 minutes with a parcel opens ONE case, and the sender is told we are checking', (await pool.query(`SELECT count(*)::int n FROM problem_reports WHERE order_id=$1 AND reason='check:driver_silent'`, [o.id])).rows[0].n === 1 && (await pool.query(`SELECT 1 FROM notifications WHERE order_id=$1 AND type='order.checking'`, [o.id])).rowCount === 1);
+  await pool.query(`UPDATE orders SET picked_up_at = now() - interval '4 hours' WHERE id=$1`, [o.id]);
+  await api('/dev/watchdog', {});
+  ok('W2 a parcel not delivered 4 hours after pickup opens a case', (await pool.query(`SELECT 1 FROM problem_reports WHERE order_id=$1 AND reason='check:parcel_overdue'`, [o.id])).rowCount === 1);
+  ok('W2 the sender sees the check in the history', (await api('/get_order?id=' + o.id, undefined, U.token)).b.history.some((e: any) => e.type === 'flag_check'));
+  ok('W2 the driver got no points for it (GPS and traffic can fail)', (await pool.query(`SELECT count(*)::int n FROM violations WHERE profile_id=$1`, [D2.id])).rows[0].n === 0);
+  await api('/update_location', { lat: 36.7590, lng: 3.0590 }, D2.token);
+  await PR.deliver(o.id, U.token, D2.token);
+
+  // ===== W3 problem reports: categories, evidence photos, 24 hours =====
+  ok('W3 a free-text reason is refused (fixed categories)', (await api('/report_problem', { order_id: o.id, reason: 'give me my money' }, U.token)).b.error === 'BAD_REASON');
+  const ph = [await upload(HTTP, U.token, 'evidence_photo'), await upload(HTTP, U.token, 'evidence_photo')].map(x => x.b.document_id);
+  w = await api('/report_problem', { order_id: o.id, reason: 'missing_item', note: 'One shoe is missing', photos: ph }, U.token);
+  ok('W3 a problem with 2 evidence photos is recorded', w.s === 200 && w.b.photos === 2, w.b);
+  ok('W3 more than 3 photos is refused', (await api('/report_problem', { order_id: o.id, reason: 'other', photos: ['a', 'b', 'c', 'd'] }, U.token)).b.error === 'BAD_PHOTOS');
+  ok('W3 a photo of someone else cannot be attached', (await api('/report_problem', { order_id: o.id, reason: 'other', photos: [(await upload(HTTP, D2.token, 'evidence_photo')).b.document_id] }, U.token)).b.error === 'BAD_DOCUMENT');
+  const tl = (await api('/get_order_timeline?id=' + o.id, undefined, ST)).b;
+  ok('W3 staff see the photos in the order timeline', tl.photos.filter((x: any) => x.kind === 'evidence_photo').length === 2 && tl.problems.some((x: any) => x.photos.length === 2), tl.photos);
+  await pool.query(`UPDATE orders SET ended_at = now() - interval '25 hours' WHERE id=$1`, [o.id]);
+  ok('W3 after 24 hours a problem can no longer be reported', (await api('/report_problem', { order_id: o.id, reason: 'other' }, U.token)).b.error === 'REPORT_TOO_LATE');
+
+  // ===== W4 emergency button =====
+  o = await order(U.token, 'trust-key-w4'); f = await offerFor(D2.token); await api('/accept_offer', { offer_id: f.offer_id }, D2.token);
+  w = await api('/emergency', { order_id: o.id, location: { lat: 36.76, lng: 3.06 } }, D2.token);
+  ok('W4 the driver\'s emergency alert reaches staff at once, with the position', w.s === 200 && (await pool.query(`SELECT note FROM problem_reports WHERE id=$1 AND reason='emergency'`, [w.b.id])).rows[0].note.includes('36.76000'));
+  ok('W4 ...and appears in the order history', (await pool.query(`SELECT 1 FROM order_events WHERE order_id=$1 AND type='emergency'`, [o.id])).rowCount === 1);
+  ok('W4 an alert without an order also works (alone on the road)', (await api('/emergency', {}, D2.token)).s === 200 && (await api('/list_problems?status=open', undefined, ST)).b.problems.some((x: any) => x.reason === 'emergency' && x.order_id === null));
+  ok('W4 nobody can raise an alert on someone else\'s order', (await api('/emergency', { order_id: o.id }, D1.token)).s === 404);
+  for (let i = 0; i < 3; i++) await api('/emergency', {}, D2.token);
+  ok('W4 alerts are limited (5 per hour) so the button cannot flood staff', (await api('/emergency', {}, D2.token)).b.error === 'TOO_MANY_ALERTS');
+  await api('/cancel_order', { order_id: o.id }, U.token);
+
   console.log(`\n${pass} passed, ${fail} failed`); await pool.end(); process.exit(fail ? 1 : 0);
 })();

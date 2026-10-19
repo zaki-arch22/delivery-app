@@ -36,6 +36,9 @@ export class DriverService {
   async setOnline(driverId: string, online: any) {
     if (typeof online !== 'boolean') throw bad('BAD_INPUT', 'online must be true or false');
     if (online) await assertCanWork((s, p) => this.db.query(s, p), driverId);   // a blocked driver cannot start working
+    // A recent selfie before going online: the person working is the person staff approved (stops lending accounts).
+    if (online && cfg.selfieDays() > 0 && !(await this.db.one(`SELECT 1 FROM documents WHERE profile_id=$1 AND kind='selfie_photo' AND created_at > now() - make_interval(days => $2)`, [driverId, cfg.selfieDays()])))
+      throw fail(428, 'SELFIE_REQUIRED', 'Take a selfie to go online (once a week)');
     if (!online) {
       const job = await this.db.one(`SELECT 1 FROM orders WHERE driver_profile_id=$1 AND status IN ('assigned','picked_up')`, [driverId]);
       if (job) throw fail(409, 'ON_JOB', 'Finish your current job before going offline');
@@ -43,6 +46,15 @@ export class DriverService {
     await this.db.query(`UPDATE driver_details SET is_online=$2 WHERE profile_id=$1`, [driverId, online]);
     if (!online) await this.db.query(`UPDATE offers SET status='declined' WHERE driver_profile_id=$1 AND status='offered'`, [driverId]);
     return { online };
+  }
+
+  // The selfie photo (uploaded first, kind selfie_photo) becomes part of the driver's record; staff compare it with the ID photo.
+  async submitSelfie(driverId: string, docId: any) {
+    const acc = await this.db.one(`SELECT account_id FROM profiles WHERE id=$1`, [driverId]);
+    const r = await this.db.one(`UPDATE documents SET profile_id=$3 WHERE id=$1 AND account_id=$2 AND kind='selfie_photo' AND profile_id IS NULL AND order_id IS NULL RETURNING id`,
+      [typeof docId === 'string' && /^[0-9a-f-]{36}$/i.test(docId) ? docId : '00000000-0000-0000-0000-000000000000', acc.account_id, driverId]);
+    if (!r) throw bad('BAD_DOCUMENT', 'The selfie must be a photo you just took');
+    return { ok: true };
   }
 
   async updateLocation(driverId: string, b: any) {

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
+import { photoBlob, pickPhoto } from '../lib/photos';
+import { ApiError } from '../core/api';
 import { useApp, useNotices } from '../lib/app';
 import { driver, DriverHome as Home, Job, Offer } from '../lib/driver';
 import { errorMessage } from '../lib/errors';
@@ -43,12 +45,27 @@ export function DriverHome() {
   useEffect(() => { if (!home?.online || job) return; const h = setInterval(() => api.offer().then(setOffer).catch(() => {}), OFFER_CHECK_MS); return () => clearInterval(h); }, [home?.online, job]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!offer) return; const h = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(h); }, [offer]);
 
+  // Once a week the driver takes a selfie before going online (the approved person is the one working).
+  async function selfieThenOnline() {
+    const p = await pickPhoto('camera', true);
+    if (p === 'denied') { setMsg({ text: t('camera_needed'), warn: true }); return false; }
+    if (!p) return false;
+    const r = await services.client.call<{ document_id: string }>('/upload_document?kind=selfie_photo', await photoBlob(p.uri));
+    await services.client.call('/submit_selfie', { document_id: r.document_id });
+    await api.setOnline(true);
+    return true;
+  }
   async function toggle() {
     if (!home) return;
     setBusy('online'); setMsg(null);
     try {
       if (!home.online) {
-        await api.setOnline(true);
+        try { await api.setOnline(true); }
+        catch (e) {
+          if (!(e instanceof ApiError && e.code === 'SELFIE_REQUIRED')) throw e;
+          setMsg({ text: t('selfie_needed') });
+          if (!(await selfieThenOnline())) return;
+        }
         if (!(await tracking.ensure(send))) { await api.setOnline(false); setMsg({ text: t('location_needed'), warn: true }); }
       } else { await api.setOnline(false); tracking.stop(); }
       await load();

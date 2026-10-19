@@ -3,6 +3,7 @@ import { api, qs } from '../api';
 import { fmtDate, t, tx, useLang } from '../i18n';
 import { ActionDialog, Empty, ErrorBox, Field, Loading, Modal, Pager, Pill, useLoad } from '../ui';
 import type { Nav } from '../App';
+import { DocPhoto } from './Drivers';
 
 // Rules and sanctions (backend/docs/TRUST_AND_SAFETY.md): appeals waiting for a person, every rule break, blocks and bans,
 // and one profile's whole record (with other accounts that used the same phone). Every action asks for a written reason.
@@ -97,6 +98,7 @@ function Record({ id, nav, onClose }: { id: string; nav: Nav; onClose: () => voi
           <span className="muted"> · {d.profile.phone ?? '—'}{d.profile.phone && !d.profile.phone_verified ? ` (${t('trust.unverified')})` : ''}{d.profile.google ? ' · Google' : ''}{d.profile.national_id_last3 ? ` · ID …${d.profile.national_id_last3}` : ''}</span></p>
         <p><strong>{d.points_90d} {t('trust.points90')}</strong>{d.active_block && <> · <Pill tone="bad">{tx('trust.kind.' + d.active_block.kind)} {d.active_block.until ? '→ ' + fmtDate(d.active_block.until) : ''}</Pill></>}
           <span className="muted"> · {t('trust.devices')}: {d.devices}</span></p>
+        {d.documents?.id_photo || d.documents?.selfie ? <div className="docs"><DocPhoto id={d.documents.id_photo ?? undefined} label={tx('doc.id_photo')} /><DocPhoto id={d.documents.selfie ?? undefined} label={`${t('trust.selfie')} ${d.documents.selfie_at ? fmtDate(d.documents.selfie_at) : ''}`} /></div> : null}
         {d.linked_profiles.length > 0 && <div role="alert" className="error">{t('trust.linked')}: {d.linked_profiles.map((p: any) => `${p.display_name}${p.banned ? ' (' + t('trust.kind.ban') + ')' : ''}`).join(', ')}</div>}
         <div className="row">
           <button type="button" onClick={() => setDialog('add')}>{t('trust.addViolation')}</button>

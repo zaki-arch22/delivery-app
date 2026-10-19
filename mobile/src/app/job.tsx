@@ -27,6 +27,7 @@ export default function JobScreen() {
   const [failing, setFailing] = useState(false), [reason, setReason] = useState<FailReason | null>(null), [evidence, setEvidence] = useState<string | null>(null);
   const [pickupCode, setPickupCode] = useState(''), [parcel, setParcel] = useState<string | null>(null), [method, setMethod] = useState<'code' | 'qr'>('code');
   const [scan, setScan] = useState<null | 'PCK1' | 'DLV1'>(null);
+  const [sos, setSos] = useState(false);
   const [releasing, setReleasing] = useState(false), [relReason, setRelReason] = useState<ReleaseReason | null>(null), [released, setReleased] = useState(false);
   const [msg, setMsg] = useState<{ text: string; warn?: boolean } | null>(null), [busy, setBusy] = useState<string | null>(null);
   const [cancelled, setCancelled] = useState(false);
@@ -114,6 +115,11 @@ export default function JobScreen() {
     setReleasing(false); setRelReason(null); setEvidence(null); setReleased(true); setJob(null);
   });
   const call = (phone: string) => Linking.openURL('tel:' + phone).catch(() => {});
+  // Emergency: our team is alerted at once with the position; the public numbers are one tap away (17 police, 14 civil protection, 1055 gendarmerie).
+  const alertTeam = () => job && run('sos', async () => {
+    await services.client.call('/emergency', { order_id: job.id, location: await currentPosition() });
+    setMsg({ text: t('sos_sent') });
+  });
   const maps = (lat: number, lng: number) => Linking.openURL(Platform.OS === 'ios' ? `http://maps.apple.com/?ll=${lat},${lng}&q=${lat},${lng}` : `geo:${lat},${lng}?q=${lat},${lng}`).catch(() => {});
 
   if (job === undefined) return <Screen testID="screen-job"><Button kind="plain" label={'‹ ' + t('back')} onPress={() => router.back()} /></Screen>;
@@ -189,12 +195,23 @@ export default function JobScreen() {
         </>) : <Button testID="cant-deliver" kind="plain" label={t('cant_deliver')} onPress={() => setFailing(true)} />}
       </>)}
       {msg ? <Notice testID="job-msg" warn={msg.warn} text={msg.text} /> : null}
+      {sos ? (
+        <View style={s.sos} testID="sos-box">
+          <T kind="label">{t('sos_title')}</T>
+          <Button testID="sos-team" kind="danger" busy={busy === 'sos'} label={t('sos_team')} onPress={alertTeam} />
+          {EMERGENCY.map(e => <Button key={e.n} testID={'sos-' + e.n} kind="secondary" label={`☎ ${e.n} · ${t(e.k)}`} onPress={() => call(e.n)} />)}
+          <Button kind="plain" label={t('close')} onPress={() => setSos(false)} />
+        </View>
+      ) : <Button testID="sos" kind="plain" label={'⚠ ' + t('sos_btn')} onPress={() => setSos(true)} />}
       <QrScanner visible={!!scan} title={t(scan === 'PCK1' ? 'scan_pickup_qr' : 'scan_delivery_qr')} onCode={scanned} onClose={() => setScan(null)} />
       <Gap />
     </Screen>
   );
 }
+// Public emergency numbers in Algeria (to be confirmed locally: sources list 14 and 1021 for civil protection).
+const EMERGENCY = [{ n: '17', k: 'sos_police' }, { n: '14', k: 'sos_civil' }, { n: '1055', k: 'sos_gendarmerie' }] as const;
 const s = StyleSheet.create({
+  sos: { backgroundColor: '#FEF3C7', borderWidth: 2, borderColor: color.amber, borderRadius: radius, padding: space(4), marginVertical: space(2), gap: space(2) },
   mapBox: { height: 200, borderRadius: radius, overflow: 'hidden', borderWidth: 1, borderColor: color.border, marginVertical: space(3) },
   box: { backgroundColor: color.white, borderRadius: radius, borderWidth: 1, borderColor: color.border, padding: space(4), marginVertical: space(1.5) },
   row: { flexDirection: 'row', gap: space(3), flexWrap: 'wrap', alignItems: 'center' },

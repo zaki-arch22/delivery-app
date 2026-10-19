@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, qs } from '../api';
 import { fmtDate, t, tx, useLang } from '../i18n';
-import { ActionDialog, Empty, ErrorBox, Field, Loading, Pager, Status, useLoad } from '../ui';
+import { ActionDialog, Empty, ErrorBox, Field, Loading, Pager, Pill, Status, useLoad } from '../ui';
 import type { Nav } from '../App';
 
 export function Problems({ nav }: { nav: Nav }) {
@@ -24,9 +24,9 @@ export function Problems({ nav }: { nav: Nav }) {
             <tbody>{data.problems.map(p => (
               <tr key={p.id}>
                 <td className="num">{fmtDate(p.created_at)}</td>
-                <td><button type="button" className="link" onClick={() => nav.go('orders', { orderId: p.order_id })}>{p.ref}</button></td>
+                <td>{p.order_id ? <button type="button" className="link" onClick={() => nav.go('orders', { orderId: p.order_id })}>{p.ref}</button> : '—'}</td>
                 <td>{p.reporter} <span className="muted">({p.reporter_type === 'driver' ? t('col.driver') : t('col.user')})</span><div className="muted">{p.reporter_phone}</div></td>
-                <td><strong className="wrap-text">{tx('reason.' + p.reason, p.reason)}</strong>{p.note && <div className="wrap-text">{p.note}</div>}{p.resolution && <div className="muted wrap-text">→ {p.resolution}</div>}</td>
+                <td>{p.reason === 'emergency' ? <Pill tone="bad">{tx('reason.emergency')}</Pill> : <strong className="wrap-text">{tx('reason.' + p.reason, p.reason)}</strong>}{p.note && <div className="wrap-text">{p.note}</div>}{p.resolution && <div className="muted wrap-text">→ {p.resolution}</div>}</td>
                 <td><Status s={p.status} /></td>
                 <td>{p.status !== 'resolved' && <div className="row">
                   {p.status === 'open' && <button type="button" onClick={() => progress(p.id)}>{t('problems.inProgress')}</button>}

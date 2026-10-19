@@ -118,12 +118,12 @@ test('6. orders: find an order, act on it only when allowed, and the server agre
 });
 
 test('7. problems: a report is resolved with a written outcome', async () => {
-  await call('/report_problem', { order_id: orderId, reason: 'Parcel was damaged', note: 'Box crushed' }, user.token);
+  await call('/report_problem', { order_id: orderId, reason: 'damaged', note: 'Box crushed' }, user.token);
   await u.click(nav().getByRole('button', { name: 'Problems' }));
-  const row = (await screen.findByText('Parcel was damaged')).closest('tr')!;
+  const row = (await screen.findByText('The parcel is damaged')).closest('tr')!;
   await u.click(within(row).getByRole('button', { name: 'Resolve' }));
   const d = await dialog(); await u.type(within(d).getByLabelText(/^What was done/), 'Refund arranged'); await u.click(within(d).getByRole('button', { name: 'Confirm' }));
-  await waitFor(() => expect(screen.queryByText('Parcel was damaged')).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByText('The parcel is damaged')).not.toBeInTheDocument());
   expect((await db.query(`SELECT status, resolution FROM problem_reports`)).rows[0]).toEqual({ status: 'resolved', resolution: 'Refund arranged' });
 });
 

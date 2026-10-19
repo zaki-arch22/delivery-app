@@ -32,6 +32,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Trust phase 2 "rules engine" (2026-10-19): violations with points (automatic: driver gives back a job, late cancel, "never ordered" refusal; staff: far confirmation, wrong item, damage, behaviour, prohibited goods), levels (3 warning, 5 = 24 h, 8 = 7 days, 12 = until staff), blocks stop new work only, appeals (once, 30 days) decided by staff, staff blocks/lifts, bans (Google, device, national ID, verified phone cannot return), linked accounts by device, rules accepted at sign-up, national ID for drivers; app: Rules screen, My record with appeals; staff console: Rules page. Fixed: huge ids crashed queries. Development build with camera + device id: https://expo.dev/artifacts/eas/OIqHv3Prv_Gtc8Lbr-SPphRLhUtbvcW1TzkhU6VXTd0.apk. 512 tests + 12 database rules green.
 
+- Trust phase 3 "safety nets" (2026-10-19): watchdog (silent driver 20 min, parcel overdue 3 h, pickup late 60 min: staff cases + "we are checking" to the sender), problem reports with categories + up to 3 photos within 24 h, emergency button (staff alert with position + 17/14/1055), weekly driver selfie before going online (staff compare with ID photo), order photos in the staff timeline. All tests green.
+
 ## In progress
 - (none)
 
@@ -62,4 +64,5 @@ OSRM real data: still blocked (download.geofabrik.de); not possible on Render fr
 
 ## Pending questions / owner actions
 - Owner: create Neon, Firebase, Render following backend/deploy/render.md; send the Render address and google-services.json.
+- Confirm locally the emergency numbers shown to drivers: 17 police, 14 civil protection (some sources say 1021), 1055 gendarmerie.
 - Later (when the server is up): the starting prices (base, per km, size and car extras, allowed range), set by the owner in the staff console.
