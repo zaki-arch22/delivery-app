@@ -34,6 +34,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Trust phase 3 "safety nets" (2026-10-19): watchdog (silent driver 20 min, parcel overdue 3 h, pickup late 60 min: staff cases + "we are checking" to the sender), problem reports with categories + up to 3 photos within 24 h, emergency button (staff alert with position + 17/14/1055), weekly driver selfie before going online (staff compare with ID photo), order photos in the staff timeline. All tests green.
 
+- Firebase project `delivery-c945c` created by the owner (2026-10-19): mobile/google-services.json saved, web client id 790230988811-20h827uvsigdi8dfcsdvq6oavmks6735.apps.googleusercontent.com in eas.json (= Render GOOGLE_CLIENT_IDS). The file has NO Android OAuth client (client_type 1): the SHA-1 fingerprint must still be added in Firebase (Project settings → Your apps → Android → Add fingerprint), otherwise Google sign-in on the phone fails (DEVELOPER_ERROR).
+
 ## In progress
 - (none)
 
@@ -63,5 +65,5 @@ OSRM real data: still blocked (download.geofabrik.de); not possible on Render fr
 - Real map data: YES, allowing download.geofabrik.de and tiles.openfreemap.org.
 
 ## Pending questions / owner actions
-- Owner: create Neon, Firebase, Render following backend/deploy/render.md; send the Render address and google-services.json.
+- Owner: add the SHA-1 fingerprint in Firebase; create Neon and Render (backend/deploy/render.md); send the Render address.
 - Later (when the server is up): the starting prices (base, per km, size and car extras, allowed range), set by the owner in the staff console.

@@ -9,6 +9,9 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "790230988811-20h827uvsigdi8dfcsdvq6oavmks6735.apps.googleusercontent.com"
       }
     },
     "preview": {
@@ -17,7 +20,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.example.invalid"
+        "EXPO_PUBLIC_API_URL": "https://api.example.invalid",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "790230988811-20h827uvsigdi8dfcsdvq6oavmks6735.apps.googleusercontent.com"
       }
     },
     "production": {
@@ -26,7 +30,8 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.example.invalid"
+        "EXPO_PUBLIC_API_URL": "https://api.example.invalid",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "790230988811-20h827uvsigdi8dfcsdvq6oavmks6735.apps.googleusercontent.com"
       }
     }
   }

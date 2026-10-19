@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "790230988811",
+    "project_id": "delivery-c945c",
+    "storage_bucket": "delivery-c945c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:790230988811:android:d3be47abc84d235535af0e",
+        "android_client_info": {
+          "package_name": "dz.delivery.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "790230988811-20h827uvsigdi8dfcsdvq6oavmks6735.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAGOuNptygnGyCODIaZcjjT7QAMve5kQUw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "790230988811-20h827uvsigdi8dfcsdvq6oavmks6735.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
