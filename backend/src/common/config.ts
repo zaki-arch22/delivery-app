@@ -12,6 +12,9 @@ export const cfg = {
   fallbackKmh: () => n('FALLBACK_KMH', 20),       // fallback only: city speed
   routingUrl: () => process.env.ROUTING_URL ?? '', // our own OSRM server (road distances); empty = estimate only
   routingTimeoutMs: () => n('ROUTING_TIMEOUT_MS', 1500), // slower than this -> estimate, so quotes never hang
+  proofRadiusM: () => n('PROOF_RADIUS_M', 300),   // pickup/delivery confirmed farther than this from the point = a case for staff
+  lateCancelS: () => n('LATE_CANCEL_S', 180),     // a sender cancel later than this after a driver accepted counts as "late"
+  trackingHours: () => n('TRACKING_HOURS', 24),   // the receiver's tracking link works until this long after the order ends
 };
 export const cfgN = {
   pushTickMs: () => n('PUSH_TICK_MS', 1000),

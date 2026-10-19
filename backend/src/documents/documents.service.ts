@@ -5,8 +5,11 @@ import { Db } from '../db/db.service';
 import { SecurityLog } from '../security/security-log.service';
 import { bad, fail, UUID } from '../common/errors';
 
-export const KINDS = ['id_photo', 'licence_photo', 'vehicle_photo'] as const;
+export const KINDS = ['id_photo', 'licence_photo', 'vehicle_photo'] as const;   // driver sign-up
 export type Kind = typeof KINDS[number];
+export const ORDER_KINDS = ['parcel_photo', 'evidence_photo'] as const;         // tied to an order: parcel at pickup, evidence of a refusal or problem
+export type OrderKind = typeof ORDER_KINDS[number];
+const ALL_KINDS: readonly string[] = [...KINDS, ...ORDER_KINDS];
 export const MAX_UPLOAD_BYTES = 6 * 1024 * 1024;   // a phone photo; the server shrinks it anyway
 const MAX_UNUSED = 10;          // uploaded but not yet used by a driver profile, per account (stops storage filling)
 const MIN_SIDE = 300;           // smaller pictures cannot be read by staff
@@ -30,10 +33,10 @@ export class Documents {
   constructor(private db: Db, private sec: SecurityLog) {}
 
   async upload(accountId: string, ip: string, kind: any, body: any) {
-    if (!KINDS.includes(kind)) throw bad('BAD_KIND', 'kind must be id_photo, licence_photo or vehicle_photo');
+    if (!ALL_KINDS.includes(kind)) throw bad('BAD_KIND', 'kind must be id_photo, licence_photo, vehicle_photo, parcel_photo or evidence_photo');
     if (!Buffer.isBuffer(body) || body.length === 0) throw fail(415, 'IMAGE_ONLY', 'Send a JPEG, PNG or WebP photo');
     if (!sniff(body)) { this.sec.event('upload_not_image', ip, { kind }, { account: accountId }); throw fail(415, 'IMAGE_ONLY', 'Send a JPEG, PNG or WebP photo'); }
-    const unused = await this.db.one(`SELECT count(*)::int n FROM documents WHERE account_id=$1 AND profile_id IS NULL`, [accountId]);
+    const unused = await this.db.one(`SELECT count(*)::int n FROM documents WHERE account_id=$1 AND profile_id IS NULL AND order_id IS NULL`, [accountId]);
     if (unused.n >= MAX_UNUSED) { this.sec.event('upload_cap', ip, {}, { account: accountId }); throw fail(429, 'TOO_MANY_UPLOADS', 'Too many photos waiting. Finish the sign-up or try again tomorrow.'); }
 
     let out: Buffer, w = 0, h = 0;
@@ -63,25 +66,40 @@ export class Documents {
   // Inside the add_profile transaction: the three photos must belong to this account, be of the right kind and unused.
   async attach(q: (sql: string, p?: any[]) => Promise<any[]>, accountId: string, profileId: string, docs: Record<Kind, string>) {
     const ids = KINDS.map(k => docs[k]);
-    const rows = await q(`SELECT id, kind FROM documents WHERE id = ANY($1::uuid[]) AND account_id=$2 AND profile_id IS NULL FOR UPDATE`, [ids, accountId]);
+    const rows = await q(`SELECT id, kind FROM documents WHERE id = ANY($1::uuid[]) AND account_id=$2 AND profile_id IS NULL AND order_id IS NULL FOR UPDATE`, [ids, accountId]);
     for (const k of KINDS) if (!rows.some(r => r.id === docs[k] && r.kind === k)) throw bad('BAD_DOCUMENT', `${k} must be a photo you uploaded for this sign-up`);
     await q(`UPDATE documents SET profile_id=$1 WHERE id = ANY($2::uuid[])`, [profileId, ids]);
+  }
+
+  // Inside an order transaction: a parcel or evidence photo uploaded by THIS account, of the right kind, never used before.
+  async attachToOrder(q: (sql: string, p?: any[]) => Promise<any[]>, accountId: string, orderId: string, docId: any, kind: OrderKind) {
+    if (typeof docId !== 'string' || !UUID.test(docId)) throw bad('PHOTO_REQUIRED', `A ${kind.replace('_', ' ')} is required`);
+    const [d] = await q(`UPDATE documents SET order_id=$3 WHERE id=$1 AND account_id=$2 AND kind=$4 AND profile_id IS NULL AND order_id IS NULL RETURNING id`, [docId, accountId, orderId, kind]);
+    if (!d) throw bad('BAD_DOCUMENT', `The ${kind.replace('_', ' ')} must be one you just took for this order`);
+    return d.id as string;
+  }
+
+  // A photo tied to an order, for the people of that order (the caller has already checked who may see it).
+  async orderPhoto(orderId: string, docId: string | null): Promise<Buffer | null> {
+    if (!docId) return null;
+    const r = await this.db.one(`SELECT f.data FROM documents d JOIN document_files f ON f.document_id=d.id WHERE d.id=$1 AND d.order_id=$2`, [docId, orderId]);
+    return r?.data ?? null;
   }
 
   // Staff only. Who looked at a photo is recorded forever.
   async readForStaff(staffId: string, id: any) {
     if (typeof id !== 'string' || !UUID.test(id)) throw bad('BAD_ID', 'id must be an id');
-    const doc = await this.db.one(`SELECT d.id, d.kind, d.profile_id, f.data FROM documents d JOIN document_files f ON f.document_id=d.id WHERE d.id=$1 AND d.profile_id IS NOT NULL`, [id]);
+    const doc = await this.db.one(`SELECT d.id, d.kind, d.profile_id, d.order_id, f.data FROM documents d JOIN document_files f ON f.document_id=d.id WHERE d.id=$1 AND (d.profile_id IS NOT NULL OR d.order_id IS NOT NULL)`, [id]);
     if (!doc) throw fail(404, 'NOT_FOUND', 'Document not found');
     const data: Buffer = doc.data;
-    await this.db.query(`INSERT INTO staff_audit(staff_id, action, target_type, target_id, data) VALUES ($1,'view_document','profile',$2,$3)`,
-      [staffId, doc.profile_id, { document_id: doc.id, kind: doc.kind }]);
+    await this.db.query(`INSERT INTO staff_audit(staff_id, action, target_type, target_id, data) VALUES ($1,'view_document',$2,$3,$4)`,
+      [staffId, doc.profile_id ? 'profile' : 'order', doc.profile_id ?? doc.order_id, { document_id: doc.id, kind: doc.kind }]);
     return data;
   }
 
   // Hourly: photos uploaded but never used for a sign-up are deleted after a day (with their picture).
   async cleanup() {
-    const old = await this.db.query(`DELETE FROM documents WHERE profile_id IS NULL AND created_at < now() - interval '1 day' RETURNING id`);
+    const old = await this.db.query(`DELETE FROM documents WHERE profile_id IS NULL AND order_id IS NULL AND created_at < now() - interval '1 day' RETURNING id`);
     return old.length;
   }
 }

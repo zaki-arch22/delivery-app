@@ -1,6 +1,7 @@
 import { googleToken } from './google';
 import { Pool } from 'pg';
 import { driverDocs, upload, PHOTO } from './docs';
+import { proof } from './proof';
 const HTTP = 'http://localhost:3399', WS = 'ws://localhost:3399/ws';
 if (!process.env.TEST_DATABASE_URL || /\/delivery$/.test(process.env.TEST_DATABASE_URL)) throw new Error('Tests need TEST_DATABASE_URL pointing to a separate test database, never the real one');
 const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL! });
@@ -75,7 +76,8 @@ const profileOf = async (id: number) => (await pool.query(`SELECT profile_id FRO
   ok('N6 user is told LIVE that a driver accepted', !!(await sU1.waitKind('order.assigned')));
   const pushU = await until(async () => (await api('/dev/pushes?token=tok-sara-user-0001')).b.sent?.find((x: any) => x.m.data.kind === 'order.assigned'));
   ok('N6 user gets an ARABIC phone push', !!pushU && pushU.m.title === 'تم العثور على مندوب', pushU);
-  const step = (oid: string, body: any) => api('/update_job_step', { order_id: oid, ...body }, D1.token);
+  const PR = proof(api, async t => (await upload(HTTP, t, 'parcel_photo')).b.document_id);
+  const step = async (oid: string, body: any) => body.step === 'picked_up' ? PR.pickup(oid, U1.token, D1.token) : api('/update_job_step', { order_id: oid, location: await PR.dropoff(oid, U1.token), ...body }, D1.token);
   await step(O1.id, { step: 'picked_up' }); ok('N6 "picked up" arrives live', !!(await sU1.waitKind('order.picked_up')));
   const code1 = (await api('/get_order?id=' + O1.id, undefined, U1.token)).b.delivery_code;
   await step(O1.id, { step: 'delivered', delivery_code: code1 }); ok('N6 "delivered" arrives live', !!(await sU1.waitKind('order.delivered')));

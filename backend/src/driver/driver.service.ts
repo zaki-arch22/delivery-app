@@ -4,13 +4,33 @@ import { Db } from '../db/db.service';
 import { bad, fail, isInt, point, uuid } from '../common/errors';
 import { notify } from '../notify/notify';
 import { createReturnLeg } from '../orders/return-leg';
+import { Documents } from '../documents/documents.service';
+import { Matching } from '../orders/matching.service';
+import { cfg } from '../common/config';
 
-const REASONS = ['no_answer', 'refused', 'wrong_address'];
+// Why a parcel could not be delivered. "refused_*" = the receiver refused it at the door (TRUST_AND_SAFETY.md, step 6).
+export const FAIL_REASONS = ['no_answer', 'wrong_address', 'refused_damaged', 'refused_wrong_item', 'refused_not_ordered', 'refused_changed_mind', 'refused_cannot_pay'];
+const NEEDS_EVIDENCE = ['refused_damaged', 'refused_wrong_item'];
+// Why a driver gives back a job before pickup. Refusing unsafe or prohibited goods (with a photo) is never held against him.
+export const RELEASE_REASONS = ['vehicle_problem', 'emergency', 'sender_unreachable', 'parcel_not_ready', 'parcel_too_big', 'unsafe_or_prohibited', 'other'];
+const sameCode = (given: any, real: string) => { const a = Buffer.from(String(given ?? '')), b = Buffer.from(real); return a.length === b.length && timingSafeEqual(a, b); };
 const cashToCollect = (o: any) => (o.leg === 'return' ? 0 : o.cod_amount_da + (o.payer === 'recipient' ? o.locked_da : 0));
 
 @Injectable()
 export class DriverService {
-  constructor(private db: Db) {}
+  constructor(private db: Db, private documents: Documents, private matching: Matching) {}
+
+  // A position check: how far the driver's phone was from where he says he is. Far away = a case for staff (GPS can be wrong,
+  // so it never blocks the step on its own).
+  private async distanceCheck(q: (s: string, p?: any[]) => Promise<any[]>, o: any, which: 'pickup' | 'dropoff', loc: { lat: number; lng: number }) {
+    const [d] = await q(`SELECT round(ST_Distance(${which}_point, ST_SetSRID(ST_MakePoint($2,$3),4326)::geography))::int m FROM orders WHERE id=$1`, [o.id, loc.lng, loc.lat]);
+    if (d.m > cfg.proofRadiusM()) {
+      await q(`INSERT INTO order_events(order_id,type,data) VALUES ($1,'flag_far_away',$2)`, [o.id, { at: which, distance_m: d.m }]);
+      await q(`INSERT INTO problem_reports(order_id, reporter_kind, reason, note) VALUES ($1,'system',$2,$3)`, [o.id, `check:far_from_${which}`, `Confirmed ${d.m} m away from the ${which} point`]);
+    }
+    return d.m as number;
+  }
+  private accountOf = async (q: (s: string, p?: any[]) => Promise<any[]>, profileId: string) => (await q(`SELECT account_id FROM profiles WHERE id=$1`, [profileId]))[0].account_id as string;
 
   async setOnline(driverId: string, online: any) {
     if (typeof online !== 'boolean') throw bad('BAD_INPUT', 'online must be true or false');
@@ -81,7 +101,7 @@ export class DriverService {
   async job(driverId: string, orderId?: string) {
     const o = await this.db.one(
       `SELECT o.id, o.ref, o.leg, o.status, o.size, o.vehicle, o.payer, o.cod_amount_da, o.locked_da, o.distance_m, o.recipient_name, o.recipient_phone,
-         o.pickup_address, o.dropoff_address, ST_Y(o.pickup_point::geometry) pickup_lat, ST_X(o.pickup_point::geometry) pickup_lng,
+         o.pickup_address, o.dropoff_address, o.inspection, o.recipient_expecting_at, (o.pickup_code IS NOT NULL) needs_pickup_code, ST_Y(o.pickup_point::geometry) pickup_lat, ST_X(o.pickup_point::geometry) pickup_lng,
          ST_Y(o.dropoff_point::geometry) dropoff_lat, ST_X(o.dropoff_point::geometry) dropoff_lng,
          sp.display_name sender_name, sa.phone sender_phone
        FROM orders o JOIN profiles sp ON sp.id=o.user_profile_id JOIN accounts sa ON sa.id=sp.account_id
@@ -94,6 +114,7 @@ export class DriverService {
   async step(driverId: string, b: any) {
     if (!['picked_up', 'delivered'].includes(b?.step)) throw bad('BAD_STEP', 'step must be picked_up or delivered');
     uuid(b?.order_id, 'order_id');
+    const loc = point(b?.location, 'location');   // where the phone was when the driver pressed the button
     const out = await this.db.tx(async q => {
       const [o] = await q(`SELECT * FROM orders WHERE id=$1 AND driver_profile_id=$2 FOR UPDATE`, [b.order_id, driverId]);
       if (!o) throw fail(404, 'NOT_FOUND', 'Job not found');
@@ -102,49 +123,87 @@ export class DriverService {
       if (b.step === 'delivered' && o.status === 'delivered') return { again: true };
       if (b.step === 'picked_up') {
         if (o.status !== 'assigned') throw fail(409, 'WRONG_STEP', `Order is ${o.status}`);
-        await q(`UPDATE orders SET status='picked_up', picked_up_at=now() WHERE id=$1`, [o.id]);
-        await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'picked_up',$2,'{}')`, [o.id, driverId]);
+        // Handover proof: the SENDER's pickup code (he shows it or its QR) and a photo of the parcel as it was collected.
+        if (o.pickup_code) {
+          if (o.pickup_attempts >= 5) return { pickupLocked: true };
+          if (!sameCode(b.pickup_code, o.pickup_code)) {
+            await q(`UPDATE orders SET pickup_attempts = pickup_attempts + 1 WHERE id=$1`, [o.id]);
+            await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'pickup_code_wrong',$2,'{}')`, [o.id, driverId]);
+            return { pickupWrong: true };
+          }
+        }
+        const photo = await this.documents.attachToOrder(q, await this.accountOf(q, driverId), o.id, b.parcel_photo, 'parcel_photo');
+        const m = await this.distanceCheck(q, o, 'pickup', loc);
+        await q(`UPDATE orders SET status='picked_up', picked_up_at=now(), pickup_photo_doc=$2, pickup_distance_m=$3 WHERE id=$1`, [o.id, photo, m]);
+        await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'picked_up',$2,$3)`, [o.id, driverId, { distance_m: m, with_code: !!o.pickup_code, photo: true }]);
         await notify(q, { profile: o.user_profile_id, kind: 'order.picked_up', order: o.id, dedupe: `order:${o.id}:picked_up`, data: { ref: o.ref } });
         return { again: false };
       }
       if (o.status !== 'picked_up') throw fail(409, 'WRONG_STEP', 'Pick the parcel up first');
       if (o.code_attempts >= 5) return { locked: true };   // too many wrong codes: only staff can continue this order
-      const code = Buffer.from(String(b.delivery_code ?? '')), real = Buffer.from(o.delivery_code);
-      if (code.length !== real.length || !timingSafeEqual(code, real)) {
+      if (!sameCode(b.delivery_code, o.delivery_code)) {
         await q(`UPDATE orders SET code_attempts = code_attempts + 1 WHERE id=$1`, [o.id]);
         await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'code_wrong',$2,'{}')`, [o.id, driverId]);
         return { wrong: true };                          // committed first, THEN refused, so the attempt is counted
       }
       const expected = cashToCollect(o), got = b.cash_collected_da ?? 0;
       if (!isInt(got) || got !== expected) throw bad('CASH_MISMATCH', `Cash to collect is ${expected} DA`);
-      await q(`UPDATE orders SET status='delivered', delivered_at=now() WHERE id=$1`, [o.id]);
+      const m = await this.distanceCheck(q, o, 'dropoff', loc);
+      await q(`UPDATE orders SET status='delivered', delivered_at=now(), delivery_distance_m=$2 WHERE id=$1`, [o.id, m]);
       // Only the goods money (cash on delivery) goes into the driver's cash ledger. Delivery-fee handling is a finance rule, parked.
       if (o.leg === 'delivery' && o.cod_amount_da > 0) await q(`INSERT INTO cash_ledger(driver_profile_id, order_id, type, amount_da) VALUES ($1,$2,'cod_collected',$3)`, [driverId, o.id, o.cod_amount_da]);
-      await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'delivered',$2,$3)`, [o.id, driverId, { cash_collected_da: got }]);
+      await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'delivered',$2,$3)`, [o.id, driverId, { cash_collected_da: got, distance_m: m, method: b.method === 'qr' ? 'qr' : 'code' }]);
       await notify(q, { profile: o.user_profile_id, kind: o.leg === 'return' ? 'return.delivered' : 'order.delivered', order: o.id, dedupe: `order:${o.id}:delivered`, data: { ref: o.ref } });
       return { again: false };
     });
+    if ((out as any).pickupLocked) throw fail(423, 'PICKUP_LOCKED', 'Too many wrong pickup codes. Contact support.');
+    if ((out as any).pickupWrong) throw bad('PICKUP_CODE_WRONG', 'Wrong pickup code: ask the sender for the code in his app');
     if ((out as any).locked) throw fail(423, 'CODE_LOCKED', 'Too many wrong codes. Contact support.');
     if ((out as any).wrong) throw bad('CODE_WRONG', 'Wrong delivery code');
     return { ...out, job: await this.job(driverId, b.order_id), order_status: (await this.db.one(`SELECT status FROM orders WHERE id=$1`, [b.order_id])).status };
   }
 
   async failDelivery(driverId: string, b: any) {
-    if (!REASONS.includes(b?.reason)) throw bad('BAD_REASON', 'reason must be no_answer, refused or wrong_address');
+    if (!FAIL_REASONS.includes(b?.reason)) throw bad('BAD_REASON', `reason must be one of ${FAIL_REASONS.join(', ')}`);
     uuid(b?.order_id, 'order_id');
+    const loc = b?.location ? point(b.location, 'location') : null;
+    const note = typeof b?.note === 'string' ? b.note.trim().slice(0, 500) : null;
     const returnId = await this.db.tx(async q => {
       const [o] = await q(`SELECT o.*, sp.display_name sender_name, sa.phone sender_phone FROM orders o JOIN profiles sp ON sp.id=o.user_profile_id JOIN accounts sa ON sa.id=sp.account_id
                            WHERE o.id=$1 AND o.driver_profile_id=$2 FOR UPDATE OF o`, [b?.order_id ?? null, driverId]);
       if (!o) throw fail(404, 'NOT_FOUND', 'Job not found');
       if (o.status !== 'picked_up') throw fail(409, 'WRONG_STEP', 'Only a picked-up parcel can fail delivery');
+      // A refusal for damage or a wrong item needs a photo: it is the evidence staff will judge.
+      const evidence = NEEDS_EVIDENCE.includes(b.reason) || b.evidence_photo ? await this.documents.attachToOrder(q, await this.accountOf(q, driverId), o.id, b.evidence_photo, 'evidence_photo') : null;
+      const m = loc ? await this.distanceCheck(q, o, 'dropoff', loc) : null;
       await q(`UPDATE orders SET status='failed' WHERE id=$1`, [o.id]);
-      await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'delivery_failed',$2,$3)`, [o.id, driverId, { reason: b.reason }]);
-      await q(`INSERT INTO problem_reports(order_id, reporter_profile_id, reason) VALUES ($1,$2,$3)`, [o.id, driverId, `delivery_failed:${b.reason}`]);
+      await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'delivery_failed',$2,$3)`, [o.id, driverId, { reason: b.reason, note, evidence_photo: evidence, distance_m: m }]);
+      await q(`INSERT INTO problem_reports(order_id, reporter_profile_id, reason, note) VALUES ($1,$2,$3,$4)`, [o.id, driverId, `delivery_failed:${b.reason}`, note]);
       await notify(q, { profile: o.user_profile_id, kind: 'order.failed', order: o.id, dedupe: `order:${o.id}:failed`, data: { ref: o.ref, reason: b.reason } });
       if (o.leg === 'return') return null;       // a failed return goes to staff, no second return
       return createReturnLeg(q, o, { profile: driverId });
     });
     return { job: returnId ? await this.job(driverId, returnId) : null };
+  }
+
+  // The driver gives a job back BEFORE pickup: the order goes back to searching at the same price, for another driver
+  // (never offered to him again). Counted as a "driver cancel" by the rules, except refusing unsafe or prohibited goods.
+  async releaseJob(driverId: string, b: any) {
+    uuid(b?.order_id, 'order_id');
+    if (!RELEASE_REASONS.includes(b?.reason)) throw bad('BAD_REASON', `reason must be one of ${RELEASE_REASONS.join(', ')}`);
+    const note = typeof b?.note === 'string' ? b.note.trim().slice(0, 500) : null;
+    await this.db.tx(async q => {
+      const [o] = await q(`SELECT * FROM orders WHERE id=$1 AND driver_profile_id=$2 FOR UPDATE`, [b.order_id, driverId]);
+      if (!o) throw fail(404, 'NOT_FOUND', 'Job not found');
+      if (o.status !== 'assigned') throw fail(409, 'CANNOT_RELEASE', 'After pickup the parcel must be delivered or returned');
+      const evidence = b.reason === 'unsafe_or_prohibited' ? await this.documents.attachToOrder(q, await this.accountOf(q, driverId), o.id, b.evidence_photo, 'evidence_photo') : null;
+      await q(`UPDATE orders SET status='searching', driver_profile_id=NULL, locked_da=NULL, assigned_at=NULL, search_started_at=now() WHERE id=$1`, [o.id]);
+      await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'released_by_driver',$2,$3)`, [o.id, driverId, { reason: b.reason, note, evidence_photo: evidence }]);
+      if (b.reason === 'unsafe_or_prohibited') await q(`INSERT INTO problem_reports(order_id, reporter_profile_id, reason, note) VALUES ($1,$2,'driver_refused:unsafe_or_prohibited',$3)`, [o.id, driverId, note]);
+      await notify(q, { profile: o.user_profile_id, kind: 'order.driver_released', order: o.id, dedupe: `order:${o.id}:released:${Date.now()}`, data: { ref: o.ref } });
+    });
+    await this.matching.offerNext(b.order_id);
+    return { job: null };
   }
 
   async jobs(driverId: string, page: any) {

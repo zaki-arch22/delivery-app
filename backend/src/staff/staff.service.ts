@@ -209,8 +209,8 @@ export class StaffService {
   // ---------- problems and ratings ----------
   async listProblems(f: any) {
     const rows = await this.db.query(
-      `SELECT r.id, r.reason, r.note, r.status, r.resolution, r.created_at, o.id AS order_id, o.ref, p.display_name AS reporter, p.type AS reporter_type, a.phone AS reporter_phone
-       FROM problem_reports r JOIN orders o ON o.id=r.order_id JOIN profiles p ON p.id=r.reporter_profile_id JOIN accounts a ON a.id=p.account_id
+      `SELECT r.id, r.reason, r.note, r.status, r.resolution, r.created_at, o.id AS order_id, o.ref, p.display_name AS reporter, COALESCE(p.type::text, r.reporter_kind) AS reporter_type, a.phone AS reporter_phone
+       FROM problem_reports r JOIN orders o ON o.id=r.order_id LEFT JOIN profiles p ON p.id=r.reporter_profile_id LEFT JOIN accounts a ON a.id=p.account_id
        WHERE ($1::text IS NULL OR r.status::text=$1) ORDER BY r.id DESC LIMIT 50 OFFSET $2`, [f.status ?? null, (page(f.page) - 1) * 50]);
     return { page: page(f.page), problems: ids(rows, 'id') };
   }

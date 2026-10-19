@@ -34,14 +34,26 @@ add_profile rule: the FIRST profile is created right after login (path choice). 
 | Screen | Function | Request | Answer |
 |---|---|---|---|
 | New order | get_quote | pickup {lat,lng}, dropoff {lat,lng}, size | recommended_da, min_da, max_da, vehicle, distance_m, duration_s, distance_estimated (true = road distance unavailable, straight-line estimate used; the app shows "about"), quote_id (valid 5 min); error ZONE_CLOSED if either point is outside an open zone |
-| Price | create_order | quote_id, offered_da, pickup_address{...}, dropoff_address{...}, recipient_name, recipient_phone, payer, cod_amount_da | order |
-| Tracking | get_order | order id | order + driver summary (name, photo, rating, vehicle) + delivery_code |
-| Tracking | cancel_order | order id, reason | order (only while `searching` or `assigned`) |
+| Price | create_order | quote_id, offered_da, pickup_address{...}, dropoff_address{...}, recipient_name, recipient_phone, payer, cod_amount_da, inspection (`outside` default \| `open` = the receiver may open the parcel before paying) | order |
+| Tracking | get_order | order id | order + driver summary (name, photo, rating, vehicle, position while active) + delivery_code + pickup_code (the sender shows it, or its QR `PCK1:<ref>:<code>`, to the driver at pickup) + tracking_token (receiver link `<server>/t/<token>`) + inspection, recipient_expecting_at, pickup_photo_doc, pickup/delivery_distance_m, evidence_photos[], history[] {type, at, data} |
+| Tracking | get_order_photo | order_id, id (a photo of THIS order: parcel at pickup or evidence) | JPEG |
+| Tracking | recall_order | order id, reason (`buyer_cancelled`\|`wrong_parcel`\|`wrong_address`\|`other`) | order (only after pickup: it fails and a return leg goes to the driver; before pickup use cancel_order, CANNOT_RECALL) |
+| Details | recipient_history | phone | delivered, refused, no_answer (counts of parcels to that number, all senders, 180 days; 30 checks per hour) |
+| Tracking | cancel_order | order id, reason | order (only while `searching` or `assigned`; after a driver accepted, a cancel later than 3 min is recorded as late) |
 | Searching | raise_price (negotiation, upward only) | order id, new_offered_da | order (only while `searching`, only upward, inside max_da) |
 | My orders | list_orders | page | orders[] (own only) |
 | Rate | submit_rating | order id, stars 1-5, comment? | ok (delivered orders only, once) |
 | Problem | report_problem | order id, reason, note? | report |
 Live updates: see section G (one WebSocket per logged-in profile). Driver location while a job is active is read with get_order (polled every few seconds) until live location sharing is added.
+
+## B2. Receiver (no account: the secret link is the key)
+| Page | Function | Request | Answer |
+|---|---|---|---|
+| `/t/<token>` | (the page) | - | one static page (ar/fr/en); strict content policy; map tiles from OpenFreeMap |
+| Tracking | track_data | t (token) | ref, status, sender first name, inspection, amount_to_pay_da (goods + fee if the receiver pays), dropoff, driver {first name, vehicle, rating, phone once picked up, position} while active, eta_s, delivery_code until delivered, has_parcel_photo, expecting, history. BAD_LINK 400; LINK_ENDED 404 (unknown, or 24 h after the order ended: same answer) |
+| Tracking | track_qr / track_photo | t | SVG QR of `DLV1:<ref>:<code>` / JPEG of the parcel at pickup |
+| Tracking | track_expecting | t | expecting true (once; the sender and driver are told) |
+| Tracking | track_report | t, reason (`not_arrived`\|`damaged`\|`wrong_item`\|`driver_behaviour`\|`other`), note? | report (max 3 per order, 10 per hour per address) |
 
 ## C. Driver path (active profile = driver, status active)
 | Screen | Function | Request | Answer |
@@ -51,9 +63,10 @@ Live updates: see section G (one WebSocket per logged-in profile). Driver locati
 | Home | get_driver_home | - | earnings_today_da, cash_held_da, cash_limit_da, rating |
 | Offer | get_current_offer (FALLBACK only: used when the live connection is down or just reconnected) | - | offer (price, pickup distance, trip distance, payment type, cash amount, sender rating, expires_at) or null |
 | Offer | accept_offer / decline_offer | offer id | job (accept is atomic: only one driver can win) |
-| Active job | get_job | - | the current job incl. pickup/dropoff, cash to collect |
-| Active job | update_job_step | order id, step (`picked_up`\|`delivered`), delivery_code (for delivered), cash_collected_da (if cash order) | job |
-| Can't deliver | report_delivery_failure | order id, reason (`no_answer`\|`refused`\|`wrong_address`) | job (original -> `failed`, a `return` leg is created) |
+| Active job | get_job | - | the current job incl. pickup/dropoff, cash to collect, inspection, recipient_expecting_at, needs_pickup_code (never the pickup or delivery code) |
+| Active job | update_job_step | order id, step (`picked_up`\|`delivered`), location {lat,lng} (always: where the phone is), pickup_code + parcel_photo (document id, kind `parcel_photo`) for picked_up, delivery_code (typed or read from the receiver's QR `DLV1:<ref>:<code>`) + method (`code`\|`qr`) + cash_collected_da (if cash order) for delivered | job. PICKUP_CODE_WRONG / PICKUP_LOCKED (5 wrong), PHOTO_REQUIRED, BAD_DOCUMENT, CODE_WRONG / CODE_LOCKED. Confirmed more than 300 m from the point: allowed, but a staff case opens |
+| Can't deliver | report_delivery_failure | order id, reason (`no_answer`\|`wrong_address`\|`refused_damaged`\|`refused_wrong_item`\|`refused_not_ordered`\|`refused_changed_mind`\|`refused_cannot_pay`), evidence_photo (kind `evidence_photo`; required for damaged and wrong item), note?, location? | job (original -> `failed`, a `return` leg is created; staff get a case) |
+| Active job | release_job | order id, reason (`vehicle_problem`\|`emergency`\|`sender_unreachable`\|`parcel_not_ready`\|`parcel_too_big`\|`unsafe_or_prohibited` (+ evidence_photo)\|`other`), note? | job null (only before pickup; the order searches again at the same price, never offered to him again) |
 | Earnings | list_jobs | page | jobs[] |
 | Cash | get_cash_balance | - | balance_da, entries[] |
 | Rate | submit_rating | same function as above, used by the driver on the user | ok |

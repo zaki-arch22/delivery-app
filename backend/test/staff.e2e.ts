@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { driverDocs, upload, PHOTO } from './docs';
+import { proof } from './proof';
 import { hashPassword } from '../src/auth/password';
 import { seal } from '../src/security/crypto';
 import { codeAt, newSecret, stepNow } from '../src/security/totp';
@@ -43,6 +44,7 @@ const BOX = { type: 'Polygon', coordinates: [[[2.9, 36.6], [3.3, 36.6], [3.3, 36
   for (let i = 0; i < 5; i++) await api('/staff_login', { email: 'locked@test.example', password: 'wrong' });
   ok('S1 after 5 wrong passwords the account locks, even for the RIGHT password', (await api('/staff_login', { email: 'locked@test.example', password: PW, code: code('locked@test.example') })).b.error === 'LOCKED');
   const U = await makeUser('+213550600001', 'Karim Seller');
+  const PR = proof(api, async t => (await upload(HTTP, t, 'parcel_photo')).b.document_id);
   ok('S1 a user token cannot use staff functions', (await api('/list_pending_drivers', undefined, U.token)).b.error === 'STAFF_ONLY');
   ok('S1 a staff token cannot act as a user', (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, ST)).b.error === 'WRONG_PROFILE');
   ok('S1 no token is refused', (await api('/list_pending_drivers')).s === 401);
@@ -124,22 +126,22 @@ const BOX = { type: 'Polygon', coordinates: [[[2.9, 36.6], [3.3, 36.6], [3.3, 36
   ok('S5 the NEXT driver is offered it, never the old one again', !!of1b && (await pool.query(`SELECT count(*)::int n FROM offers WHERE order_id=$1 AND driver_profile_id=$2`, [O1.id, D1.id])).rows[0].n === 1);
   await api('/accept_offer', { offer_id: of1b.data.offer_id }, D2.token);
   ok('S5 the price locks again with the new driver, at the same price', (await pool.query(`SELECT locked_da, offered_da FROM orders WHERE id=$1`, [O1.id])).rows[0].locked_da === O1.offered_da);
-  await api('/update_job_step', { order_id: O1.id, step: 'picked_up' }, D2.token);
+  await PR.pickup(O1.id, U.token, D2.token);
   ok('S5 the pickup address cannot change after pickup', (await S('/staff_order_action', { order_id: O1.id, action: 'correct_address', which: 'pickup', address: { street: 'X street' } })).b.error === 'ALREADY_PICKED_UP');
   const code1 = (await api('/get_order?id=' + O1.id, undefined, U.token)).b.delivery_code, bad1 = code1 === '0000' ? '1111' : '0000';
-  for (let i = 0; i < 5; i++) await api('/update_job_step', { order_id: O1.id, step: 'delivered', delivery_code: bad1 }, D2.token);
-  ok('S5 after 5 wrong codes the order is locked', (await api('/update_job_step', { order_id: O1.id, step: 'delivered', delivery_code: code1 }, D2.token)).b.error === 'CODE_LOCKED');
+  for (let i = 0; i < 5; i++) await api('/update_job_step', { location: await PR.dropoff(O1.id, U.token), order_id: O1.id, step: 'delivered', delivery_code: bad1 }, D2.token);
+  ok('S5 after 5 wrong codes the order is locked', (await api('/update_job_step', { location: await PR.dropoff(O1.id, U.token), order_id: O1.id, step: 'delivered', delivery_code: code1 }, D2.token)).b.error === 'CODE_LOCKED');
   await S('/staff_order_action', { order_id: O1.id, action: 'reset_code_attempts', reason: 'Recipient confirmed by phone' });
-  ok('S5 staff unlock it and the driver can finish', (await api('/update_job_step', { order_id: O1.id, step: 'delivered', delivery_code: code1 }, D2.token)).b.order_status === 'delivered');
+  ok('S5 staff unlock it and the driver can finish', (await api('/update_job_step', { location: await PR.dropoff(O1.id, U.token), order_id: O1.id, step: 'delivered', delivery_code: code1 }, D2.token)).b.order_status === 'delivered');
   // returns
   await api('/set_online', { online: false }, D2.token);
-  const O2 = await order(U.token, 'staff-o2'); const of2 = await sD1.kind('offer.new', 4000, m => m.data.ref === O2.ref); await api('/accept_offer', { offer_id: of2.data.offer_id }, D1.token); await api('/update_job_step', { order_id: O2.id, step: 'picked_up' }, D1.token);
+  const O2 = await order(U.token, 'staff-o2'); const of2 = await sD1.kind('offer.new', 4000, m => m.data.ref === O2.ref); await api('/accept_offer', { offer_id: of2.data.offer_id }, D1.token); await PR.pickup(O2.id, U.token, D1.token);
   ok('S5 cancelling after pickup is refused (use return instead)', (await S('/staff_order_action', { order_id: O2.id, action: 'cancel', reason: 'too late' })).b.error === 'CANNOT_CANCEL');
   const sr = await S('/staff_order_action', { order_id: O2.id, action: 'start_return', reason: 'Recipient unreachable' });
   const ret = (await S('/list_all_orders?leg=return')).b.orders[0];
   ok('S5 staff-started return: original failed, a return leg created for the same driver', sr.b.order.status === 'failed' && !!ret && ret.status === 'picked_up' && ret.driver_name === 'Driver One', ret);
   ok('S5 the customer is told the delivery failed', !!(await sU.kind('order.failed', 4000, m => m.data.reason === 'support')));
-  const rcode = (await api('/get_order?id=' + ret.id, undefined, U.token)).b.delivery_code; await api('/update_job_step', { order_id: ret.id, step: 'delivered', delivery_code: rcode }, D1.token);
+  const rcode = (await api('/get_order?id=' + ret.id, undefined, U.token)).b.delivery_code; await api('/update_job_step', { location: await PR.dropoff(ret.id, U.token), order_id: ret.id, step: 'delivered', delivery_code: rcode }, D1.token);
   // cancels
   const O3 = await order(U.token, 'staff-o3'); const of3 = await sD1.kind('offer.new', 4000, m => m.data.ref === O3.ref);
   await S('/staff_order_action', { order_id: O3.id, action: 'cancel', reason: 'Duplicate order' });
@@ -150,8 +152,8 @@ const BOX = { type: 'Polygon', coordinates: [[[2.9, 36.6], [3.3, 36.6], [3.3, 36
 
   // ===== S6 problems =====
   const O5 = await order(U.token, 'staff-o5'); const of5 = await sD1.kind('offer.new', 4000, m => m.data.ref === O5.ref); await api('/accept_offer', { offer_id: of5.data.offer_id }, D1.token);
-  await api('/update_job_step', { order_id: O5.id, step: 'picked_up' }, D1.token); const fl = await api('/report_delivery_failure', { order_id: O5.id, reason: 'no_answer' }, D1.token);
-  await api('/update_job_step', { order_id: fl.b.job.id, step: 'delivered', delivery_code: (await api('/get_order?id=' + fl.b.job.id, undefined, U.token)).b.delivery_code }, D1.token);
+  await PR.pickup(O5.id, U.token, D1.token); const fl = await api('/report_delivery_failure', { order_id: O5.id, reason: 'no_answer' }, D1.token);
+  await api('/update_job_step', { location: await PR.dropoff(fl.b.job.id, U.token), order_id: fl.b.job.id, step: 'delivered', delivery_code: (await api('/get_order?id=' + fl.b.job.id, undefined, U.token)).b.delivery_code }, D1.token);
   await api('/report_problem', { order_id: O1.id, reason: 'Parcel was damaged', note: 'Box crushed' }, U.token);
   const pl = (await S('/list_problems?status=open')).b.problems;
   ok('S6 problems from drivers AND users reach staff, newest first', pl.some((p: any) => p.reason === 'delivery_failed:no_answer' && p.reporter_type === 'driver') && pl.some((p: any) => p.reporter_type === 'user' && p.reason === 'Parcel was damaged'), pl);
@@ -170,8 +172,8 @@ const BOX = { type: 'Polygon', coordinates: [[[2.9, 36.6], [3.3, 36.6], [3.3, 36
 
   // ===== S8 cash =====
   const O6 = await order(U.token, 'staff-o6', { cod_amount_da: 4000 }); const of6 = await sD1.kind('offer.new', 4000, m => m.data.ref === O6.ref); await api('/accept_offer', { offer_id: of6.data.offer_id }, D1.token);
-  await api('/update_job_step', { order_id: O6.id, step: 'picked_up' }, D1.token);
-  await api('/update_job_step', { order_id: O6.id, step: 'delivered', delivery_code: (await api('/get_order?id=' + O6.id, undefined, U.token)).b.delivery_code, cash_collected_da: 4000 }, D1.token);
+  await PR.pickup(O6.id, U.token, D1.token);
+  await api('/update_job_step', { location: await PR.dropoff(O6.id, U.token), order_id: O6.id, step: 'delivered', delivery_code: (await api('/get_order?id=' + O6.id, undefined, U.token)).b.delivery_code, cash_collected_da: 4000 }, D1.token);
   ok('S8 staff see who holds cash', (await S('/list_drivers?holding_cash=true')).b.drivers.some((d: any) => d.id === D1.id && d.cash_held_da === 4000));
   const gc = (await S('/get_driver_cash?profile_id=' + D1.id)).b; ok('S8 the driver\'s ledger shows the order\'s cash entry', gc.balance_da === 4000 && gc.entries[0].type === 'cod_collected' && !!gc.entries[0].ref, gc);
   ok('S8 a handover larger than the cash held is refused', (await S('/record_cash_handover', { driver_profile_id: D1.id, amount_da: 5000 })).b.error === 'EXCEEDS_BALANCE');

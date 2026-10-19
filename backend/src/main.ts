@@ -23,6 +23,17 @@ async function main() {
   const hops = Number(process.env.TRUST_PROXY ?? 0); if (hops > 0) express.set('trust proxy', hops);   // behind a reverse proxy: real client addresses
   app.use(headers);
   app.use(ipLimit(app.get(SecurityLog)));
+  // The receiver's tracking page: /t/<secret token>. The page itself is the same small file for everyone; its data comes from
+  // /track_data with the token. It may load only its own files, talk only to this server, and draw map tiles from OpenFreeMap.
+  const pub = join(__dirname, '..', 'public');
+  const trackCsp = "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' data: blob: https://tiles.openfreemap.org; connect-src 'self' https://tiles.openfreemap.org; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+  app.use('/t', (req: any, res: any, next: any) => {
+    res.setHeader('Content-Security-Policy', trackCsp);
+    if (/^\/[A-Za-z0-9_-]{32}$/.test(req.path)) { res.setHeader('Cache-Control', 'no-store'); return res.sendFile(join(pub, 'track.html')); }
+    next();
+  }, serveStatic(join(pub, 'track'), { dotfiles: 'ignore', index: false, fallthrough: true, maxAge: '1h' }),
+    serveStatic(join(__dirname, '..', 'node_modules', 'maplibre-gl', 'dist'), { dotfiles: 'ignore', index: false, maxAge: '1d' }),
+    (_req: any, res: any) => res.status(404).json({ error: 'NOT_FOUND', message: 'Not found' }));
   // Optional: the server also hands out the staff console's files at /staff/ (one address for a small or free host).
   // Same address = no cross-site access to open. The page may only run its own files and talk to this server.
   const consoleDir = process.env.STAFF_CONSOLE_DIR ? resolve(process.env.STAFF_CONSOLE_DIR) : '';

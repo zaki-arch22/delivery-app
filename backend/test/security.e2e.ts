@@ -134,7 +134,7 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
   const offer = (await api('/get_current_offer', undefined, D1.token)).b.offer;
   ok('SEC10 a driver cannot accept an offer that was made to ANOTHER driver', (await api('/accept_offer', { offer_id: offer.offer_id }, D2.token)).s === 409);
   await api('/accept_offer', { offer_id: offer.offer_id }, D1.token);
-  ok('SEC10 a driver cannot touch ANOTHER driver\'s job', (await api('/update_job_step', { order_id: O.id, step: 'picked_up' }, D2.token)).s === 404 && (await api('/report_delivery_failure', { order_id: O.id, reason: 'refused' }, D2.token)).s === 404 && (await api('/get_job', undefined, D2.token)).b.job === null);
+  ok('SEC10 a driver cannot touch ANOTHER driver\'s job', (await api('/update_job_step', { order_id: O.id, step: 'picked_up', location: P }, D2.token)).s === 404 && (await api('/report_delivery_failure', { order_id: O.id, reason: 'refused_changed_mind' }, D2.token)).s === 404 && (await api('/release_job', { order_id: O.id, reason: 'other' }, D2.token)).s === 404 && (await api('/get_job', undefined, D2.token)).b.job === null);
   ok('SEC10 a stranger cannot rate my order', (await api('/submit_rating', { order_id: O.id, stars: 1 }, Bb.token)).s === 404);
 
   // ===== SEC11 injection payloads and garbage =====
@@ -144,7 +144,7 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
   const ST = (await api('/staff_login', { email: 'nofactor@test.example', password: PW, code: '1' })).b.token; // none: no token; build a real staff token below
   const sid = await insStaff('fuzz@test.example'); const stTok = (await api('/staff_login', { email: 'fuzz@test.example', password: PW, code: code('fuzz@test.example') })).b.token as string;
   const q = (await api('/list_all_orders?q=' + encodeURIComponent("%' OR 1=1 --"), undefined, stTok)); ok('SEC11 an injection attempt in the staff search returns nothing, not everything', q.s === 200 && q.b.orders.length === 0, q.b);
-  const userRoutes = ['get_quote', 'create_order', 'cancel_order', 'raise_price', 'report_problem', 'submit_rating', 'register_device', 'add_profile', 'switch_profile'], driverRoutes = ['set_online', 'update_location', 'accept_offer', 'decline_offer', 'update_job_step', 'report_delivery_failure'];
+  const userRoutes = ['get_quote', 'create_order', 'cancel_order', 'raise_price', 'recall_order', 'report_problem', 'submit_rating', 'register_device', 'add_profile', 'switch_profile'], driverRoutes = ['set_online', 'update_location', 'accept_offer', 'decline_offer', 'update_job_step', 'report_delivery_failure', 'release_job'];
   const staffRoutes = ['approve_driver', 'reject_driver', 'suspend_profile', 'unsuspend_profile', 'staff_order_action', 'resolve_problem', 'record_cash_handover', 'add_cash_adjustment', 'create_zone', 'set_zone_open', 'create_pricing_version'];
   const junk: any[] = [{}, { a: [1, 2] }, { order_id: { $ne: null } }, { order_id: "' OR 1=1", offer_id: 'abc', id: -1, quote_id: 'x', profile_id: 5, amount_da: 1e30, offered_da: 'NaN', lat: 'a', lng: [], online: 'yes', stars: 99, type: [], name: 'x'.repeat(5000), polygon: 'x', email: {}, which: 1 }, { order_id: '00000000-0000-0000-0000-000000000000', step: 'delivered', delivery_code: 12, cash_collected_da: 'x' }];
   const sweep = async (routes: string[], tok: string) => { let five = 0, n = 0; const bad: string[] = []; for (const r of routes) for (const bdy of junk) { const x = await api('/' + r, bdy, tok, { 'x-forwarded-for': fresh() }); n++; if (x.s >= 500) { five++; bad.push(r + ' ' + JSON.stringify(bdy).slice(0, 40)); } } return { five, n, bad }; };
@@ -263,6 +263,38 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
     ok('SEC18 path tricks and hidden files never reveal anything outside the console', leaks === 0, leaks);
     const apiCsp = (await api('/login_methods')).h.get('content-security-policy');
     ok('SEC18 the API itself keeps its "nothing may run" policy', apiCsp === "default-src 'none'; frame-ancestors 'none'", apiCsp);
+  }
+
+  // ===== SEC19 proof chain and the receiver's tracking link =====
+  {
+    const Tk = (await api('/get_order?id=' + O.id, undefined, A.token)).b.tracking_token as string;
+    ok('SEC19 a guessed tracking link shows nothing (same answer as an ended one)', (await api('/track_data?t=' + 'A'.repeat(32))).b.error === 'LINK_ENDED');
+    let badLinks = 0; for (const t of ['', 'short', "' OR 1=1 --", '../../etc/passwd', Tk + 'x', Tk.slice(0, 31) + '*']) if ((await api('/track_data?t=' + encodeURIComponent(t))).b.error === 'BAD_LINK') badLinks++;
+    ok('SEC19 malformed links are refused before any lookup', badLinks === 6, badLinks);
+    ok('SEC19 a link cannot be passed twice to confuse the check', (await api(`/track_data?t=${Tk}&t=${Tk}`)).s === 400);
+    let leaks = 0;
+    for (const p of ['/t/../package.json', '/t/%2e%2e/src/main.ts', '/t/..%2f..%2f.env', '/t/.hidden', '/t/track.js/../../package.json']) { const r = await raw(p); const tx = await r.text(); if (/"dependencies"|JWT_SECRET|import /.test(tx)) leaks++; }
+    ok('SEC19 path tricks on the tracking page never reveal server files', leaks === 0, leaks);
+    const fixed = { 'x-forwarded-for': '10.77.0.1' }; let limited = false;
+    for (let i = 0; i < 12 && !limited; i++) { const r = await api('/track_report', { t: 'B'.repeat(32), reason: 'other' }, undefined, fixed); if (r.s === 429) limited = true; }
+    ok('SEC19 one address cannot flood the receiver report form', limited);
+    let hist = 0; for (let i = 0; i < 32; i++) if ((await api('/recipient_history?phone=' + encodeURIComponent('+2137700000' + String(i).padStart(2, '0')), undefined, A.token)).b.error === 'RATE_LIMITED') hist++;
+    ok('SEC19 checking receiver numbers in bulk is stopped (30 per hour per profile)', hist >= 2, hist);
+    const someDoc = (await pool.query(`SELECT id FROM documents WHERE kind='id_photo' LIMIT 1`)).rows[0].id;
+    ok('SEC19 a sender cannot open a driver\'s ID photo through the order-photo route', (await api(`/get_order_photo?order_id=${O.id}&id=${someDoc}`, undefined, A.token)).s === 404);
+    ok('SEC19 another user cannot open my order\'s photos', (await api(`/get_order_photo?order_id=${O.id}&id=${someDoc}`, undefined, Bb.token)).s === 404);
+    ok('SEC19 a driver cannot use the sender\'s photo route', (await api(`/get_order_photo?order_id=${O.id}&id=${someDoc}`, undefined, D1.token)).b.error === 'WRONG_PROFILE');
+    ok('SEC19 another user cannot call my parcel back', (await api('/recall_order', { order_id: O.id, reason: 'other' }, Bb.token)).s === 404);
+    let odd = 0;
+    for (const pc of [{ a: 1 }, ['1234'], 'x'.repeat(5000), null, 1234]) { const r = await api('/update_job_step', { order_id: O.id, step: 'picked_up', pickup_code: pc, parcel_photo: 'nope', location: P }, D1.token); if (r.s >= 400 && r.s < 500) odd++; }
+    ok('SEC19 strange pickup codes are refused cleanly (no crash, no pickup)', odd === 5 && (await api('/get_order?id=' + O.id, undefined, A.token)).b.status === 'assigned', odd);
+    const js = readFileSync(join(__dirname, '..', 'public', 'track', 'track.js'), 'utf8');
+    ok('SEC19 the tracking page never inserts server text as HTML (names and addresses cannot run as code)', !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/.test(js));
+    const evil = await order(A.token, 'sec-order-xss1', { recipient_name: '<img src=x onerror=alert(1)>' });
+    const etk = (await api('/get_order?id=' + evil.id, undefined, A.token)).b.tracking_token;
+    const page = await raw('/t/' + etk);
+    ok('SEC19 the page is the same static file for every order (no data written into it)', !(await page.text()).includes('onerror') && /script-src 'self'/.test(page.headers.get('content-security-policy') ?? ''));
+    await api('/cancel_order', { order_id: evil.id }, A.token);
   }
 
   // ===== SEC15 evidence trail and code hygiene =====
