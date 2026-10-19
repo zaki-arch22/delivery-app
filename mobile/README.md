@@ -10,11 +10,20 @@ Follow `AGENTS.md` (Expo's own guidance) for any Expo or React Native API.
 - session.ts   login by SMS code, first profile, second profile from Settings, switching, log out, log out of all devices, resuming after the app is reopened
 - realtime.ts  live notifications: reconnects with growing delays, picks up exactly what was missed, never shows anything twice, renews an expired key itself
 
+## Screens built and tested (src/app, Expo Router: every file there is a screen)
+- welcome: language switch (Arabic right-to-left, French, English) and the two paths
+- phone, code: SMS login (Algerian numbers typed any usual way; a new code only after 60 s; calm translated errors)
+- new-profile: the first (sender) profile; driver sign-up waits for the photo upload function
+- home: temporary landing screen (becomes "New order" / driver home)
+- settings: language, switch or add the sender profile, log out, log out of all devices
+Shared pieces: `src/ui` (brand components, large buttons, never colour alone), `src/i18n` (all texts; the type check makes sure every language has every text), `src/lib` (login state, server address, error messages, phone numbers).
+The server address is set when building: `EXPO_PUBLIC_API_URL=https://...` (release builds refuse anything but HTTPS).
+
 ## Not built yet
-The screens, push notifications (needs the Firebase key), maps, and driver document photos (needs the upload function on the server).
+The order and driver screens, the map, push notifications (needs the Firebase key), driver document photos (needs the upload function on the server).
 
 ## Tests
-From the project root: `bash scripts/test-all.sh` (type check + 7 tests against the real backend).
+From the project root: `bash scripts/test-all.sh` (type check + 14 tests against the real backend: 7 for the foundation, 7 that drive the real screens like a person would).
 
 ## Accepted build-tool risks
 See `backend/docs/SECURITY.md`, section "Known, accepted risks".

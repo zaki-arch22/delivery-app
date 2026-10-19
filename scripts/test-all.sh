@@ -88,7 +88,7 @@ run "staff console: contract match" console-contract "$ROOT/staff-console" node 
 run "staff console: type check and build" console-build "$ROOT/staff-console" env VITE_API_URL=http://localhost:3399 npm run build
 run "staff console: screens against the real backend" console "$ROOT/staff-console" env VITE_API_URL=http://localhost:3399 $T npx vitest run
 run "mobile: type check" mobile-tsc "$ROOT/mobile" npx tsc --noEmit
-run "mobile: foundation against the real backend" mobile "$ROOT/mobile" env API_URL=http://localhost:3399 $T npx jest --runInBand
+run "mobile: foundation and screens against the real backend" mobile "$ROOT/mobile" env API_URL=http://localhost:3399 $T npx jest --runInBand
 
 # 5. Attacks, with every protection switched ON (rate limits, proxy, cross-origin rules).
 start_server 3398 security TRUST_PROXY=1 STAFF_ORIGINS=https://staff.example.test SMS_DAILY_CAP=100 OFFER_TTL_S=10 SEARCH_WINDOW_S=120 WIDEN_AFTER_S=60

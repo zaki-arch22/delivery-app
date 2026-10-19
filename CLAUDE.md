@@ -21,9 +21,9 @@ Built so far by Claude in a claude.ai chat (October 2026), then moved to Claude 
 |---|---|---|---|
 | Backend | `backend/` | NestJS (TypeScript), PostgreSQL 16 + PostGIS, Node 22 | complete for the current scope; 280 tests incl. 73 attacks and 12 road-distance tests + 10 database-rule checks |
 | Staff console | `staff-console/` | React 18 + Vite | complete; 13 tests against the real backend; matches the 22 staff functions one-to-one |
-| Mobile app | `mobile/` | React Native + Expo SDK 58 (React Native 0.88) | FOUNDATION ONLY (`src/core`: secure storage, API client, login/profiles, live notifications); 7 tests. No screens yet: `App.tsx` is still Expo's placeholder, and the name in `app.json` is still "mobile" |
+| Mobile app | `mobile/` | React Native + Expo SDK 58 (React Native 0.88), Expo Router | foundation (`src/core`) + first screens: welcome/language, phone login, first sender profile, temporary home, settings; 14 tests against the real backend. Order and driver screens not built yet |
 
-- `bash scripts/dev-setup.sh` once (local test database), then `bash scripts/test-all.sh` runs everything (300 tests + database rules). Run it after every change.
+- `bash scripts/dev-setup.sh` once (local test database), then `bash scripts/test-all.sh` runs everything (307 tests + database rules). Run it after every change.
 - The real database ships EMPTY: schema files only, no data.
 
 ## 4. Product decisions (current)
@@ -58,6 +58,8 @@ Built so far by Claude in a claude.ai chat (October 2026), then moved to Claude 
 - SMS provider: not chosen (stub in `backend/src/auth/sms.service.ts`). Each login code costs money; get a real price quote before choosing.
 - Mobile: React Native + Expo, chosen over Flutter (Flutter could not be built or tested in the original environment; Expo's free cloud builds iPhone apps without a Mac). Follow `mobile/AGENTS.md` for Expo APIs.
 - **Cloud work setup:** the project runs in a Claude Code cloud session (works with the owner's laptop off). `.claude/hooks/session-start.sh` prepares any fresh machine (PostGIS, PostgreSQL, packages, test database). A scheduled task "Resume delivery-app work" wakes the session every 2 hours to continue from `PROGRESS.md` (so work restarts after usage limits reset). Limit: it only wakes THIS session; if the session is archived or deleted, the owner starts a new session on this repo and says "continue from PROGRESS.md".
+- **Mobile structure:** Expo Router (screens in `mobile/src/app`), own small translation module (`src/i18n`, no extra library). Direction (right-to-left for Arabic) is applied by the app itself on every screen, and the phone's own RTL switching is turned off (`supportsRTL: false`), so changing language works instantly without restarting the app. Only the 3 Cairo weights used are bundled. `react-native-web` is a test tool only (screenshots for design checks), not a product.
+- **Working app name** until the owner chooses: "Delivery" / "Livraison" / "توصيل".
 - Publishing: Android first (Google Play is $25 one-time, or a direct APK). iPhone is built but published later (Apple $99/year).
 
 ## 6. Security (must stay true; full list in `backend/docs/SECURITY.md`)
