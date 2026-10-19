@@ -30,14 +30,22 @@ Branch: `claude/optimistic-cannon-iw9rm9` (repo zaki-arch22/delivery-app). Resum
 2. Before launch list (CLAUDE.md section 9).
 
 ## Exact next action
-Waiting on the owner for the Expo token + network allowance (BUILD.md). Meanwhile: review and polish (accessibility labels, empty states, Arabic layout screenshots), keep everything green.
+When `EXPO_TOKEN` is present and `api.expo.dev` is reachable (`curl -sS -o /dev/null -w "%{http_code}" https://api.expo.dev/`):
+in `mobile/`: `npx eas-cli init --non-interactive`, save the printed project id as EXPO_PROJECT_ID (env var or app.config), then
+`npx eas-cli build -p android --profile preview --non-interactive` and give the owner the APK link (plain steps to install it).
+When `download.geofabrik.de` is reachable: build OSRM data for Algiers per backend/deploy/osrm.md into .local/osrm-algiers and test real road distances
+(e.g. Place des Martyrs -> Bab Ezzouar) against expectations; check tiles.openfreemap.org style loads.
+Until then: polish and review only; do not message the owner again.
 
 ## Dev notes
 - Screen tests: `test/screens.tsx` (helpers, all routes), `test/http.ts` (test HTTP client; jest-expo replaces fetch). `renderRouter` turns on fake clocks: `open()` switches back to real ones. Test DB access goes through `psql` (pg stalls in that environment). Use `await fireEvent...` (testing library v14 is async); `toHaveTextContent('x')` is an EXACT match, use a regex; NEVER put `findBy...` inside `act(...)` (act holds updates back: deadlock); prices use non-breaking spaces (match with \s).
 - Visual check: `EXPO_OFFLINE=1 EXPO_PUBLIC_API_URL=http://localhost:3399 npx expo export --dev --platform web`, serve, screenshot with the global playwright (`$(npm root -g)/playwright`).
 
-## Pending questions / owner actions (ask together at the end of a milestone)
-- Optional, free: allow `download.geofabrik.de` and `tiles.openfreemap.org` in this cloud environment's network settings so maps and road data can be tested with real Algiers data.
-- Free Expo account (to build the Android app in Expo's cloud).
-- Free Firebase project (phone push).
-- Final app name (working name: Delivery / Livraison / توصيل).
+## Owner answers (asked at the "push and build prep" milestone)
+- Phone build: YES, the owner is creating the Expo account, EXPO_TOKEN and network allowance (expo.dev, api.expo.dev, exp.host, storage.googleapis.com). Settings reach NEW sessions.
+- Firebase push: AFTER the first build (then guide the owner step by step).
+- App name: not yet; keep the working name.
+- Real map data: YES, allowing download.geofabrik.de and tiles.openfreemap.org.
+
+## Pending questions / owner actions
+- (none until the first build is done)
