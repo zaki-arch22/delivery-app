@@ -13,6 +13,7 @@
     "expo-linking": "~58.0.13",
     "expo-localization": "~58.0.4",
     "expo-location": "~58.0.17",
+    "expo-notifications": "~58.1.5",
     "expo-router": "~58.0.23",
     "expo-secure-store": "~58.0.2",
     "expo-splash-screen": "~58.0.10",
@@ -69,7 +70,8 @@
           "<rootDir>/test/screen*.test.tsx"
         ],
         "moduleNameMapper": {
-          "^@maplibre/maplibre-react-native$": "<rootDir>/test/mocks/maplibre.tsx"
+          "^@maplibre/maplibre-react-native$": "<rootDir>/test/mocks/maplibre.tsx",
+          "^expo-notifications$": "<rootDir>/test/mocks/notifications.ts"
         },
         "testPathIgnorePatterns": [
           "/node_modules/",

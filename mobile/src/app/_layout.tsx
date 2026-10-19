@@ -8,6 +8,7 @@ import { Cairo_600SemiBold } from '@expo-google-fonts/cairo/600SemiBold';
 import { Cairo_700Bold } from '@expo-google-fonts/cairo/700Bold';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppProvider } from '../lib/app';
+import { PushBridge } from '../lib/PushBridge';
 import { color } from '../lib/theme';
 
 export default function RootLayout() {
@@ -17,6 +18,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <AppProvider>
         <StatusBar style="dark" />
+        <PushBridge />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.page }, animation: 'fade' }} />
       </AppProvider>
     </SafeAreaProvider>

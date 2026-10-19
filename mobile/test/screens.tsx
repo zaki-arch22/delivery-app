@@ -6,6 +6,7 @@ import { renderRouter, screen, fireEvent, act, configure } from 'expo-router/tes
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { execFileSync } from 'child_process';
 import { AppProvider, makeServices, Services } from '../src/lib/app';
+import { PushBridge } from '../src/lib/PushBridge';
 import { memoryStore } from '../src/core/storage';
 import { nodeFetch } from './http';
 import { toInternational } from '../src/lib/phone';
@@ -50,7 +51,7 @@ export const metrics = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets:
 export function routes(services: Services) {
   const Layout = () => (
     <SafeAreaProvider initialMetrics={metrics}>
-      <AppProvider services={services}><Stack screenOptions={{ headerShown: false }} /></AppProvider>
+      <AppProvider services={services}><PushBridge /><Stack screenOptions={{ headerShown: false }} /></AppProvider>
     </SafeAreaProvider>
   );
   return { _layout: Layout, index: Start, welcome: Welcome, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup, 'new-order': NewOrder, 'order-details': OrderDetails, 'order/[id]': OrderScreen, orders: Orders, 'rate/[id]': Rate, 'problem/[id]': Problem, job: JobScreen, jobs: Jobs, cash: Cash };
