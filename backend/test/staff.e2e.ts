@@ -26,7 +26,10 @@ async function makeDriver(phone: string, name: string) { const l = await login(p
 const P = { lat: 36.7538, lng: 3.0588 }, D = { lat: 36.765, lng: 3.07 }, adr = { street: 'Rue Didouche Mourad' };
 async function order(tok: string, key: string, extra: any = {}) {
   const q = (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, tok)).b;
-  return (await api('/create_order', { quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Amine', recipient_phone: '+213770000001', payer: 'sender', ...extra }, tok, { 'idempotency-key': key })).b;
+  const o = (await api('/create_order', { auto_accept: true, quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Amine', recipient_phone: '+213770000001', payer: 'sender', ...extra }, tok, { 'idempotency-key': key })).b;
+  // The receiver says yes first (tracking link), then couriers are searched. Auto-accept: the first courier who accepts gets it.
+  if (o?.status === 'awaiting_recipient') { await api('/track_confirm', { t: o.tracking_token }); return { ...o, status: 'searching' }; }
+  return o;
 }
 const PW = 'correct-horse-battery-1';
 const BOX = { type: 'Polygon', coordinates: [[[2.9, 36.6], [3.3, 36.6], [3.3, 36.9], [2.9, 36.9], [2.9, 36.6]]] };
@@ -112,7 +115,7 @@ const BOX = { type: 'Polygon', coordinates: [[[2.9, 36.6], [3.3, 36.6], [3.3, 36
   await api('/accept_offer', { offer_id: of1.data.offer_id }, D1.token);
   ok('S5 the order list filters by status and finds an order by its reference', (await S('/list_all_orders?status=assigned')).b.orders.some((o: any) => o.ref === O1.ref) && (await S('/list_all_orders?q=' + O1.ref)).b.orders.length === 1);
   const tl = (await S('/get_order_timeline?id=' + O1.id)).b;
-  ok('S5 the order timeline shows events, offers, both phone numbers and addresses', tl.events.length >= 3 && tl.offers.length === 1 && !!tl.order.user_phone && !!tl.order.driver_phone && !!tl.order.dropoff_address, tl.events.map((e: any) => e.type));
+  ok('S5 the order timeline shows events, offers, both phone numbers and addresses', tl.events.length >= 3 && tl.offers.length >= 1 && !!tl.order.user_phone && !!tl.order.driver_phone && !!tl.order.dropoff_address, tl.events.map((e: any) => e.type));
   ok('S5 staff can NOT see the delivery code (it protects against insider fraud)', !('delivery_code' in tl.order) && !JSON.stringify(tl).includes((await api('/get_order?id=' + O1.id, undefined, U.token)).b.delivery_code + '"'));
   ok('S5 a missing reason is refused', (await S('/staff_order_action', { order_id: O1.id, action: 'cancel' })).s === 400 && (await S('/staff_order_action', { order_id: O1.id, action: 'explode', reason: 'xxx' })).b.error === 'BAD_ACTION');
   const fix = await S('/staff_order_action', { order_id: O1.id, action: 'correct_address', which: 'dropoff', address: { street: 'Rue Larbi Ben Mhidi', entrance: 'C' } });
@@ -122,7 +125,8 @@ const BOX = { type: 'Polygon', coordinates: [[[2.9, 36.6], [3.3, 36.6], [3.3, 36
   const re = await S('/staff_order_action', { order_id: O1.id, action: 'reassign', reason: 'Driver unreachable' });
   ok('S5 reassign sends the order back to searching and RELEASES the price lock', re.b.order.status === 'searching' && re.b.order.locked_da === null && re.b.order.driver_profile_id === null, re.b.order);
   ok('S5 old driver told the job is gone; the customer is told a new driver is being found', !!(await sD1.kind('job.cancelled')) && !!(await sU.kind('order.reassigned')));
-  const of1b = await sD2.kind('offer.new', 6000, m => m.data.ref === O1.ref);
+  // D2 saw it before (several couriers see a request at once); after the reassignment it is shown to him again.
+  let of1b: any = null; for (let i = 0; i < 30 && !of1b; i++) { const c = (await api('/get_current_offer', undefined, D2.token)).b.offer; if (c?.order_id === O1.id) of1b = { data: c }; else await sleep(300); }
   ok('S5 the NEXT driver is offered it, never the old one again', !!of1b && (await pool.query(`SELECT count(*)::int n FROM offers WHERE order_id=$1 AND driver_profile_id=$2`, [O1.id, D1.id])).rows[0].n === 1);
   await api('/accept_offer', { offer_id: of1b.data.offer_id }, D2.token);
   ok('S5 the price locks again with the new driver, at the same price', (await pool.query(`SELECT locked_da, offered_da FROM orders WHERE id=$1`, [O1.id])).rows[0].locked_da === O1.offered_da);

@@ -31,7 +31,10 @@ async function makeDriver(phone: string, name: string, lat: number, lng: number)
 const P = { lat: 36.7538, lng: 3.0588 }, D = { lat: 36.765, lng: 3.07 }, adr = { street: 'Rue Didouche Mourad' };
 async function order(tok: string, key: string, extra: any = {}) {
   const q = (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, tok)).b;
-  return (await api('/create_order', { quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Amine', recipient_phone: '+213770000001', payer: 'sender', ...extra }, tok, { 'idempotency-key': key })).b;
+  const o = (await api('/create_order', { auto_accept: true, quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Amine', recipient_phone: '+213770000001', payer: 'sender', ...extra }, tok, { 'idempotency-key': key })).b;
+  // The receiver says yes first (tracking link), then couriers are searched. Auto-accept: the first courier who accepts gets it.
+  if (o?.status === 'awaiting_recipient') { await api('/track_confirm', { t: o.tracking_token }); return { ...o, status: 'searching' }; }
+  return o;
 }
 const b64 = (o: any) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const PW = 'correct-horse-battery-1'; const secrets: Record<string, string> = {};
@@ -144,7 +147,7 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
   const ST = (await api('/staff_login', { email: 'nofactor@test.example', password: PW, code: '1' })).b.token; // none: no token; build a real staff token below
   const sid = await insStaff('fuzz@test.example'); const stTok = (await api('/staff_login', { email: 'fuzz@test.example', password: PW, code: code('fuzz@test.example') })).b.token as string;
   const q = (await api('/list_all_orders?q=' + encodeURIComponent("%' OR 1=1 --"), undefined, stTok)); ok('SEC11 an injection attempt in the staff search returns nothing, not everything', q.s === 200 && q.b.orders.length === 0, q.b);
-  const userRoutes = ['appeal_violation', 'get_quote', 'create_order', 'cancel_order', 'raise_price', 'recall_order', 'report_problem', 'submit_rating', 'register_device', 'add_profile', 'switch_profile'], driverRoutes = ['set_online', 'update_location', 'accept_offer', 'decline_offer', 'update_job_step', 'report_delivery_failure', 'release_job'];
+  const userRoutes = ['appeal_violation', 'get_quote', 'create_order', 'cancel_order', 'raise_price', 'recall_order', 'report_problem', 'submit_rating', 'register_device', 'add_profile', 'switch_profile', 'set_auto_accept', 'accept_bid', 'decline_bid', 'rename_profile'], driverRoutes = ['set_online', 'update_location', 'accept_offer', 'make_bid', 'decline_offer', 'update_job_step', 'report_delivery_failure', 'release_job'];
   const staffRoutes = ['approve_driver', 'reject_driver', 'suspend_profile', 'unsuspend_profile', 'staff_order_action', 'resolve_problem', 'record_cash_handover', 'add_cash_adjustment', 'create_zone', 'set_zone_open', 'create_pricing_version', 'add_violation', 'decide_violation', 'block_profile', 'lift_sanction', 'ban_account'];
   const junk: any[] = [{}, { a: [1, 2] }, { order_id: { $ne: null } }, { order_id: "' OR 1=1", offer_id: 'abc', id: -1, quote_id: 'x', profile_id: 5, amount_da: 1e30, offered_da: 'NaN', lat: 'a', lng: [], online: 'yes', stars: 99, type: [], name: 'x'.repeat(5000), polygon: 'x', email: {}, which: 1 }, { order_id: '00000000-0000-0000-0000-000000000000', step: 'delivered', delivery_code: 12, cash_collected_da: 'x' }];
   const sweep = async (routes: string[], tok: string) => { let five = 0, n = 0; const bad: string[] = []; for (const r of routes) for (const bdy of junk) { const x = await api('/' + r, bdy, tok, { 'x-forwarded-for': fresh() }); n++; if (x.s >= 500) { five++; bad.push(r + ' ' + JSON.stringify(bdy).slice(0, 40)); } } return { five, n, bad }; };
@@ -329,6 +332,47 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
     ok('SEC21 a made-up selfie id is refused', (await api('/submit_selfie', { document_id: "' OR 1=1 --" }, D1.token)).b.error === 'BAD_DOCUMENT');
     let bad = 0; for (const ph of ['x', [{}], [1, 2], ['../../etc/passwd']]) { const r = await api('/report_problem', { order_id: O.id, reason: 'other', photos: ph }, A.token); if (r.s >= 400 && r.s < 500) bad++; }
     ok('SEC21 garbage in evidence photos is refused cleanly', bad === 4, bad);
+  }
+
+  // ===== SEC22 receiver confirmation, courier offers, place search, notifications list, profile name =====
+  {
+    let badLink = 0; for (const t of ['', 'x', "' OR 1=1 --", 'A'.repeat(33), { a: 1 }]) { const r = await api('/track_confirm', { t }); if (r.b.error === 'BAD_LINK') badLink++; }
+    ok('SEC22 malformed receiver links are refused before touching the database', badLink === 5, badLink);
+    const unknown = await api('/track_confirm', { t: 'Z'.repeat(32) }), unknownD = await api('/track_decline', { t: 'Z'.repeat(32) });
+    ok('SEC22 an unknown link looks exactly like an ended one (no hint that an order exists)', unknown.b.error === 'LINK_ENDED' && unknownD.b.error === 'LINK_ENDED');
+    let limited = false; const ipx = '10.250.0.1';
+    for (let i = 0; i < 35 && !limited; i++) if ((await api('/track_confirm', { t: 'Q'.repeat(32) }, undefined, { 'x-forwarded-for': ipx })).s === 429) limited = true;
+    ok('SEC22 guessing confirmation links from one address is cut off (rate limit)', limited);
+    // the sender confirms his own request from his own connection: allowed (cannot be told apart) but recorded for staff
+    const q = (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, A.token)).b;
+    const self = (await api('/create_order', { quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Myself', recipient_phone: '+213770000002', payer: 'sender' }, A.token, { 'idempotency-key': 'sec-self-confirm-1' })).b;
+    const myIp = (await pool.query(`SELECT s.last_ip FROM sessions s JOIN profiles p ON p.account_id=s.account_id WHERE p.id=$1 AND NOT s.revoked AND s.last_ip IS NOT NULL ORDER BY s.created_at DESC LIMIT 1`, [A.id])).rows[0].last_ip;
+    const cf = await api('/track_confirm', { t: self.tracking_token }, undefined, { 'x-forwarded-for': myIp });
+    ok('SEC22 a "yes" sent from the sender\'s own internet address is recorded for staff', (await pool.query(`SELECT 1 FROM order_events WHERE order_id=$1 AND type='flag_same_network'`, [self.id])).rowCount === 1, { myIp, cf: cf.b, self: self.status });
+    ok('SEC22 ...and that flag is not shown in the sender\'s own history', !(await api('/get_order?id=' + self.id, undefined, A.token)).b.history.some((e: any) => e.type === 'flag_same_network'));
+    await api('/set_auto_accept', { order_id: self.id, on: false }, A.token);
+    // offers: only the right people, only sane prices
+    const D3 = await makeDriver('+213550960003', 'Driver Three', 36.7570, 3.0588);   // D1 is busy with an earlier job
+    const req = await until(async () => (await api('/list_requests', undefined, D3.token)).b.requests.find((x: any) => x.order_id === self.id));
+    let silly = 0; for (const price of [1e20, -5, '50', 10.5, [100], { $gt: 0 }]) { const r = await api('/make_bid', { offer_id: req.offer_id, price_da: price }, D3.token); if (r.s === 400) silly++; }
+    ok('SEC22 absurd prices in a courier\'s offer are refused cleanly', silly === 6, silly);
+    ok('SEC22 a courier cannot answer using another courier\'s request', (await api('/make_bid', { offer_id: req.offer_id, price_da: self.offered_da }, D2.token)).b.error === 'OFFER_GONE');
+    ok('SEC22 a customer cannot make offers, a courier cannot choose', (await api('/make_bid', { offer_id: req.offer_id }, A.token)).b.error === 'WRONG_PROFILE' && (await api('/accept_bid', { order_id: self.id, offer_id: req.offer_id }, D3.token)).b.error === 'WRONG_PROFILE');
+    await api('/make_bid', { offer_id: req.offer_id, price_da: self.offered_da }, D3.token);
+    ok('SEC22 another customer cannot choose, decline or change auto-accept on my order', (await api('/accept_bid', { order_id: self.id, offer_id: req.offer_id }, Bb.token)).s === 404 && (await api('/decline_bid', { order_id: self.id, offer_id: req.offer_id }, Bb.token)).b.error === 'OFFER_GONE' && (await api('/set_auto_accept', { order_id: self.id, on: true }, Bb.token)).s === 404);
+    const q2 = (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, A.token)).b;
+    const other = (await api('/create_order', { quote_id: q2.quote_id, offered_da: q2.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Other', recipient_phone: '+213770000003', payer: 'sender' }, A.token, { 'idempotency-key': 'sec-self-confirm-2' })).b;
+    ok('SEC22 an offer cannot be used on a different order, even of the same customer', (await api('/accept_bid', { order_id: other.id, offer_id: req.offer_id }, A.token)).b.error === 'ORDER_TAKEN' || (await api('/accept_bid', { order_id: other.id, offer_id: req.offer_id }, A.token)).b.error === 'OFFER_GONE');
+    let big = 0; for (const [path, body, tok] of [['make_bid', { offer_id: 1e20 }, D3.token], ['accept_bid', { order_id: self.id, offer_id: 1e20 }, A.token], ['decline_bid', { order_id: self.id, offer_id: 1e20 }, A.token]] as [string, any, string][])
+      if ((await api('/' + path, body, tok)).s === 400) big++;
+    ok('SEC22 ids too big for the database are refused on every offer function', big === 3 && (await api('/list_notifications?before=1e20', undefined, A.token)).b.error === 'BAD_ID', big);
+    await api('/cancel_order', { order_id: self.id }, A.token); await api('/cancel_order', { order_id: other.id }, A.token);
+    // place search (switched off on this server), notifications, names
+    ok('SEC22 place search switched off answers "off", never crashes', (await api('/search_places?q=ardis', undefined, A.token)).b.error === 'SEARCH_OFF' && (await api('/app_config')).b.place_search === false);
+    ok('SEC22 place search and the notifications list need a login', (await api('/search_places?q=ardis')).s === 401 && (await api('/list_notifications')).s === 401);
+    ok('SEC22 nobody\'s notifications list carries a delivery or pickup code', !/delivery_code|pickup_code/.test(JSON.stringify((await api('/list_notifications', undefined, A.token)).b)));
+    let names = 0; for (const n of ['x'.repeat(5000), 'a', 'Bob\u0000', 'Eve\u202Elive', 42, null]) if ((await api('/rename_profile', { display_name: n }, A.token)).b.error === 'BAD_NAME') names++;
+    ok('SEC22 bad names are refused (too long, too short, hidden characters, not text)', names === 6 && (await api('/rename_profile', { display_name: 'Hacker' })).s === 401, names);
   }
 
   // ===== SEC15 evidence trail and code hygiene =====

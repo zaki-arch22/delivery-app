@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Post, Req } from '@nestjs/common';
 import { AuthService, deviceOf } from './auth.service';
 import { TrustService } from '../trust/trust.service';
 import { Access, Public, Who } from './guard';
+import { cfg } from '../common/config';
 
 const who = (req: any): Who => req.who;
 
@@ -11,6 +12,13 @@ export class AuthController {
 
   @Public() @Get('login_methods')
   methods() { return this.auth.loginMethods(); }
+
+  // What the app may show (the server decides): today only whether place search is switched on.
+  @Public() @Get('app_config')
+  config() { return { place_search: !!cfg.geocoderUrl() }; }
+
+  @Access('account') @Post('rename_profile') @HttpCode(200)
+  rename(@Req() r: any, @Body() b: any) { return this.auth.renameProfile(who(r).profileId, b?.display_name); }
 
   @Public() @Post('login_google') @HttpCode(200)
   google(@Req() r: any, @Body() b: any) { return this.auth.loginGoogle(b?.id_token, b?.path, r.ip, deviceOf(r.headers['x-device'])); }

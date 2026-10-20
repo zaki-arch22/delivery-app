@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { createHash, createHmac } from 'crypto';
 import QRCode from 'qrcode';
 import { Db } from '../db/db.service';
-import { Routing } from '../geo/routing';
+import { Eta } from '../geo/eta';
+import { Matching } from './matching.service';
 import { Documents } from '../documents/documents.service';
 import { deriveKey } from '../security/crypto';
 import { cfg } from '../common/config';
@@ -22,10 +23,7 @@ const ACTIVE = ['assigned', 'picked_up'];
 
 @Injectable()
 export class Tracking {
-  private eta = new Map<string, { at: number; s: number | null; estimated: boolean }>();
-  constructor(private db: Db, private routing: Routing, private documents: Documents) {
-    setInterval(() => { const old = Date.now() - 60_000; for (const [k, v] of this.eta) if (v.at < old) this.eta.delete(k); }, 60_000).unref();
-  }
+  constructor(private db: Db, private eta: Eta, private documents: Documents, private matching: Matching) {}
 
   private async order(token: any) {
     if (typeof token !== 'string' || !TOKEN.test(token)) throw bad('BAD_LINK', 'This tracking link is not valid');
@@ -43,27 +41,17 @@ export class Tracking {
     return o;
   }
 
-  private async etaFor(o: any): Promise<{ s: number | null; estimated: boolean }> {
-    const fresh = o.last_location_at && Date.now() - new Date(o.last_location_at).getTime() < cfg.locationFreshS() * 1000;
-    if (!ACTIVE.includes(o.status) || !fresh || o.driver_lat == null) return { s: null, estimated: true };
-    const hit = this.eta.get(o.id); if (hit && Date.now() - hit.at < 15_000) return hit;
-    const here = { lat: o.driver_lat, lng: o.driver_lng };
-    const r = o.status === 'picked_up'
-      ? await this.routing.route(here, { lat: o.dropoff_lat, lng: o.dropoff_lng })
-      : await this.routing.route(here, { lat: o.pickup_lat, lng: o.pickup_lng }).then(a => ({ ...a, duration_s: a.duration_s + o.duration_s }));
-    const v = { at: Date.now(), s: r.duration_s, estimated: r.estimated }; this.eta.set(o.id, v); return v;
-  }
-
   async data(token: any) {
     const o = await this.order(token);
     const active = ACTIVE.includes(o.status);
     const fresh = o.last_location_at && Date.now() - new Date(o.last_location_at).getTime() < cfg.locationFreshS() * 1000;
-    const eta = await this.etaFor(o);
+    const eta = await this.eta.forOrder(o);
     const events = await this.db.query(`SELECT type, data, created_at FROM order_events WHERE order_id=$1 AND type = ANY($2) ORDER BY id`,
-      [o.id, ['created', 'assigned', 'released_by_driver', 'reassigned', 'picked_up', 'delivered', 'delivery_failed', 'recalled_by_sender', 'cancelled', 'cancelled_by_support', 'expired', 'recipient_expecting']]);
+      [o.id, ['created', 'recipient_confirmed', 'recipient_declined', 'assigned', 'released_by_driver', 'reassigned', 'picked_up', 'delivered', 'delivery_failed', 'recalled_by_sender', 'cancelled', 'cancelled_by_support', 'expired', 'recipient_expecting']]);
     const toPay = o.leg === 'return' ? 0 : o.cod_amount_da + (o.payer === 'recipient' ? (o.locked_da ?? o.offered_da) : 0);
     return {
-      ref: o.ref, status: o.status, leg: o.leg,
+      ref: o.ref, status: o.status, leg: o.leg, recipient_answer: o.recipient_answer,
+      size: o.size, pickup_area: o.status === 'awaiting_recipient' ? (o.pickup_address?.landmark || o.pickup_address?.street || null) : null,
       sender_first_name: o.sender_first_name, recipient_name: o.recipient_name,
       inspection: o.inspection, amount_to_pay_da: toPay, cod_amount_da: o.cod_amount_da, delivery_fee_da: o.payer === 'recipient' ? (o.locked_da ?? o.offered_da) : 0,
       dropoff: { lat: o.dropoff_lat, lng: o.dropoff_lng, address: o.dropoff_address },
@@ -74,7 +62,7 @@ export class Tracking {
       } : null,
       eta_s: eta.s, eta_estimated: eta.estimated,
       // The code is the receiver's proof of receipt; it is shown until the parcel is delivered.
-      delivery_code: active || o.status === 'searching' ? o.delivery_code : null,
+      delivery_code: active || o.status === 'searching' ? o.delivery_code : null,   // not before the receiver said yes
       has_parcel_photo: !!o.pickup_photo_doc,
       expecting: !!o.recipient_expecting_at,
       history: events.map((e: any) => ({ type: e.type, at: e.created_at, reason: e.data?.reason ?? undefined })),
@@ -92,6 +80,45 @@ export class Tracking {
     const p = await this.documents.orderPhoto(o.id, o.pickup_photo_doc);
     if (!p) throw fail(404, 'NO_PHOTO', 'No parcel photo yet');
     return p;
+  }
+
+  // The receiver says YES before any courier is searched (owner's wish, Oct 2026). Saying yes also means "I am expecting it".
+  // Honest limit: the sender holds the link too, so he could press "yes" himself. It cannot be prevented without verifying
+  // the receiver's phone (paid SMS); a "yes" from the sender's own internet address is recorded for staff (families share Wi-Fi,
+  // so it is evidence, never a block).
+  async confirm(token: any, ip?: string) {
+    const o = await this.order(token);
+    if (o.recipient_answer === 'confirmed') return { ok: true, status: o.status };
+    if (o.status !== 'awaiting_recipient') throw fail(409, 'ORDER_ENDED', 'This request is no longer waiting for an answer');
+    const done = await this.db.tx(async q => {
+      const [r] = await q(`UPDATE orders SET status='searching', search_started_at=now(), recipient_answer='confirmed', recipient_answered_at=now(), recipient_expecting_at=COALESCE(recipient_expecting_at, now())
+                           WHERE id=$1 AND status='awaiting_recipient' RETURNING id`, [o.id]);
+      if (!r) return false;
+      await q(`INSERT INTO order_events(order_id,type,data) VALUES ($1,'recipient_confirmed','{}')`, [o.id]);
+      const [same] = ip ? await q(`SELECT 1 FROM sessions s JOIN profiles p ON p.account_id=s.account_id WHERE p.id=$1 AND NOT s.revoked AND s.last_ip=$2 LIMIT 1`, [o.user_profile_id, ip]) : [];
+      if (same) await q(`INSERT INTO order_events(order_id,type,data) VALUES ($1,'flag_same_network',$2)`, [o.id, { note: 'The receiver confirmed from the sender\'s own internet address' }]);
+      await notify(q, { profile: o.user_profile_id, kind: 'order.recipient_confirmed', order: o.id, priority: 'high', dedupe: `order:${o.id}:recipient_confirmed`, data: { ref: o.ref, name: o.recipient_name } });
+      return true;
+    });
+    if (!done) throw fail(409, 'ORDER_ENDED', 'This request is no longer waiting for an answer');
+    await this.matching.offerNext(o.id);   // couriers see it at once, not at the next tick
+    return { ok: true, status: 'searching' };
+  }
+
+  // "No, I do not expect this parcel": the request ends before any courier moves. Nothing is held against anyone.
+  async decline(token: any, reason: any) {
+    const o = await this.order(token);
+    if (o.recipient_answer === 'declined') return { ok: true, status: o.status };
+    const why = ['not_ordered', 'not_available', 'wrong_person', 'other'].includes(reason) ? reason : 'other';
+    if (o.status !== 'awaiting_recipient') throw fail(409, 'ORDER_ENDED', 'This request is no longer waiting for an answer');
+    await this.db.tx(async q => {
+      const [r] = await q(`UPDATE orders SET status='cancelled', cancel_reason='recipient_declined', recipient_answer='declined', recipient_answered_at=now()
+                           WHERE id=$1 AND status='awaiting_recipient' RETURNING id`, [o.id]);
+      if (!r) throw fail(409, 'ORDER_ENDED', 'This request is no longer waiting for an answer');
+      await q(`INSERT INTO order_events(order_id,type,data) VALUES ($1,'recipient_declined',$2)`, [o.id, { reason: why }]);
+      await notify(q, { profile: o.user_profile_id, kind: 'order.recipient_declined', order: o.id, priority: 'high', dedupe: `order:${o.id}:recipient_declined`, data: { ref: o.ref, name: o.recipient_name, reason: why } });
+    });
+    return { ok: true, status: 'cancelled' };
   }
 
   // "I am expecting this parcel": tells the sender (and the driver) the receiver is reachable and agrees. Once.

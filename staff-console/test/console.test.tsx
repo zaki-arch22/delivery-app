@@ -91,8 +91,9 @@ test('5. drivers: a new driver waits; staff approve with a cash limit', async ()
 
 test('6. orders: find an order, act on it only when allowed, and the server agrees', async () => {
   const q = await call('/get_quote', { pickup: { lat: 36.7538, lng: 3.0588 }, dropoff: { lat: 36.765, lng: 3.07 }, size: 'small' }, user.token);
-  const o = await fetch(API + '/create_order', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + user.token, 'idempotency-key': 'console-order-1' }, body: JSON.stringify({ quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: { street: 'Rue Didouche Mourad' }, dropoff_address: { street: 'Rue Larbi Ben Mhidi' }, recipient_name: 'Amine', recipient_phone: '+213770000001', payer: 'sender' }) }).then(r => r.json());
+  const o = await fetch(API + '/create_order', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + user.token, 'idempotency-key': 'console-order-1' }, body: JSON.stringify({ auto_accept: true, quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: { street: 'Rue Didouche Mourad' }, dropoff_address: { street: 'Rue Larbi Ben Mhidi' }, recipient_name: 'Amine', recipient_phone: '+213770000001', payer: 'sender' }) }).then(r => r.json());
   orderId = o.id; ref = o.ref;
+  await call('/track_confirm', { t: o.tracking_token });   // the receiver says yes first
   let off: any; for (let i = 0; i < 30 && !off; i++) { off = (await call('/get_current_offer', undefined, driver.token)).offer; if (!off) await sleep(300); }
   await call('/accept_offer', { offer_id: off.offer_id }, driver.token);
   await u.click(nav().getByRole('button', { name: 'Orders' }));

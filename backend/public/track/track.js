@@ -4,7 +4,8 @@
   'use strict';
   var token = location.pathname.split('/').pop();
   var T = {
-    en: { searching: 'Looking for a driver', assigned: 'A driver is going to collect your parcel', picked_up: 'Your parcel is on its way', delivered: 'Delivered', failed: 'Not delivered', cancelled: 'Cancelled', expired: 'No driver was found',
+    en: { awaiting_recipient: 'A parcel for you', ask: '{name} wants to send you a parcel', ask_size: 'Size: {size}', ask_from: 'From: {area}', ask_q: 'Are you expecting this parcel? A courier is searched only after your answer.', yes: 'Yes, I am expecting it', no: 'No', no_why: 'Why?', n_not_ordered: 'I did not order anything', n_not_available: 'I am not available now', n_wrong_person: 'This is not for me', n_other: 'Other reason', no_send: 'Decline the parcel', declined: 'You declined this parcel. The sender has been told.', s_small: 'small', s_medium: 'medium', s_large: 'large', h_recipient_confirmed: 'You confirmed', h_recipient_declined: 'You declined',
+      searching: 'Looking for a driver', assigned: 'A driver is going to collect your parcel', picked_up: 'Your parcel is on its way', delivered: 'Delivered', failed: 'Not delivered', cancelled: 'Cancelled', expired: 'No driver was found',
       from: 'Parcel from {name}', eta: 'Arrives in about {m} min', eta_soon: 'Arriving now', eta_about: '(estimate)', driver: 'Your driver', call: 'Call the driver',
       pay: 'Amount to pay at the door', pay_none: 'Nothing to pay at the door', goods: 'Goods', fee: 'Delivery',
       open: 'You may open the parcel and check it before paying.', outside: 'You may check the outside of the parcel before paying (opening is not allowed by the seller).',
@@ -15,7 +16,8 @@
       note: 'Details (optional)', send: 'Send', sent: 'Sent. Our team will look at it.', history: 'History', ended: 'This tracking link has ended.', error: 'Could not load. Check your connection.',
       h_created: 'Order created', h_assigned: 'Driver assigned', h_released_by_driver: 'Driver changed, looking for another one', h_reassigned: 'Driver changed', h_picked_up: 'Parcel collected', h_delivered: 'Delivered', h_delivery_failed: 'Not delivered', h_recalled_by_sender: 'Called back by the seller', h_cancelled: 'Cancelled', h_cancelled_by_support: 'Cancelled by support', h_expired: 'No driver found', h_recipient_expecting: 'You confirmed you are expecting it',
       motorbike: 'motorbike', car: 'car', map_credit: '© OpenStreetMap contributors' },
-    fr: { searching: 'Recherche d’un livreur', assigned: 'Un livreur va récupérer votre colis', picked_up: 'Votre colis est en route', delivered: 'Livré', failed: 'Non livré', cancelled: 'Annulé', expired: 'Aucun livreur trouvé',
+    fr: { awaiting_recipient: 'Un colis pour vous', ask: '{name} veut vous envoyer un colis', ask_size: 'Taille : {size}', ask_from: 'Depuis : {area}', ask_q: 'Attendez-vous ce colis ? Un livreur n’est recherché qu’après votre réponse.', yes: 'Oui, j’attends ce colis', no: 'Non', no_why: 'Pourquoi ?', n_not_ordered: 'Je n’ai rien commandé', n_not_available: 'Je ne suis pas disponible maintenant', n_wrong_person: 'Ce n’est pas pour moi', n_other: 'Autre raison', no_send: 'Refuser le colis', declined: 'Vous avez refusé ce colis. L’expéditeur a été prévenu.', s_small: 'petit', s_medium: 'moyen', s_large: 'grand', h_recipient_confirmed: 'Vous avez confirmé', h_recipient_declined: 'Vous avez refusé',
+      searching: 'Recherche d’un livreur', assigned: 'Un livreur va récupérer votre colis', picked_up: 'Votre colis est en route', delivered: 'Livré', failed: 'Non livré', cancelled: 'Annulé', expired: 'Aucun livreur trouvé',
       from: 'Colis de {name}', eta: 'Arrivée dans environ {m} min', eta_soon: 'Arrive maintenant', eta_about: '(estimation)', driver: 'Votre livreur', call: 'Appeler le livreur',
       pay: 'Montant à payer à la porte', pay_none: 'Rien à payer à la porte', goods: 'Marchandise', fee: 'Livraison',
       open: 'Vous pouvez ouvrir le colis et le vérifier avant de payer.', outside: 'Vous pouvez vérifier l’extérieur du colis avant de payer (le vendeur n’autorise pas l’ouverture).',
@@ -26,7 +28,8 @@
       note: 'Détails (facultatif)', send: 'Envoyer', sent: 'Envoyé. Notre équipe va l’examiner.', history: 'Historique', ended: 'Ce lien de suivi a expiré.', error: 'Chargement impossible. Vérifiez votre connexion.',
       h_created: 'Commande créée', h_assigned: 'Livreur attribué', h_released_by_driver: 'Changement de livreur, recherche d’un autre', h_reassigned: 'Changement de livreur', h_picked_up: 'Colis récupéré', h_delivered: 'Livré', h_delivery_failed: 'Non livré', h_recalled_by_sender: 'Rappelé par le vendeur', h_cancelled: 'Annulé', h_cancelled_by_support: 'Annulé par le support', h_expired: 'Aucun livreur trouvé', h_recipient_expecting: 'Vous avez confirmé l’attendre',
       motorbike: 'moto', car: 'voiture', map_credit: '© contributeurs OpenStreetMap' },
-    ar: { searching: 'جارٍ البحث عن سائق', assigned: 'سائق في طريقه لاستلام طردك', picked_up: 'طردك في الطريق إليك', delivered: 'تم التسليم', failed: 'لم يتم التسليم', cancelled: 'أُلغي', expired: 'لم يُعثر على سائق',
+    ar: { awaiting_recipient: 'طرد لك', ask: '{name} يريد أن يرسل لك طرداً', ask_size: 'الحجم: {size}', ask_from: 'من: {area}', ask_q: 'هل تنتظر هذا الطرد؟ لا نبحث عن مندوب إلا بعد جوابك.', yes: 'نعم، أنتظر هذا الطرد', no: 'لا', no_why: 'لماذا؟', n_not_ordered: 'لم أطلب شيئاً', n_not_available: 'لست متاحاً الآن', n_wrong_person: 'هذا ليس لي', n_other: 'سبب آخر', no_send: 'رفض الطرد', declined: 'رفضت هذا الطرد. تم إبلاغ المرسل.', s_small: 'صغير', s_medium: 'متوسط', s_large: 'كبير', h_recipient_confirmed: 'أكّدت', h_recipient_declined: 'رفضت',
+      searching: 'جارٍ البحث عن سائق', assigned: 'سائق في طريقه لاستلام طردك', picked_up: 'طردك في الطريق إليك', delivered: 'تم التسليم', failed: 'لم يتم التسليم', cancelled: 'أُلغي', expired: 'لم يُعثر على سائق',
       from: 'طرد من {name}', eta: 'يصل بعد حوالي {m} دقيقة', eta_soon: 'يصل الآن', eta_about: '(تقدير)', driver: 'سائقك', call: 'الاتصال بالسائق',
       pay: 'المبلغ الواجب دفعه عند الباب', pay_none: 'لا شيء للدفع عند الباب', goods: 'السلعة', fee: 'التوصيل',
       open: 'يمكنك فتح الطرد والتحقق منه قبل الدفع.', outside: 'يمكنك التحقق من الطرد من الخارج قبل الدفع (البائع لا يسمح بفتحه).',
@@ -65,6 +68,8 @@
     document.getElementById('ref').textContent = d.ref;
     var head = el('div', 'card');
     head.append(el('h1', null, t(d.status)), el('p', 'muted', t('from', { name: d.sender_first_name })));
+    if (d.status === 'awaiting_recipient') { kids.push(askCard(d)); }
+    else if (d.recipient_answer === 'declined') head.append(el('p', null, t('declined')));
     var steps = el('div', 'steps'), at = { searching: 1, assigned: 2, picked_up: 3, delivered: 4 }[d.status] || 0;
     for (var i = 1; i <= 4; i++) { var s = el('span'); if (i <= at) s.className = 'on'; steps.append(s); }
     head.append(steps);
@@ -107,6 +112,26 @@
     drawMap(mapBox);
   }
 
+  // The receiver's answer BEFORE any courier is searched: yes (searching starts) or no (with a reason).
+  var askBox = null;
+  function askCard(d) {
+    if (askBox && askBox.getAttribute('data-lang') === lang) return askBox;
+    var c = el('div', 'card ask'); c.setAttribute('data-lang', lang);
+    c.append(el('h2', null, t('ask', { name: d.sender_first_name })));
+    c.append(el('p', null, t('ask_size', { size: t('s_' + d.size) }) + (d.pickup_area ? ' · ' + t('ask_from', { area: d.pickup_area }) : '')));
+    c.append(el('p', 'muted', t('ask_q')));
+    var yes = el('button', 'btn', t('yes')), no = el('button', 'btn secondary', t('no'));
+    var why = el('div', 'why'); why.hidden = true;
+    var sel = el('select'); ['not_ordered', 'not_available', 'wrong_person', 'other'].forEach(function (r) { var o = el('option', null, t('n_' + r)); o.value = r; sel.append(o); });
+    var send = el('button', 'btn danger', t('no_send'));
+    why.append(el('label', null, t('no_why')), sel, send);
+    yes.onclick = function () { yes.disabled = no.disabled = true; api('/track_confirm', { t: token }).then(function () { askBox = null; load(); }, function () { yes.disabled = no.disabled = false; load(); }); };
+    no.onclick = function () { why.hidden = false; no.hidden = true; };
+    send.onclick = function () { send.disabled = yes.disabled = true; api('/track_decline', { t: token, reason: sel.value }).then(function () { askBox = null; load(); }, function () { send.disabled = yes.disabled = false; load(); }); };
+    c.append(yes, no, why);
+    askBox = c; return c;
+  }
+
   // Images are created once per address and reused, so a refresh does not download them again.
   var imgs = {};
   function keptImg(src, alt, cls) { if (!imgs[src]) { var i = el('img', cls); i.alt = alt; i.src = src; imgs[src] = i; } return imgs[src]; }
@@ -129,10 +154,10 @@
     var dest = [data.dropoff.lng, data.dropoff.lat], drv = data.driver && data.driver.location ? [data.driver.location.lng, data.driver.location.lat] : null;
     if (map) { box.replaceWith(map.getContainer()); } else {
       maplibregl.setWorkerUrl('/t/maplibre-gl-csp-worker.js');
-      map = new maplibregl.Map({ container: box, style: 'https://tiles.openfreemap.org/styles/liberty', center: drv || dest, zoom: 14, attributionControl: { compact: true, customAttribution: t('map_credit') } });
-      homeMarker = new maplibregl.Marker({ color: '#0B2A6B' }).setLngLat(dest).addTo(map);
+      map = new maplibregl.Map({ container: box, style: 'https://tiles.openfreemap.org/styles/dark', center: drv || dest, zoom: 14, attributionControl: { compact: true, customAttribution: t('map_credit') } });
+      homeMarker = new maplibregl.Marker({ color: '#B4EF2A' }).setLngLat(dest).addTo(map);
     }
-    if (drv) { if (!driverMarker) driverMarker = new maplibregl.Marker({ color: '#1E40AF' }).setLngLat(drv).addTo(map); else driverMarker.setLngLat(drv); }
+    if (drv) { if (!driverMarker) driverMarker = new maplibregl.Marker({ color: '#FFFFFF' }).setLngLat(drv).addTo(map); else driverMarker.setLngLat(drv); }
     else if (driverMarker) { driverMarker.remove(); driverMarker = null; }
     if (drv) { var b = new maplibregl.LngLatBounds(dest, dest); b.extend(drv); map.fitBounds(b, { padding: 50, maxZoom: 16, duration: 0 }); }
     map.resize();
@@ -142,5 +167,5 @@
     return api('/track_data?t=' + encodeURIComponent(token)).then(function (d) { data = d; failed = false; render(); }, function (e) { failed = e.code || true; if (!data) render(); });
   }
   setLang(lang); load();
-  setInterval(function () { if (!data || ['searching', 'assigned', 'picked_up'].indexOf(data.status) >= 0) load(); }, 10000);
+  setInterval(function () { if (!data || ['searching', 'assigned', 'picked_up'].indexOf(data.status) >= 0) load(); }, 10000);   // waiting for the receiver: nothing changes until he answers
 })();

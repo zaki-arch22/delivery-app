@@ -42,5 +42,14 @@ INSERT INTO documents(account_id,kind,size_bytes,sha256,profile_id) SELECT a.id,
 DELETE FROM documents;
 \echo '--- TEST 13: move a used document photo to another profile (must FAIL)'
 UPDATE documents SET profile_id = pid('+213550000001','driver');
+\echo '--- TEST 14: lock a price outside the allowed range (must FAIL)'
+INSERT INTO orders(user_profile_id,pickup_point,pickup_address,dropoff_point,dropoff_address,recipient_name,recipient_phone,size,vehicle,payer,pricing_version,distance_m,duration_s,recommended_da,min_da,max_da,offered_da,delivery_code,idempotency_key,driver_profile_id,locked_da,status)
+VALUES (pid('+213550000001','user'),'POINT(3.05 36.75)','{}','POINT(3.07 36.76)','{}','R','+213550000009','small','motorbike','sender',1,3000,600,200,160,300,200,'2222','k2',pid('+213550000002','driver'),999,'assigned');
+\echo '--- TEST 15: a courier waiting for two customers at once (second offer must FAIL)'
+INSERT INTO orders(user_profile_id,pickup_point,pickup_address,dropoff_point,dropoff_address,recipient_name,recipient_phone,size,vehicle,payer,pricing_version,distance_m,duration_s,recommended_da,min_da,max_da,offered_da,delivery_code,idempotency_key)
+VALUES (pid('+213550000001','user'),'POINT(3.05 36.75)','{}','POINT(3.07 36.76)','{}','R','+213550000009','small','motorbike','sender',1,3000,600,200,160,300,200,'3333','k3'),
+       (pid('+213550000001','user'),'POINT(3.05 36.75)','{}','POINT(3.07 36.76)','{}','R','+213550000009','small','motorbike','sender',1,3000,600,200,160,300,200,'4444','k4');
+INSERT INTO offers(order_id,driver_profile_id,status,rank,expires_at,bid_da,bid_expires_at) SELECT id,pid('+213550000002','driver'),'bid',1,now()+interval '1 minute',200,now()+interval '1 minute' FROM orders WHERE idempotency_key='k3';
+INSERT INTO offers(order_id,driver_profile_id,status,rank,expires_at,bid_da,bid_expires_at) SELECT id,pid('+213550000002','driver'),'bid',1,now()+interval '1 minute',210,now()+interval '1 minute' FROM orders WHERE idempotency_key='k4';
 \echo '--- Balance of the other driver (must be 5000)'
 SELECT driver_profile_id=pid('+213550000002','driver') AS is_other_driver, SUM(amount_da) FROM cash_ledger GROUP BY 1;

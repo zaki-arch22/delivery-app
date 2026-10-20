@@ -48,6 +48,16 @@ export class AuthService {
 
   loginMethods() { return { google: googleLoginOn(), sms: smsLoginOn() }; }
 
+  // A customer may change the name couriers see. A courier's name was checked by staff against his ID card: staff change it.
+  async renameProfile(profileId: string | null, displayName: any) {
+    if (!profileId) throw new ConflictException({ error: 'NO_PROFILE', message: 'Create your profile first' });
+    const name = typeof displayName === 'string' ? displayName.trim() : '';
+    if (name.length < 2 || name.length > 60 || CONTROL.test(name)) throw bad('BAD_NAME', 'Name must be 2 to 60 characters, without control characters');
+    const r = await this.db.one(`UPDATE profiles SET display_name=$2 WHERE id=$1 AND type='user' RETURNING id, display_name`, [profileId, name]);
+    if (!r) throw new ForbiddenException({ error: 'NAME_LOCKED', message: 'A courier\'s name is checked against the ID card: ask support to change it' });
+    return { ok: true, display_name: r.display_name };
+  }
+
   async sendCode(phone: string, ip: string) {
     if (!smsLoginOn()) throw methodOff();
     if (!PHONE.test(phone ?? '')) throw bad('BAD_PHONE', 'Phone must be in international format, e.g. +213...');

@@ -38,6 +38,8 @@ const A = { lat: 36.74, lng: 3.04 }, Z = { lat: 36.76, lng: 3.06 };
     ok('R2 large parcel on roads: car, same road distance back', back.vehicle === 'car' && back.distance_estimated === false && Math.abs(back.distance_m - q.distance_m) < 50, back);
     const stored = (await pool.query(`SELECT data FROM quotes WHERE id=$1`, [q.quote_id])).rows[0].data;
     ok('R3 the stored quote keeps the road distance used for the price', stored.distance_m === q.distance_m && stored.distance_estimated === false, stored);
+    const line = q.route as [number, number][];
+    ok('R5 the quote carries the road\'s shape for the map: starts near A, ends near Z, follows the grid', Array.isArray(line) && line.length >= 3 && Math.abs(line[0][0] - A.lng) < 0.002 && Math.abs(line[0][1] - A.lat) < 0.002 && Math.abs(line[line.length - 1][1] - Z.lat) < 0.002, line);
   } else {
     const t = Date.now();
     const q = (await api('/get_quote', { pickup: A, dropoff: Z, size: 'small' }, U)).b;
@@ -45,6 +47,7 @@ const A = { lat: 36.74, lng: 3.04 }, Z = { lat: 36.76, lng: 3.06 };
     ok(`R4 (${MODE}) quote still works when the routing server is ${MODE === 'down' ? 'down' : 'not answering'}`, typeof q.quote_id === 'string' && q.recommended_da > 0, q);
     ok(`R4 (${MODE}) the distance is marked estimated`, q.distance_estimated === true, q);
     ok(`R4 (${MODE}) the quote answers quickly (under 3 s) instead of hanging`, ms < 3000, ms);
+    ok(`R4 (${MODE}) without a road shape the map draws a straight line (route is null)`, q.route === null, q.route);
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   await pool.end(); process.exit(fail ? 1 : 0);

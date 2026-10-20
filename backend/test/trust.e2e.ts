@@ -34,7 +34,10 @@ async function makeDriver(phone: string, name: string, at = { lat: 36.7585, lng:
 const P = { lat: 36.7538, lng: 3.0588 }, D = { lat: 36.765, lng: 3.07 }, adr = { street: 'Rue Didouche Mourad' };
 async function order(tok: string, key: string, extra: any = {}) {
   const q = (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, tok)).b;
-  return (await api('/create_order', { quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Amine', recipient_phone: '+213770000001', payer: 'sender', ...extra }, tok, { 'idempotency-key': key })).b;
+  const o = (await api('/create_order', { auto_accept: true, quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Amine', recipient_phone: '+213770000001', payer: 'sender', ...extra }, tok, { 'idempotency-key': key })).b;
+  // The receiver says yes first (tracking link), then couriers are searched. Auto-accept: the first courier who accepts gets it.
+  if (o?.status === 'awaiting_recipient') { await api('/track_confirm', { t: o.tracking_token }); return { ...o, status: 'searching' }; }
+  return o;
 }
 const offerFor = (t: string) => until(async () => (await api('/get_current_offer', undefined, t)).b.offer);
 const points = async (pid: string) => (await pool.query(`SELECT COALESCE(sum(points),0)::int n FROM violations WHERE profile_id=$1 AND status <> 'cancelled'`, [pid])).rows[0].n;

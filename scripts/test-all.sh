@@ -54,21 +54,21 @@ run() {  # run <title> <logname> <dir> <command...>
 }
 B="$ROOT/backend"; T="TEST_DATABASE_URL=$TEST_OWNER_URL"
 
-# 1. Rules enforced by the database itself (12 forbidden actions must be refused, the cash balance must be 5000).
+# 1. Rules enforced by the database itself (14 forbidden actions must be refused, the cash balance must be 5000).
 echo "== database rules"; wipe
 psql_owner -f "$B/test/db_rules.sql" >"$LOG/db-rules.log" 2>&1
 REFUSED=$(grep -c "ERROR:" "$LOG/db-rules.log"); BAL=$(grep -cE "^ t +\| +5000" "$LOG/db-rules.log")
-echo "   refused: $REFUSED of 12 expected; final balance check: $BAL"
-[ "$REFUSED" = 12 ] && [ "$BAL" = 1 ]; record "database rules" $? db-rules; wipe
+echo "   refused: $REFUSED of 14 expected; final balance check: $BAL"
+[ "$REFUSED" = 14 ] && [ "$BAL" = 1 ]; record "database rules" $? db-rules; wipe
 
 # 2. Orders and accounts (fast timers).
-start_server 3399 orders RATE_LIMIT_DISABLED=1 OFFER_TTL_S=3 SEARCH_WINDOW_S=15 WIDEN_AFTER_S=6
+start_server 3399 orders RATE_LIMIT_DISABLED=1 BID_TTL_S=4 SEARCH_WINDOW_S=15 WIDEN_AFTER_S=6 GEOCODER_URL=http://127.0.0.1:5056
 run "backend: orders, matching, cash, ratings" orders "$B" env $T npx ts-node test/orders.e2e.ts
 wipe; run "backend: accounts and profiles" auth "$B" env $T npx ts-node test/auth.e2e.ts
 wipe; run "backend: rules and sanctions" trust "$B" env $T npx ts-node test/trust.e2e.ts
 
 # 3. Notifications.
-start_server 3399 notify RATE_LIMIT_DISABLED=1 OFFER_TTL_S=3 SEARCH_WINDOW_S=60 WIDEN_AFTER_S=30
+start_server 3399 notify RATE_LIMIT_DISABLED=1 BID_TTL_S=3 SEARCH_WINDOW_S=60 WIDEN_AFTER_S=30
 run "backend: notifications" notify "$B" env $T npx ts-node test/notify.e2e.ts
 
 # 3b. Road distances from our own OSRM server, built from the made-up test grid (test/fixtures/test-grid.osm).

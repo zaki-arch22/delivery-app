@@ -5,7 +5,8 @@ import { bad, fail, isId, isInt, point, uuid } from '../common/errors';
 import { notify } from '../notify/notify';
 import { createReturnLeg } from '../orders/return-leg';
 import { Documents } from '../documents/documents.service';
-import { Matching } from '../orders/matching.service';
+import { assign, ELIGIBLE_SQL, Matching } from '../orders/matching.service';
+import { Routing } from '../geo/routing';
 import { cfg } from '../common/config';
 import { assertCanWork, recordViolation } from '../trust/rules';
 
@@ -19,7 +20,7 @@ const cashToCollect = (o: any) => (o.leg === 'return' ? 0 : o.cod_amount_da + (o
 
 @Injectable()
 export class DriverService {
-  constructor(private db: Db, private documents: Documents, private matching: Matching) {}
+  constructor(private db: Db, private documents: Documents, private matching: Matching, private routing: Routing) {}
 
   // A position check: how far the driver's phone was from where he says he is. Far away = a case for staff (GPS can be wrong,
   // so it never blocks the step on its own).
@@ -44,7 +45,11 @@ export class DriverService {
       if (job) throw fail(409, 'ON_JOB', 'Finish your current job before going offline');
     }
     await this.db.query(`UPDATE driver_details SET is_online=$2 WHERE profile_id=$1`, [driverId, online]);
-    if (!online) await this.db.query(`UPDATE offers SET status='declined' WHERE driver_profile_id=$1 AND status='offered'`, [driverId]);
+    if (!online) await this.db.tx(async q => {   // going offline clears his list; a price he offered is taken back (the customer is told)
+      const gone = await q(`UPDATE offers f SET status='declined' FROM orders o WHERE o.id=f.order_id AND f.driver_profile_id=$1 AND f.status IN ('offered','bid')
+                            RETURNING f.id, f.order_id, o.user_profile_id, (f.bid_da IS NOT NULL) had_bid`, [driverId]);
+      for (const g of gone) if (g.had_bid) await notify(q, { profile: g.user_profile_id, kind: 'order.bid_withdrawn', order: g.order_id, push: false, dedupe: `offer:${g.id}:offline:${Date.now()}`, data: { offer_id: Number(g.id) } });
+    });
     return { online };
   }
 
@@ -74,36 +79,70 @@ export class DriverService {
     return { online: d.is_online, earnings_today_da: e.earnings, cash_held_da: c.held, cash_limit_da: d.cash_limit_da, rating: d.rating, rating_count: d.rating_count };
   }
 
-  async currentOffer(driverId: string) {
-    const o = await this.db.one(
-      `SELECT f.id offer_id, f.expires_at, ord.id order_id, ord.ref, ord.offered_da price_da, ord.payer, ord.cod_amount_da, ord.size, ord.vehicle, ord.distance_m trip_distance_m,
-         round(ST_Distance(d.last_location, ord.pickup_point))::int pickup_distance_m, ord.pickup_address,
-         CASE WHEN sp.rating_count=0 THEN NULL ELSE round(sp.rating_sum::numeric/sp.rating_count,2) END sender_rating
+  // What a courier sees of a request BEFORE taking it: price, distances, cash to collect, size, the sender's rating and
+  // the pickup area. Never the receiver's details nor the codes.
+  private requestSql = (where: string) => `
+      SELECT f.id offer_id, f.status, f.expires_at, f.bid_da my_price_da, f.bid_expires_at, ord.id order_id, ord.ref, ord.offered_da price_da, ord.max_da, ord.payer, ord.cod_amount_da,
+         ord.size, ord.vehicle, ord.distance_m trip_distance_m, ord.duration_s trip_duration_s, round(ST_Distance(d.last_location, ord.pickup_point))::int pickup_distance_m, ord.pickup_address,
+         ST_Y(ord.pickup_point::geometry) pickup_lat, ST_X(ord.pickup_point::geometry) pickup_lng, ST_Y(ord.dropoff_point::geometry) dropoff_lat, ST_X(ord.dropoff_point::geometry) dropoff_lng,
+         CASE WHEN sp.rating_count=0 THEN NULL ELSE round(sp.rating_sum::numeric/sp.rating_count,2) END sender_rating, sp.rating_count sender_rating_count
        FROM offers f JOIN orders ord ON ord.id=f.order_id AND ord.status='searching'
        JOIN profiles sp ON sp.id=ord.user_profile_id JOIN driver_details d ON d.profile_id=f.driver_profile_id
-       WHERE f.driver_profile_id=$1 AND f.status='offered' AND f.expires_at > now() ORDER BY f.id DESC LIMIT 1`, [driverId]);
-    if (o) o.offer_id = Number(o.offer_id);   // big ids come out of PostgreSQL as text; the app always gets a number
-    return { offer: o ?? null };
+       WHERE f.driver_profile_id=$1 AND f.status IN ('offered','bid') AND f.expires_at > now() ${where}`;
+  private cleanRequest = (o: any) => ({ ...o, offer_id: Number(o.offer_id), dropoff_address: undefined });   // big ids come out of PostgreSQL as text; the app always gets a number
+
+  // Every open request shown to this courier (nearest first), with his own pending price if he answered one.
+  async listRequests(driverId: string) {
+    const rows = await this.db.query(this.requestSql('') + ' ORDER BY pickup_distance_m ASC, f.id DESC LIMIT 20', [driverId]);
+    return { requests: rows.map(this.cleanRequest) };
   }
 
-  async accept(driverId: string, offerId: any) {
+  // Older apps: the newest open request only.
+  async currentOffer(driverId: string) {
+    const o = await this.db.one(this.requestSql(`AND f.status='offered'`) + ' ORDER BY f.id DESC LIMIT 1', [driverId]);
+    return { offer: o ? this.cleanRequest(o) : null };
+  }
+
+  // The courier answers a request with a price: the customer's own price, or a higher one (never above the order's
+  // allowed maximum). The customer then chooses among the couriers who answered. If the customer switched on
+  // "auto-accept" and the courier accepts the customer's price, the job is his at once (first come, first served).
+  async makeBid(driverId: string, offerId: any, priceIn: any) {
     if (!isId(offerId)) throw bad('BAD_ID', 'offer_id must be a number');
     await assertCanWork((s, p) => this.db.query(s, p), driverId);
+    const pre = await this.db.one(
+      `SELECT f.order_id, ord.offered_da, ord.max_da, ST_Y(d.last_location::geometry) lat, ST_X(d.last_location::geometry) lng,
+              ST_Y(ord.pickup_point::geometry) plat, ST_X(ord.pickup_point::geometry) plng
+       FROM offers f JOIN orders ord ON ord.id=f.order_id JOIN driver_details d ON d.profile_id=f.driver_profile_id
+       WHERE f.id=$1 AND f.driver_profile_id=$2`, [offerId, driverId]);
+    if (!pre) throw fail(409, 'OFFER_GONE', 'This request is no longer available');
+    const price = priceIn === undefined || priceIn === null ? pre.offered_da : priceIn;
+    if (!isInt(price)) throw bad('BAD_PRICE', 'price_da must be a whole number of dinars');
+    // The time to reach the pickup point, measured outside the transaction (road distance when available).
+    const eta = pre.lat == null ? null : (await this.routing.route({ lat: pre.lat, lng: pre.lng }, { lat: pre.plat, lng: pre.plng })).duration_s;
     return this.db.tx(async q => {
-      const [f] = await q(`UPDATE offers SET status='accepted' WHERE id=$1 AND driver_profile_id=$2 AND status='offered' AND expires_at > now() RETURNING order_id`, [offerId, driverId]);
-      if (!f) throw fail(409, 'OFFER_GONE', 'This offer is no longer available');
-      let o;
+      const [o] = await q(`SELECT id, status, ref, user_profile_id, offered_da, max_da, auto_accept FROM orders WHERE id=$1 FOR UPDATE`, [pre.order_id]);
+      const [f] = await q(`SELECT id, status FROM offers WHERE id=$1 AND driver_profile_id=$2 FOR UPDATE`, [offerId, driverId]);
+      if (!o || o.status !== 'searching' || !f || !['offered', 'bid'].includes(f.status)) throw fail(409, 'OFFER_GONE', 'This request is no longer available');
+      if (price < o.offered_da || price > o.max_da) throw bad('PRICE_NOT_ALLOWED', `Price must be between ${o.offered_da} and ${o.max_da}`);
+      const [ok] = await q(`SELECT 1 FROM driver_details d JOIN profiles p ON p.id=d.profile_id JOIN orders o ON o.id=$2 WHERE d.profile_id=$1 AND ${ELIGIBLE_SQL('p', 'o')}`, [driverId, o.id]);
+      if (!ok) throw fail(409, 'NOT_ELIGIBLE', 'You cannot take this request now (offline, busy or over your cash limit)');
+      if (o.auto_accept && price === o.offered_da) {
+        await assign(q, o.id, f.id, driverId, price);
+        return { job_order_id: o.id as string };
+      }
       try {
-        [o] = await q(`UPDATE orders SET status='assigned', driver_profile_id=$2, locked_da=offered_da, assigned_at=now() WHERE id=$1 AND status='searching' AND driver_profile_id IS NULL RETURNING id, user_profile_id, ref`, [f.order_id, driverId]);
-      } catch (e: any) { if (e.code === '23505') throw fail(409, 'ALREADY_ON_JOB', 'You already have an active job'); throw e; }
-      if (!o) throw fail(409, 'ORDER_TAKEN', 'Order already taken or cancelled');
-      await q(`UPDATE offers SET status='expired' WHERE order_id=$1 AND status='offered'`, [f.order_id]);
-      await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'assigned',$2,'{}')`, [f.order_id, driverId]);
-      await notify(q, { profile: o.user_profile_id, kind: 'order.assigned', order: f.order_id, dedupe: `order:${f.order_id}:assigned`, data: { ref: o.ref } });
-      return { job_order_id: f.order_id };
-    }).then(async r => ({ job: await this.job(driverId, r.job_order_id) }));
+        await q(`UPDATE offers SET status='bid', bid_da=$2, bid_at=now(), bid_expires_at=now() + make_interval(secs => $3), eta_s=$4 WHERE id=$1`, [f.id, price, cfg.bidTtlS(), eta]);
+      } catch (e: any) { if (e.code === '23505') throw fail(409, 'BID_PENDING', 'Wait for the answer to your other offer first'); throw e; }
+      await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'bid_made',$2,$3)`, [o.id, driverId, { price_da: price }]);
+      await notify(q, { profile: o.user_profile_id, kind: 'order.bid', order: o.id, priority: 'high', expiresInS: cfg.bidTtlS(), dedupe: `offer:${f.id}:bid:${Date.now()}`, data: { offer_id: Number(f.id), ref: o.ref, price_da: price } });
+      return { bid: { offer_id: Number(f.id), price_da: price, eta_s: eta } };
+    }).then(async (r: any) => (r.job_order_id ? { job: await this.job(driverId, r.job_order_id) } : { job: null, bid: { ...r.bid, expires_in_s: cfg.bidTtlS() } }));
   }
 
+  // Older apps: "accept" = answer with the customer's price.
+  accept(driverId: string, offerId: any) { return this.makeBid(driverId, offerId, null); }
+
+  // "Not for me": the request leaves this courier's list (it is never shown to him again).
   async decline(driverId: string, offerId: any) {
     if (!isId(offerId)) throw bad('BAD_ID', 'offer_id must be a number');
     const r = await this.db.one(`UPDATE offers SET status='declined' WHERE id=$1 AND driver_profile_id=$2 AND status='offered' RETURNING order_id`, [offerId, driverId]);

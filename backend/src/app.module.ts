@@ -7,6 +7,8 @@ import { AuthGuard } from './auth/guard';
 import { Sms } from './auth/sms.service';
 import { Google } from './auth/google';
 import { Routing } from './geo/routing';
+import { Eta } from './geo/eta';
+import { Places } from './geo/places';
 import { Realtime } from './notify/realtime.service';
 import { PushService } from './notify/push.service';
 import { NotifyController } from './notify/notify.controller';
@@ -29,6 +31,6 @@ import { Watchdog } from './trust/watchdog';
 @Module({
   imports: [DbModule],
   controllers: [AuthController, NotifyController, StaffController, ...(process.env.TEST_HOOKS === '1' ? [DevController] : []), UserOrdersController, DriverController, RatingsController, TrackingController, DocumentsController],
-  providers: [SecurityLog, Maintenance, AuthService, Sms, Google, Realtime, PushService, StaffService, Routing, Matching, OrdersService, RatingsService, DriverService, Documents, Tracking, TrustService, Watchdog, { provide: APP_GUARD, useClass: AuthGuard }],
+  providers: [SecurityLog, Maintenance, AuthService, Sms, Google, Realtime, PushService, StaffService, Routing, Eta, Places, Matching, OrdersService, RatingsService, DriverService, Documents, Tracking, TrustService, Watchdog, { provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule {}

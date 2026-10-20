@@ -15,7 +15,8 @@ const login = async (phone: string, path: string) => { await api('/send_code', {
   await pool.query(`UPDATE profiles SET status='active' WHERE id=$1`, [dr.active_profile.id]); await pool.query(`UPDATE driver_details SET cash_limit_da=50000 WHERE profile_id=$1`, [dr.active_profile.id]);
   await api('/set_online', { online: true }, dr.token); await api('/update_location', { lat: 36.7600, lng: 3.0500 }, dr.token);
   const q = await api('/get_quote', { pickup: { lat: 36.7538, lng: 3.0588 }, dropoff: { lat: 36.7750, lng: 3.0600 }, size: 'small' }, ut);
-  const o = await api('/create_order', { quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: { street: 'Rue Didouche Mourad' }, dropoff_address: { street: 'Bab El Oued', landmark: 'near the market' }, recipient_name: 'Karim', recipient_phone: '+213770123456', payer: 'recipient', cod_amount_da: 4500, inspection: 'open' }, ut, { 'idempotency-key': 'visual-key-01' });
+  const o = await api('/create_order', { quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: { street: 'Rue Didouche Mourad' }, dropoff_address: { street: 'Bab El Oued', landmark: 'near the market' }, recipient_name: 'Karim', recipient_phone: '+213770123456', payer: 'recipient', cod_amount_da: 4500, inspection: 'open', auto_accept: true }, ut, { 'idempotency-key': 'visual-key-01' });
+  await api('/track_confirm', { t: o.tracking_token });
   for (let i = 0; i < 20; i++) { const f = (await api('/get_current_offer', undefined, dr.token)).offer; if (f) { await api('/accept_offer', { offer_id: f.offer_id }, dr.token); break; } await new Promise(r => setTimeout(r, 500)); }
   const v = await api('/get_order?id=' + o.id, undefined, ut);
   const ph = (await upload(B, dr.token, 'parcel_photo')).b.document_id;

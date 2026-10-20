@@ -148,7 +148,7 @@ export class StaffService {
     delete order.delivery_code; delete order.idempotency_key;   // staff never see the delivery code (it protects against fraud, including by insiders)
     const [events, offers, ratings, problems, ledger] = await Promise.all([
       this.db.query(`SELECT e.id, e.type, e.data, e.created_at, p.display_name AS actor, s.name AS staff FROM order_events e LEFT JOIN profiles p ON p.id=e.actor_profile_id LEFT JOIN staff_users s ON s.id=e.actor_staff_id WHERE e.order_id=$1 ORDER BY e.id`, [oid]),
-      this.db.query(`SELECT f.id, f.rank, f.status, f.offered_at, f.expires_at, p.display_name AS driver FROM offers f JOIN profiles p ON p.id=f.driver_profile_id WHERE f.order_id=$1 ORDER BY f.id`, [oid]),
+      this.db.query(`SELECT f.id, f.rank, f.status, f.offered_at, f.expires_at, f.bid_da, p.display_name AS driver FROM offers f JOIN profiles p ON p.id=f.driver_profile_id WHERE f.order_id=$1 ORDER BY f.id`, [oid]),
       this.db.query(`SELECT r.stars, r.comment, r.created_at, a.display_name AS rater, b.display_name AS rated FROM ratings r JOIN profiles a ON a.id=r.rater_profile_id JOIN profiles b ON b.id=r.rated_profile_id WHERE r.order_id=$1`, [oid]),
       this.db.query(`SELECT id, reason, note, status, resolution, created_at, resolved_at, reporter_kind, photos FROM problem_reports WHERE order_id=$1 ORDER BY id`, [oid]),
       this.db.query(`SELECT id, type, amount_da, note, created_at FROM cash_ledger WHERE order_id=$1 ORDER BY id`, [oid]),
@@ -166,11 +166,11 @@ export class StaffService {
       const [o] = await q(`SELECT o.*, sp.display_name AS sender_name, sa.phone AS sender_phone FROM orders o JOIN profiles sp ON sp.id=o.user_profile_id JOIN accounts sa ON sa.id=sp.account_id WHERE o.id=$1 FOR UPDATE OF o`, [oid]);
       if (!o) throw fail(404, 'NOT_FOUND', 'Order not found');
       const ev = (type: string, data: any) => q(`INSERT INTO order_events(order_id,type,actor_staff_id,data) VALUES ($1,$2,$3,$4)`, [oid, type, staff, data]);
-      const withdraw = async () => { for (const x of await q(`UPDATE offers SET status='expired' WHERE order_id=$1 AND status='offered' RETURNING id, driver_profile_id`, [oid]))
+      const withdraw = async () => { for (const x of await q(`UPDATE offers SET status='expired' WHERE order_id=$1 AND status IN ('offered','bid') RETURNING id, driver_profile_id`, [oid]))
         await notify(q, { profile: x.driver_profile_id, kind: 'offer.withdrawn', order: oid, push: false, dedupe: `offer:${x.id}:end`, data: { offer_id: Number(x.id), reason: 'support' } }); };
       const stamp = Date.now();
       if (action === 'cancel') {
-        if (!['searching', 'assigned'].includes(o.status)) throw fail(409, 'CANNOT_CANCEL', `Order is ${o.status}. After pickup use start_return.`);
+        if (!['awaiting_recipient', 'searching', 'assigned'].includes(o.status)) throw fail(409, 'CANNOT_CANCEL', `Order is ${o.status}. After pickup use start_return.`);
         await q(`UPDATE orders SET status='cancelled', cancel_reason=$2 WHERE id=$1`, [oid, `support: ${reason}`]); await withdraw();
         if (o.status === 'assigned') await notify(q, { profile: o.driver_profile_id, kind: 'job.cancelled', order: oid, priority: 'high', dedupe: `order:${oid}:cancelled`, data: { ref: o.ref } });
         await notify(q, { profile: o.user_profile_id, kind: 'order.cancelled', order: oid, dedupe: `order:${oid}:cancelled_by_support`, data: { ref: o.ref } });

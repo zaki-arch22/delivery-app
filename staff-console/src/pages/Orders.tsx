@@ -5,7 +5,7 @@ import { ActionDialog, addressText, Empty, ErrorBox, Field, Loading, Modal, Page
 import type { Nav } from '../App';
 import { DocPhoto } from './Drivers';
 
-const STATUSES = ['searching', 'assigned', 'picked_up', 'delivered', 'failed', 'cancelled', 'expired'];
+const STATUSES = ['awaiting_recipient', 'searching', 'assigned', 'picked_up', 'delivered', 'failed', 'cancelled', 'expired'];
 
 export function Orders({ nav, openId }: { nav: Nav; openId?: string }) {
   useLang();
@@ -55,7 +55,7 @@ export function OrderDetail({ id, onClose }: { id: string; nav: Nav; onClose: ()
   const o = data?.order;
   // Each action is offered ONLY in the states where the server accepts it.
   const can: Record<Act, boolean> = o ? {
-    cancel: ['searching', 'assigned'].includes(o.status), reassign: o.status === 'assigned', start_return: o.status === 'picked_up' && o.leg === 'delivery',
+    cancel: ['awaiting_recipient', 'searching', 'assigned'].includes(o.status), reassign: o.status === 'assigned', start_return: o.status === 'picked_up' && o.leg === 'delivery',
     reset_code_attempts: o.status === 'picked_up' && o.code_attempts > 0, correct_address: ['searching', 'assigned', 'picked_up'].includes(o.status),
   } : { cancel: false, reassign: false, start_return: false, reset_code_attempts: false, correct_address: false };
   const run = async (reason: string) => {
@@ -93,7 +93,7 @@ export function OrderDetail({ id, onClose }: { id: string; nav: Nav; onClose: ()
           <div className="table-wrap"><table><tbody>{data.events.map((e: any) => (
             <tr key={e.id}><td className="num">{fmtDate(e.created_at)}</td><td><strong>{String(e.type).replace(/_/g, ' ')}</strong></td><td>{e.staff ? `${t('col.by')} ${e.staff}` : e.actor ?? ''}</td><td className="muted wrap-text">{Object.keys(e.data ?? {}).length ? JSON.stringify(e.data).slice(0, 160) : ''}</td></tr>))}</tbody></table></div>
         </section>
-        {data.offers.length > 0 && <section><h3>{t('detail.offers')}</h3><div className="table-wrap"><table><tbody>{data.offers.map((f: any) => <tr key={f.id}><td>#{f.rank}</td><td>{f.driver}</td><td>{f.status}</td><td className="num">{fmtDate(f.offered_at)}</td></tr>)}</tbody></table></div></section>}
+        {data.offers.length > 0 && <section><h3>{t('detail.offers')}</h3><div className="table-wrap"><table><tbody>{data.offers.map((f: any) => <tr key={f.id}><td>#{f.rank}</td><td>{f.driver}</td><td>{f.status}</td><td className="num">{f.bid_da ? `${fmtNum(f.bid_da)} ${t('common.da')}` : '—'}</td><td className="num">{fmtDate(f.offered_at)}</td></tr>)}</tbody></table></div></section>}
         {data.problems.length > 0 && <section><h3>{t('detail.problems')}</h3>{data.problems.map((p: any) => <p key={p.id}><Status s={p.status} /> <strong>{tx('reason.' + p.reason, p.reason)}</strong> <span className="wrap-text">{p.note}</span>{p.resolution && <span className="muted"> → {p.resolution}</span>}</p>)}</section>}
         {data.ratings.length > 0 && <section><h3>{t('detail.ratings')}</h3>{data.ratings.map((r: any, i: number) => <p key={i}><strong>{'★'.repeat(r.stars)}</strong> {r.rater} → {r.rated} <span className="wrap-text">{r.comment}</span></p>)}</section>}
         {data.photos?.length > 0 && <section><h3>{t('detail.photos')}</h3><div className="docs">{data.photos.map((p: any) => <DocPhoto key={p.id} id={p.id} label={tx('doc.' + p.kind, p.kind)} />)}</div></section>}

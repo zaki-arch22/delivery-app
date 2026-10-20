@@ -35,7 +35,10 @@ async function makeDriver(phone: string, name: string, lat: number, lng: number,
 const P = { lat: 36.7538, lng: 3.0588 }, D = { lat: 36.765, lng: 3.07 }, adr = { street: 'Rue Didouche Mourad' };
 async function order(tok: string, key: string, phone = '+213770000001') {
   const q = (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, tok)).b;
-  return (await api('/create_order', { quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Amine', recipient_phone: phone, payer: 'sender' }, tok, { 'idempotency-key': key })).b;
+  const o = (await api('/create_order', { auto_accept: true, quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Amine', recipient_phone: phone, payer: 'sender' }, tok, { 'idempotency-key': key })).b;
+  // The receiver says yes first (tracking link), then couriers are searched. Auto-accept: the first courier who accepts gets it.
+  if (o?.status === 'awaiting_recipient') { await api('/track_confirm', { t: o.tracking_token }); return { ...o, status: 'searching' }; }
+  return o;
 }
 const profileOf = async (id: number) => (await pool.query(`SELECT profile_id FROM notifications WHERE id=$1`, [id])).rows[0]?.profile_id;
 
@@ -90,8 +93,8 @@ const profileOf = async (id: number) => (await pool.query(`SELECT profile_id FRO
   const off2b = sD1.msgs.filter(m => m.kind === 'offer.new').pop();
   await api('/accept_offer', { offer_id: off2b.data.offer_id }, D1.token); await step(O2.id, { step: 'picked_up' });
   const code2 = (await api('/get_order?id=' + O2.id, undefined, U1.token)).b.delivery_code; await step(O2.id, { step: 'delivered', delivery_code: code2 });
-  const sU1b = new Sock(U1.token, lastSeen); await until(() => sU1b.msgs.length >= 3, 3000);
-  ok('N7 reconnect replays exactly what was missed, in order', sU1b.msgs.map(m => m.kind).join() === 'order.assigned,order.picked_up,order.delivered' && sU1b.msgs.every(m => m.id > lastSeen), sU1b.msgs.map(m => m.kind));
+  const sU1b = new Sock(U1.token, lastSeen); await until(() => sU1b.msgs.length >= 4, 3000);
+  ok('N7 reconnect replays exactly what was missed, in order', sU1b.msgs.map(m => m.kind).join() === 'order.recipient_confirmed,order.assigned,order.picked_up,order.delivered' && sU1b.msgs.every(m => m.id > lastSeen), sU1b.msgs.map(m => m.kind));
   const last2 = Math.max(...sU1b.msgs.map(m => m.id)); sU1b.close(); await sleep(200);
   const sU1c = new Sock(U1.token, last2); await sleep(900);
   ok('N7 reconnecting again replays nothing (no duplicates)', sU1c.msgs.length === 0, sU1c.msgs);
@@ -105,11 +108,16 @@ const profileOf = async (id: number) => (await pool.query(`SELECT profile_id FRO
   const O4 = await order(U1.token, 'notify-order-004'); const off4 = await until(() => sD1.msgs.filter(m => m.kind === 'offer.new' && m.data.ref === O4.ref)[0]);
   await api('/accept_offer', { offer_id: off4.data.offer_id }, D1.token); await api('/cancel_order', { order_id: O4.id }, U1.token);
   const jc = await sD1.waitKind('job.cancelled'); ok('N9 driver is told LIVE the job was cancelled (high priority)', !!jc && jc.priority === 'high');
-  // N10 offer expires on its own
-  const O5 = await order(U1.token, 'notify-order-005'); const off5 = await until(() => sD1.msgs.filter(m => m.kind === 'offer.new' && m.data.ref === O5.ref)[0]);
-  const w5 = await until(() => sD1.msgs.find(m => m.kind === 'offer.withdrawn' && m.data.offer_id === off5?.data.offer_id), 7000);
-  ok('N10 unanswered offer is withdrawn LIVE when it expires, so the screen clears itself', !!w5 && w5.data.reason === 'expired', w5);
-  await api('/cancel_order', { order_id: O5.id }, U1.token);
+  // N10 a courier's price offer reaches the customer LIVE, and ends LIVE on both screens when nobody answers it
+  const O5 = await order(U1.token, 'notify-order-005'); await api('/set_auto_accept', { order_id: O5.id, on: false }, U1.token);
+  const off5 = await until(() => sD1.msgs.filter(m => m.kind === 'offer.new' && m.data.ref === O5.ref)[0]);
+  const sU5 = new Sock(U1.token); await until(() => sU5.ready);
+  await api('/make_bid', { offer_id: off5.data.offer_id, price_da: O5.offered_da + 20 }, D1.token);
+  const b5 = await sU5.waitKind('order.bid', 3000);
+  ok('N10 the customer gets the courier\'s offer LIVE (high priority, with the price)', !!b5 && b5.priority === 'high' && b5.data.price_da === O5.offered_da + 20, b5);
+  const e5 = await sD1.waitKind('bid.expired', 8000), g5 = await sU5.waitKind('order.bid_withdrawn', 8000);
+  ok('N10 an unanswered offer ends LIVE on both screens, so they clear themselves', !!e5 && !!g5 && e5.data.offer_id === off5.data.offer_id, { e5, g5 });
+  sU5.close(); await api('/cancel_order', { order_id: O5.id }, U1.token);
 
   // N11 two profiles on ONE phone number never see each other's notifications
   const A = await makeUser('+213550500001', 'Adam Seller'); const l2 = await login('+213550500001', 'user');
@@ -139,10 +147,11 @@ const profileOf = async (id: number) => (await pool.query(`SELECT profile_id FRO
   await api('/logout', {}, (await api('/switch_profile', { type: 'user' }, A.token)).b.token ?? A.token);
 
   // N13 push retries until it works
+  const maxId = (await pool.query(`SELECT COALESCE(max(id),0)::int m FROM notifications`)).rows[0].m;
   await api('/dev/fail_next', { push: 2 }); const O8 = await order(U1.token, 'notify-order-008');
-  const off8 = await until(() => sD1.msgs.filter(m => m.kind === 'offer.new' && m.data.ref === O8.ref)[0]);
-  const row8 = await until(async () => { const r = (await pool.query(`SELECT push_state, push_attempts FROM notifications WHERE id=$1`, [off8.id])).rows[0]; return r.push_state === 'sent' ? r : null; }, 6000);
-  ok('N13 push failed twice, was retried, and finally sent (3 attempts)', !!row8 && row8.push_attempts === 2, row8);
+  // The two simulated failures may hit one push or two different ones: either way each failed push is retried until sent.
+  const row8 = await until(async () => { const r = (await pool.query(`SELECT count(*) FILTER (WHERE push_state='pending')::int pending, COALESCE(sum(push_attempts) FILTER (WHERE push_state='sent'),0)::int retries FROM notifications WHERE id > $1`, [maxId])).rows[0]; return r.pending === 0 && r.retries === 2 ? r : null; }, 8000);
+  ok('N13 pushes that failed (twice in total) were retried and finally sent', !!row8, row8);
   await api('/cancel_order', { order_id: O8.id }, U1.token);
 
   // N14 NO SMS to recipients. A registered recipient gets a PUSH with the code; others get it from the sender.
@@ -153,7 +162,7 @@ const profileOf = async (id: number) => (await pool.query(`SELECT profile_id FRO
   const inc = await sR.waitKind('order.incoming');
   ok('N14 a recipient who is a registered user is told LIVE, with the delivery code', !!inc && inc.data.delivery_code === code9, inc);
   const pr = await until(async () => (await api('/dev/pushes?token=tok-recipient-0001')).b.sent?.find((x: any) => x.m.data.kind === 'order.incoming'));
-  ok('N14 ...and gets a PUSH in French with the code', !!pr && pr.m.title === 'Un colis arrive' && pr.m.body.includes(code9), pr);
+  ok('N14 ...and gets a PUSH in French asking to confirm', !!pr && pr.m.title === 'Un colis pour vous' && pr.m.body.startsWith('Sara veut vous envoyer un colis'), pr);
   ok('N14 the sender always sees the code in the app (the way to give it to anyone)', /^\d{4}$/.test(code9));
   await api('/cancel_order', { order_id: O9.id }, U1.token);
   const O10 = await order(U1.token, 'notify-order-010', '+213770099999'); await sleep(800);
@@ -173,8 +182,8 @@ const profileOf = async (id: number) => (await pool.query(`SELECT profile_id FRO
   ok('N16 an unsupported language is refused', (await api('/register_device', { token: 'tok-recipient-0001', platform: 'android', language: 'de' }, R.token)).b.error === 'BAD_LANGUAGE');
   ok('N16 English is accepted', (await api('/register_device', { token: 'tok-recipient-0001', platform: 'android', language: 'en' }, R.token)).s === 200);
   const O12 = await order(U1.token, 'notify-order-012', '+213770000009'); const code12 = (await api('/get_order?id=' + O12.id, undefined, U1.token)).b.delivery_code;
-  const pe = await until(async () => (await api('/dev/pushes?token=tok-recipient-0001')).b.sent?.find((x: any) => x.m.body.includes(code12)));
-  ok('N16 the same device now gets the push in ENGLISH', !!pe && pe.m.title === 'A parcel is on its way to you' && pe.m.body === `Delivery code: ${code12}`, pe);
+  const pe = await until(async () => (await api('/dev/pushes?token=tok-recipient-0001')).b.sent?.find((x: any) => x.m.data.ref === O12.ref));
+  ok('N16 the same device now gets the push in ENGLISH', !!pe && pe.m.title === 'A parcel for you' && pe.m.body === 'Sara wants to send you a parcel. Open the app to confirm.' && /^\d{4}$/.test(code12), pe);
   await api('/cancel_order', { order_id: O12.id }, U1.token);
   // N15 isolation of every message, by database proof
   let leaks = 0; for (const [s, id] of [[sD1, D1.id], [sU1, U1.id], [sU1b, U1.id], [sAU, A.id], [sAD, AD.id], [sR, R.id]] as [Sock, string][]) for (const m of s.msgs) if ((await profileOf(m.id)) !== id) leaks++;

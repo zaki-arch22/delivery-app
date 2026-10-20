@@ -2,7 +2,9 @@
 const n = (k: string, d: number) => Number(process.env[k] ?? d);
 export const cfg = {
   tickMs: () => n('TICK_MS', 3000),
-  offerTtlS: () => n('OFFER_TTL_S', 20),          // how long one driver has to answer an offer
+  bidTtlS: () => n('BID_TTL_S', 40),              // how long a courier's price offer waits for the customer's answer
+  broadcastMax: () => n('BROADCAST_MAX', 10),     // a request is shown to at most this many nearby couriers at once
+  recipientWindowMin: () => n('RECIPIENT_WINDOW_MIN', 60), // the receiver has this long to confirm, then the order expires
   searchWindowS: () => n('SEARCH_WINDOW_S', 600), // how long an order searches before it expires
   radius1: () => n('RADIUS_1_M', 3000),           // first search radius
   radius2: () => n('RADIUS_2_M', 8000),           // widened radius
@@ -20,6 +22,8 @@ export const cfg = {
   overdueMin: () => n('OVERDUE_MIN', 180),        // a parcel not delivered this long after pickup = a case
   pickupLateMin: () => n('PICKUP_LATE_MIN', 60),  // accepted but not picked up after this long = a case
   reportHours: () => n('REPORT_HOURS', 24),       // a problem can be reported until this long after the order ends
+  geocoderUrl: () => process.env.GEOCODER_URL ?? '',  // place search (Photon-compatible API); empty = search off
+  geocoderTimeoutMs: () => n('GEOCODER_TIMEOUT_MS', 2500),
   selfieDays: () => n('SELFIE_DAYS', 7),          // a driver takes a new selfie before going online at least this often (0 = off)
 };
 export const cfgN = {
