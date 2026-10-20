@@ -23,7 +23,7 @@ Branch: `claude/optimistic-cannon-iw9rm9` (repo zaki-arch22/delivery-app). Resum
 - Milestone "push and build prep": PushBridge (register_device for the active profile/language, tap opens the right screen), incoming parcels card for registered recipients, staff console shows problem reasons in words, eas.json + app.config.js + mobile/BUILD.md. 358 tests + 12 database rules green.
 
 ## In progress
-- First Android build DONE (preview APK, build 089b7671): https://expo.dev/artifacts/eas/Huf2NX81wrhv4bLLsYlSBViOezdnf9lO6rS3nTq8I7M.apk . It points to a placeholder server (no backend reachable yet): screens open, login shows 'No connection'.
+- Android build with over-the-air updates DONE (preview APK, build 6309a8d5): https://expo.dev/artifacts/eas/iT_Dnk_AFiHsvEgpg6eiC__QZQYAXJlDNUOrW2oFR64.apk . After this one, JS changes go out with `npx eas-cli update --channel preview` (needs u.expo.dev allowed). It points to a placeholder server (no backend reachable yet): screens open, login shows 'No connection'.
 - Proposed to the owner (waiting for his answer): over-the-air updates (EAS Update, needs u.expo.dev allowed) + a free temporary tunnel to the test server (needs trycloudflare.com allowed) for real testing on the phone.
 
 ## Next, in order (matches CLAUDE.md section 9)
