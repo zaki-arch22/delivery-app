@@ -39,6 +39,9 @@ The database holds up to about 1 GB. Road distances use the straight-line estima
    **Google Authenticator** app on your phone, tap **+ -> Enter a setup key**, and type the secret shown in the box.
    That app now gives you the 6-digit staff code.
 5. **Environment** tab: delete `FIRST_ADMIN_PASSWORD` and save (it is no longer needed; the account exists).
+   Lost the secret, or it is not in the log? **Environment** tab: add `FIRST_ADMIN_RESET` = your staff email and
+   `FIRST_ADMIN_PASSWORD` = a NEW password (12+ characters), save, wait for **Live**, then search the log for
+   `STAFF ACCOUNT RESET`. Then delete both settings. (Each reset happens once per new password.)
 6. Copy the address shown at the top of the service page (`https://....onrender.com`) and send it to Claude.
 
 ## What Claude does next
