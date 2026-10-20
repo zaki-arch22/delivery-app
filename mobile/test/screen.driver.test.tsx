@@ -1,7 +1,7 @@
 // Driver sign-up with photos, driven like a person would, against the REAL backend and the TEST database.
 // Only the phone's camera is replaced (there is no camera in a test): it "takes" the made-up test picture.
 import { screen, fireEvent, act } from 'expo-router/testing-library';
-import { db, open, svc, loginThroughScreens } from './screens';
+import { db, open, svc, loginThroughScreens, menu } from './screens';
 
 const mockPhoto = require('fs').readFileSync(require('path').join(__dirname, '../../backend/test/fixtures/photo.jpg'));
 let mockPick: 'photo' | 'denied' | 'cancel' | 'not-an-image' = 'photo';
@@ -68,7 +68,7 @@ test('a sender adds a driver profile from Settings (same photos flow), and keeps
   await fireEvent.press(screen.getByTestId('accept-rules'));
   await fireEvent.press(screen.getByTestId('create-profile'));
   await screen.findByText('Hello, Sara Seller');
-  await fireEvent.press(screen.getByTestId('open-settings'));
+  await menu('menu-settings');
   await fireEvent.press(await screen.findByTestId('add-driver'));
   await screen.findByTestId('screen-driver-signup');
   expect(screen.getByTestId('name-input').props.value).toBe('Sara Seller');                   // pre-filled, can be changed
@@ -81,4 +81,20 @@ test('a sender adds a driver profile from Settings (same photos flow), and keeps
   expect(await screen.findByTestId('driver-status')).toHaveTextContent(/waiting for approval/);
   const me = await s.client.call('/get_me');
   expect(me.profiles.map((p: any) => `${p.type}:${p.status}`).sort()).toEqual(['driver:pending_approval', 'user:active']);
+});
+
+test('side menu: a courier without a customer profile switches to Customer mode (creates it), and back to Courier mode', async () => {
+  const s = svc();
+  await open(s);
+  await loginThroughScreens('0554000001', 'driver');                                   // Yacine Rider, courier only
+  await menu('switch-mode');
+  await screen.findByTestId('screen-add-customer');
+  await fireEvent.press(screen.getByTestId('accept-rules'));
+  await act(async () => { await fireEvent.press(screen.getByTestId('add-user-confirm')); });
+  expect(await screen.findByTestId('send-parcel')).toBeTruthy();                       // Customer mode home: the map and "Where to?"
+  await menu('switch-mode');                                                            // now both exist: a plain switch
+  expect(await screen.findByTestId('driver-status')).toHaveTextContent(/waiting for approval/);
+  const me = await s.client.call('/get_me');
+  expect(me.active_profile.type).toBe('driver');
+  expect(me.profiles.map((p: any) => p.type).sort()).toEqual(['driver', 'user']);
 });

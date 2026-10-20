@@ -368,7 +368,7 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
     ok('SEC22 ids too big for the database are refused on every offer function', big === 3 && (await api('/list_notifications?before=1e20', undefined, A.token)).b.error === 'BAD_ID', big);
     await api('/cancel_order', { order_id: self.id }, A.token); await api('/cancel_order', { order_id: other.id }, A.token);
     // place search (switched off on this server), notifications, names
-    ok('SEC22 place search switched off answers "off", never crashes', (await api('/search_places?q=ardis', undefined, A.token)).b.error === 'SEARCH_OFF' && (await api('/app_config')).b.place_search === false);
+    ok('SEC22 place search switched off answers "off", never crashes', (await api('/search_places?q=ardis', undefined, A.token)).b.error === 'SEARCH_OFF' && (await api('/reverse_place?lat=36.7&lng=3.0', undefined, A.token)).b.error === 'SEARCH_OFF' && (await api('/reverse_place?lat=1e400&lng=x', undefined, A.token)).s === 400 && (await api('/app_config')).b.place_search === false);
     ok('SEC22 place search and the notifications list need a login', (await api('/search_places?q=ardis')).s === 401 && (await api('/list_notifications')).s === 401);
     ok('SEC22 nobody\'s notifications list carries a delivery or pickup code', !/delivery_code|pickup_code/.test(JSON.stringify((await api('/list_notifications', undefined, A.token)).b)));
     let names = 0; for (const n of ['x'.repeat(5000), 'a', 'Bob\u0000', 'Eve\u202Elive', 42, null]) if ((await api('/rename_profile', { display_name: n }, A.token)).b.error === 'BAD_NAME') names++;

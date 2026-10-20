@@ -56,9 +56,7 @@ export default function DriverSignup() {
   }
 
   return (
-    <Screen testID="screen-driver-signup">
-      <Button kind="plain" label={'‹ ' + t(state.active ? 'back' : 'logout')} onPress={leave} />
-      <T kind="title">{t('driver_signup_title')}</T>
+    <Screen testID="screen-driver-signup" title={t('driver_signup_title')} onBack={leave}>
       <T kind="muted">{t('driver_signup_sub')}</T>
       <Gap />
       <Field testID="name-input" label={t('name_label')} value={name} onChangeText={v => { setName(v); setError(null); }} autoComplete="name" textContentType="name" maxLength={60} />

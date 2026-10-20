@@ -28,11 +28,9 @@ export default function RecordScreen() {
     catch (e) { const m = errorMessage(e); setMsg({ text: t(m.key, m.vars), warn: true }); }
     finally { setBusy(false); }
   }
-  if (!r) return <Screen testID="screen-record"><Button kind="plain" label={'‹ ' + t('back')} onPress={() => router.back()} /></Screen>;
+  if (!r) return <Screen testID="screen-record" title={t('record_title')} />;
   return (
-    <Screen testID="screen-record">
-      <Button kind="plain" label={'‹ ' + t('back')} onPress={() => router.back()} />
-      <T kind="title">{t('record_title')}</T>
+    <Screen testID="screen-record" title={t('record_title')}>
       {r.active_block ? <Notice testID="record-block" warn text={r.active_block.until ? t('blocked_until', { d: when(r.active_block.until, lang) }) : t(r.active_block.kind === 'ban' ? 'banned' : 'blocked_review')} /> : null}
       <View style={s.box}>
         <T kind="label" testID="record-points">{t('record_points', { n: r.points_90d })}</T>

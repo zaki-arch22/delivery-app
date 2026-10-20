@@ -11,9 +11,12 @@ import { QrScanner } from '../ui/QrScanner';
 import { errorMessage } from '../lib/errors';
 import { addressLine, money } from '../lib/orders';
 import { color, font, radius, space } from '../lib/theme';
-import { AppMap } from '../ui/AppMap';
+import { AppMap, Pin } from '../ui/AppMap';
+import { Sheet } from '../ui/Sheet';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { lastPosition, onPosition } from '../lib/tracker';
 import { Choice } from '../ui/Choice';
-import { Button, Field, Gap, Notice, Screen, T } from '../ui/kit';
+import { Button, Card, Field, Gap, Notice, RoundButton, Screen, T } from '../ui/kit';
 
 // The driver's active delivery (contract C: get_job, update_job_step, report_delivery_failure, release_job).
 // Every handover is proved (TRUST_AND_SAFETY.md): at pickup the SENDER's code (or QR) + a photo of the parcel, at the door the
@@ -32,6 +35,8 @@ export default function JobScreen() {
   const [msg, setMsg] = useState<{ text: string; warn?: boolean } | null>(null), [busy, setBusy] = useState<string | null>(null);
   const [cancelled, setCancelled] = useState(false);
   const [unsent, setUnsent] = useState(false);   // a step is saved on the phone, waiting for network
+  const [me, setMe] = useState(lastPosition());   // my own position (the same reading sent to the server)
+  useEffect(() => onPosition(setMe), []);
 
   // The server's view of the job, plus any step saved on the phone that has not reached the server yet.
   const load = useCallback(async () => {
@@ -122,9 +127,9 @@ export default function JobScreen() {
   });
   const maps = (lat: number, lng: number) => Linking.openURL(Platform.OS === 'ios' ? `http://maps.apple.com/?ll=${lat},${lng}&q=${lat},${lng}` : `geo:${lat},${lng}?q=${lat},${lng}`).catch(() => {});
 
-  if (job === undefined) return <Screen testID="screen-job"><Button kind="plain" label={'‹ ' + t('back')} onPress={() => router.back()} /></Screen>;
+  if (job === undefined) return <Screen testID="screen-job" title="" />;
   if (!job) return (
-    <Screen testID="screen-job">
+    <Screen testID="screen-job" title={t('menu_deliveries')} onBack={() => router.replace('/home')}>
       {done ? (<>
         <T kind="title" testID="job-done">{t('job_delivered')}</T>
         {unsent ? <Notice testID="unsent" text={t('sync_pending')} /> : null}
@@ -139,27 +144,43 @@ export default function JobScreen() {
   const target = toPickup ? { lat: job.pickup_lat, lng: job.pickup_lng } : { lat: job.dropoff_lat, lng: job.dropoff_lng };
   const who = toPickup ? { name: job.sender_name, phone: job.sender_phone } : { name: job.recipient_name, phone: job.recipient_phone };
   const addr = toPickup ? job.pickup_address : job.dropoff_address;
+  const pins: Pin[] = [{ id: 'A', at: { lat: job.pickup_lat, lng: job.pickup_lng }, kind: 'pickup', label: t('pickup') }, { id: 'B', at: { lat: job.dropoff_lat, lng: job.dropoff_lng }, kind: 'dropoff', label: t('dropoff') }];
+  if (me) pins.push({ id: 'me', at: me, kind: 'driver', label: t('you_are_here') });
   return (
-    <Screen testID="screen-job">
-      <Button kind="plain" label={'‹ ' + t('back_home')} onPress={() => router.replace('/home')} />
-      <T kind="muted">{job.ref}</T>
-      {unsent ? <Notice testID="unsent" text={t('sync_pending')} /> : null}
-      <T kind="title" testID="job-step">{t(job.leg === 'return' ? 'job_return' : toPickup ? 'job_to_pickup' : 'job_to_dropoff')}</T>
+    <View style={s.root} testID="screen-job">
       <View style={s.mapBox}>
-        <AppMap start={target} zoom={14} pins={[{ id: 'A', at: { lat: job.pickup_lat, lng: job.pickup_lng }, kind: 'pickup', label: t('pickup') }, { id: 'B', at: { lat: job.dropoff_lat, lng: job.dropoff_lng }, kind: 'dropoff', label: t('dropoff') }]} />
+        <AppMap start={target} zoom={14} pins={pins} fit={me ? [me, target] : [target]} pad={{ top: 110, bottom: 60 }} />
+        <SafeAreaView edges={['top']} style={s.top} pointerEvents="box-none">
+          <View style={s.topRow}>
+            <RoundButton testID="back-home-top" icon="arrow-left" label={t('back_home')} onPress={() => router.replace('/home')} />
+            <View style={s.refChip}><T style={s.refText}>{job.ref}</T></View>
+            <RoundButton testID="sos" icon="alert-octagon" label={t('sos_btn')} onPress={() => setSos(true)} />
+          </View>
+        </SafeAreaView>
       </View>
-      <View style={s.box}>
-        <T kind="label">{toPickup ? 'A' : 'B'} · {who.name}</T>
+      <Sheet inline maxFraction={0.66} testID="job-sheet">
+      {unsent ? <Notice testID="unsent" text={t('sync_pending')} /> : null}
+      <T kind="title" testID="job-step" style={{ fontSize: 22 }}>{t(job.leg === 'return' ? 'job_return' : toPickup ? 'job_to_pickup' : 'job_to_dropoff')}</T>
+      {sos ? (
+        <View style={s.sos} testID="sos-box">
+          <T kind="label">{t('sos_title')}</T>
+          <Button testID="sos-team" kind="danger" busy={busy === 'sos'} label={t('sos_team')} onPress={alertTeam} />
+          {EMERGENCY.map(e => <Button key={e.n} testID={'sos-' + e.n} kind="secondary" label={`☎ ${e.n} · ${t(e.k)}`} onPress={() => call(e.n)} />)}
+          <Button kind="plain" label={t('close')} onPress={() => setSos(false)} />
+        </View>
+      ) : null}
+      <Card style={{ backgroundColor: color.card2 }}>
+        <T kind="label">{toPickup ? '📦' : '🏁'} {who.name}</T>
         <T testID="job-address">{addressLine(addr)}</T>
         {addr.notes ? <T kind="muted">{addr.notes}</T> : null}
         <View style={s.row}>
-          <Button testID="call" kind="secondary" label={'☎ ' + t('call', { name: who.name })} onPress={() => call(who.phone)} />
-          <Button testID="open-maps" kind="plain" label={t('open_maps')} onPress={() => maps(target.lat, target.lng)} />
+          <Button testID="call" kind="secondary" icon="phone" style={{ flex: 1 }} label={t('call', { name: who.name })} onPress={() => call(who.phone)} />
+          <Button testID="open-maps" kind="secondary" icon="navigation" style={{ flex: 1 }} label={t('open_maps')} onPress={() => maps(target.lat, target.lng)} />
         </View>
-      </View>
+      </Card>
 
       {toPickup ? (<>
-        <View style={s.box} testID="pickup-proof">
+        <Card style={{ backgroundColor: color.card2 }} testID="pickup-proof">
           <T kind="label">{t('pickup_proof_title')}</T>
           <T kind="muted">{t('pickup_steps')}</T>
           {job.needs_pickup_code ? (<>
@@ -167,7 +188,7 @@ export default function JobScreen() {
             <Field testID="pickup-code-input" label={t('pickup_code_label')} value={pickupCode} onChangeText={v => setPickupCode(v.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" maxLength={4} />
           </>) : null}
           <Button testID="parcel-photo" kind="secondary" label={parcel ? '✓ ' + t('photo_taken') : '📷 ' + t('take_parcel_photo')} onPress={() => photo(setParcel)} />
-        </View>
+        </Card>
         <Button testID="picked-up" busy={busy === 'pickup'} label={t('picked_up_btn')} onPress={pickedUp} />
         {releasing ? (<>
           <T kind="label">{t('give_back_title')}</T>
@@ -195,27 +216,24 @@ export default function JobScreen() {
         </>) : <Button testID="cant-deliver" kind="plain" label={t('cant_deliver')} onPress={() => setFailing(true)} />}
       </>)}
       {msg ? <Notice testID="job-msg" warn={msg.warn} text={msg.text} /> : null}
-      {sos ? (
-        <View style={s.sos} testID="sos-box">
-          <T kind="label">{t('sos_title')}</T>
-          <Button testID="sos-team" kind="danger" busy={busy === 'sos'} label={t('sos_team')} onPress={alertTeam} />
-          {EMERGENCY.map(e => <Button key={e.n} testID={'sos-' + e.n} kind="secondary" label={`☎ ${e.n} · ${t(e.k)}`} onPress={() => call(e.n)} />)}
-          <Button kind="plain" label={t('close')} onPress={() => setSos(false)} />
-        </View>
-      ) : <Button testID="sos" kind="plain" label={'⚠ ' + t('sos_btn')} onPress={() => setSos(true)} />}
-      <QrScanner visible={!!scan} title={t(scan === 'PCK1' ? 'scan_pickup_qr' : 'scan_delivery_qr')} onCode={scanned} onClose={() => setScan(null)} />
       <Gap />
-    </Screen>
+      </Sheet>
+      <QrScanner visible={!!scan} title={t(scan === 'PCK1' ? 'scan_pickup_qr' : 'scan_delivery_qr')} onCode={scanned} onClose={() => setScan(null)} />
+    </View>
   );
 }
 // Public emergency numbers in Algeria (to be confirmed locally: sources list 14 and 1021 for civil protection).
 const EMERGENCY = [{ n: '17', k: 'sos_police' }, { n: '14', k: 'sos_civil' }, { n: '1055', k: 'sos_gendarmerie' }] as const;
 const s = StyleSheet.create({
-  sos: { backgroundColor: '#FEF3C7', borderWidth: 2, borderColor: color.amber, borderRadius: radius, padding: space(4), marginVertical: space(2), gap: space(2) },
-  mapBox: { height: 200, borderRadius: radius, overflow: 'hidden', borderWidth: 1, borderColor: color.border, marginVertical: space(3) },
-  box: { backgroundColor: color.white, borderRadius: radius, borderWidth: 1, borderColor: color.border, padding: space(4), marginVertical: space(1.5) },
+  root: { flex: 1, backgroundColor: color.page },
+  top: { position: 'absolute', top: 0, left: 0, right: 0 },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: space(4) },
+  refChip: { backgroundColor: color.card, borderRadius: 999, paddingHorizontal: space(4), paddingVertical: space(2) },
+  refText: { fontFamily: font.semibold, fontSize: 14 },
+  sos: { backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 2, borderColor: color.amber, borderRadius: radius, padding: space(4), marginVertical: space(2), gap: space(2) },
+  mapBox: { height: '38%' },
   row: { flexDirection: 'row', gap: space(3), flexWrap: 'wrap', alignItems: 'center' },
-  cash: { backgroundColor: '#FEF3C7', borderWidth: 2, borderColor: color.amber, borderRadius: radius, padding: space(4), marginVertical: space(2) },
-  cashOk: { borderColor: color.primary },
+  cash: { backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 2, borderColor: color.amber, borderRadius: radius, padding: space(4), marginVertical: space(2) },
+  cashOk: { borderColor: color.lime },
   cashText: { fontFamily: font.bold, fontSize: 20, lineHeight: 30 },
 });

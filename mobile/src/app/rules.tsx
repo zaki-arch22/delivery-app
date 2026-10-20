@@ -12,9 +12,7 @@ const POINTS: [Key, number][] = [['rule_driver_released', 1], ['rule_late_cancel
 export default function Rules() {
   const { t } = useApp();
   return (
-    <Screen testID="screen-rules">
-      <Button kind="plain" label={'‹ ' + t('back')} onPress={() => router.back()} />
-      <T kind="title">{t('rules_title')}</T>
+    <Screen testID="screen-rules" title={t('rules_title')}>
       <T kind="muted">{t('rules_intro')}</T>
       {SECTIONS.map(([h, b]) => <View key={h} style={s.box}><T kind="label">{t(h)}</T><T>{t(b)}</T></View>)}
       <View style={s.box}>

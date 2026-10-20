@@ -5,11 +5,17 @@ import * as Location from 'expo-location';
 export async function startTracking(send: (lat: number, lng: number) => Promise<unknown>): Promise<(() => void) | null> {
   const perm = await Location.requestForegroundPermissionsAsync().catch(() => ({ granted: false }));
   if (!perm.granted) return null;
-  const push = (l: Location.LocationObject) => { send(l.coords.latitude, l.coords.longitude).catch(() => {}); };
+  const push = (l: Location.LocationObject) => { last = { lat: l.coords.latitude, lng: l.coords.longitude }; listeners.forEach(f => f(last!)); send(l.coords.latitude, l.coords.longitude).catch(() => {}); };
   try { push(await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })); } catch { /* the watch below will send it */ }
   const sub = await Location.watchPositionAsync({ accuracy: Location.Accuracy.High, timeInterval: 15_000, distanceInterval: 25 }, push);
   return () => sub.remove();
 }
+
+// The courier's last known position, for his own map (no extra request: the same reading that is sent to the server).
+let last: { lat: number; lng: number } | null = null;
+const listeners = new Set<(p: { lat: number; lng: number }) => void>();
+export const lastPosition = () => last;
+export function onPosition(f: (p: { lat: number; lng: number }) => void) { listeners.add(f); return () => { listeners.delete(f); }; }
 
 // One tracker for the whole app: it keeps running while the driver moves between screens.
 let stopFn: (() => void) | null = null, starting: Promise<boolean> | null = null, generation = 0;

@@ -9,8 +9,8 @@ export function apiUrl(): string {
 export const wsUrl = (api: string) => api.replace(/^http/, 'ws') + '/ws';
 
 // The map's look (tiles). A setting, never hard-coded in screens, so another free tile service can be swapped in.
-// Default: OpenFreeMap's public "liberty" style (free, no key; OpenStreetMap data).
-export const mapStyleUrl = () => process.env.EXPO_PUBLIC_MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/liberty';
+// Default: OpenFreeMap's public "dark" style (free, no key; OpenStreetMap data), to match the app's dark look.
+export const mapStyleUrl = () => process.env.EXPO_PUBLIC_MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/dark';
 // Where the map opens before we know anything better: central Algiers.
 export const ALGIERS = { lat: 36.7538, lng: 3.0588 };
 

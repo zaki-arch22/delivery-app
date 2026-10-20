@@ -13,7 +13,7 @@ export const headers = (_req: any, res: any, next: any) => {
   next();
 };
 
-const ROUTE: Record<string, [number, number]> = { '/upload_document': [30, 3_600_000], '/send_code': [10, 3_600_000], '/verify_code': [30, 900_000], '/staff_login': [10, 900_000], '/refresh_token': [60, 3_600_000], '/track_report': [10, 3_600_000], '/track_expecting': [30, 3_600_000], '/track_confirm': [30, 3_600_000], '/track_decline': [30, 3_600_000], '/search_places': [120, 3_600_000] };
+const ROUTE: Record<string, [number, number]> = { '/upload_document': [30, 3_600_000], '/send_code': [10, 3_600_000], '/verify_code': [30, 900_000], '/staff_login': [10, 900_000], '/refresh_token': [60, 3_600_000], '/track_report': [10, 3_600_000], '/track_expecting': [30, 3_600_000], '/track_confirm': [30, 3_600_000], '/track_decline': [30, 3_600_000], '/search_places': [120, 3_600_000], '/reverse_place': [240, 3_600_000] };
 export const ipLimit = (sec: SecurityLog) => (req: any, res: any, next: any) => {
   if (limitsOff()) return next();
   const path = req.path as string, [max, win] = ROUTE[path] ?? [300, 60_000];

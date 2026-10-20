@@ -40,6 +40,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Preview APK with the live server, Google login and over-the-air updates (2026-10-20): https://expo.dev/artifacts/eas/J1flw1xWPS-GM5H-89fgDyKS77qS7_FdBkjHcGT4iIw.apk
 
+- Milestone "inDrive-style app" (2026-10-20, owner's wish + reference pack of inDrive screenshots): SERVER: the receiver confirms first (awaiting_recipient, track_confirm/track_decline, 60 min window, same-network flag for staff); inDrive offers (request shown to up to 10 couriers, make_bid with the customer's price or more, accept_bid/decline_bid, auto-accept, 40 s offers, one pending offer per courier and locked price in range enforced by the database); place search + name under the pin through our server (Photon API, GEOCODER_URL; Render uses komoot's public Photon); road shape in quotes; ETA in get_order; list_notifications; rename_profile; app_config. APP: dark theme with lime main actions, Feather icons, map-first home with pickup pin + "Where to, and for how much?", destination with search, details with route + size cards + fare −/+ + auto-accept, order screen per state (waiting for the receiver with WhatsApp button, searching with raise, couriers' offer cards, courier card with time left), side menu (profile, parcels/deliveries, cash, notifications, safety, help, Customer/Courier mode button), courier home (online pill, numbers, requests list, accept or offer more, waiting countdown), job screen on the map, receiver page yes/no in the same dark look. Verified by screenshots in English and Arabic (web build with the map replaced). Fixed: a position check accepted "not a number" from query strings. 624 tests + 14 database rules green.
+
 ## In progress
 - (none)
 
@@ -49,18 +51,15 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 3. Before launch list (CLAUDE.md section 9).
 
 ## Exact next action
-When the owner sends the Render address (https://....onrender.com) and google-services.json:
-1. Save the file as mobile/google-services.json (not secret; commit it). Check it has an oauth_client with client_type 3 (web) and one with client_type 1 for dz.delivery.app with certificate_hash fb1552c2e61f2ef53785f15d63b5bfc725fe77b2.
-2. In mobile/eas.json (preview + production env): EXPO_PUBLIC_API_URL = the Render address; EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID = the client_type 3 client id (must equal the Render setting GOOGLE_CLIENT_IDS).
-3. curl the address: /login_methods must say google:true (first call may take ~1 min while it wakes). Open /staff/ (page loads).
-4. Add over-the-air updates (owner's wish): `npx expo install expo-updates`, `npx eas-cli@latest update:configure` (channel per build profile in eas.json, runtimeVersion policy appVersion), so later changes go out with `npx eas-cli@latest update --channel preview` instead of a new APK. Then bash scripts/test-all.sh, commit, push, then `npx eas-cli@latest build -p android --profile preview --non-interactive --no-wait` in mobile/; send the APK link.
-5. Guide the owner in the staff console: create the first zone (prepare a GeoJSON polygon of central Algiers for him to paste) and open it; set the first price version (the OWNER chooses the numbers: base, per km, extras, min/max %).
-6. Check TRUST_PROXY=1 on Render: rate-limit addresses in security_events must be real client addresses.
-OSRM real data: still blocked (download.geofabrik.de); not possible on Render free anyway.
+1. Wait for the owner's feedback on the inDrive-style update (sent over the air to the preview APK). Fix what he reports first.
+2. If place search does not work on the phone: check Render's GEOCODER_URL (render.yaml sets https://photon.komoot.io; a Blueprint that does not sync needs it added by hand in Environment).
+3. Owner actions still open: SHA-1 fingerprint in Firebase (Google login), first zone + prices in the staff console (done by him on 2026-10-20: zone and prices), delete FIRST_ADMIN_RESET/PASSWORD on Render.
+4. Then: phone push (Firebase service key into Render FIREBASE_SERVICE_ACCOUNT_JSON), TRUST_PROXY check, before-launch list (CLAUDE.md section 9: own Photon + OSRM server for Algiers).
 
 ## Dev notes
 - Screen tests: `test/screens.tsx` (helpers, all routes), `test/http.ts` (test HTTP client; jest-expo replaces fetch). `renderRouter` turns on fake clocks: `open()` switches back to real ones. Test DB access goes through `psql` (pg stalls in that environment). Use `await fireEvent...` (testing library v14 is async); `toHaveTextContent('x')` is an EXACT match, use a regex; NEVER put `findBy...` inside `act(...)` (act holds updates back: deadlock); prices use non-breaking spaces (match with \s).
-- Visual check: `EXPO_OFFLINE=1 EXPO_PUBLIC_API_URL=http://localhost:3399 npx expo export --dev --platform web`, serve, screenshot with the global playwright (`$(npm root -g)/playwright`).
+- Visual check (screenshots): a TEMPORARY mobile/metro.config.js that, when VISUAL_WEB=1, resolves `@maplibre/maplibre-react-native` to test/mocks/maplibre.tsx and `expo-secure-store` to test/mocks/securestore-web.js (getDefaultConfig + resolver.resolveRequest); run `VISUAL_WEB=1 EXPO_OFFLINE=1 CI=1 EXPO_PUBLIC_API_URL=http://localhost:3399 npx expo start --web --port 8083` (the static `expo export --dev` reloads in a loop; CI=1 means no file watching: restart after edits), a small proxy on :3399 adding CORS in front of the test server, then the global playwright (`$(npm root -g)/playwright`, executablePath /opt/pw-browsers/chromium). Delete metro.config.js afterwards. Never `pkill -f` a pattern that is in your own command line (it kills the shell): kill by pid.
+- Before an over-the-air update: `npx expo export --platform android` in mobile/ must build (checks fonts/icons resolve as on the phone).
 
 ## Owner answers (asked at the "push and build prep" milestone)
 - Phone build: YES, the owner is creating the Expo account, EXPO_TOKEN and network allowance (expo.dev, api.expo.dev, exp.host, storage.googleapis.com). Settings reach NEW sessions.
@@ -69,5 +68,5 @@ OSRM real data: still blocked (download.geofabrik.de); not possible on Render fr
 - Real map data: YES, allowing download.geofabrik.de and tiles.openfreemap.org.
 
 ## Pending questions / owner actions
-- Owner: add the SHA-1 fingerprint in Firebase; create Neon and Render (backend/deploy/render.md); send the Render address.
-- Later (when the server is up): the starting prices (base, per km, size and car extras, allowed range), set by the owner in the staff console.
+- Owner: add the SHA-1 fingerprint in Firebase (Google login on the phone fails without it).
+- Owner: delete FIRST_ADMIN_RESET and FIRST_ADMIN_PASSWORD in Render Environment (if not done).

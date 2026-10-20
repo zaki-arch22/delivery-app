@@ -24,9 +24,7 @@ export default function Phone() {
   }
 
   return (
-    <Screen testID="screen-phone">
-      <Button kind="plain" label={'‹ ' + t('back')} onPress={() => router.back()} />
-      <T kind="title">{t('phone_title')}</T>
+    <Screen testID="screen-phone" title={t('phone_title')}>
       <T kind="muted">{t('phone_sub')}</T>
       <Gap />
       <Field testID="phone-input" label={t('phone_label')} hint={t('phone_hint')} error={error} value={value}

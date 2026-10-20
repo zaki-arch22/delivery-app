@@ -47,6 +47,9 @@ export class UserOrdersController {
     const near = lat !== undefined && lng !== undefined ? point({ lat: Number(lat), lng: Number(lng) }, 'near') : null;
     return this.places.search(pid(r), q, l, near);
   }
+  @Access('user') @Get('reverse_place') reversePlace(@Req() r: any, @Query('lat') lat: string, @Query('lng') lng: string, @Query('lang') l: string) {
+    return this.places.reverse(pid(r), point({ lat: Number(lat), lng: Number(lng) }, 'at'), l);
+  }
   @Access('user') @Post('report_problem') @HttpCode(200) problem(@Req() r: any, @Body() b: any) { return this.o.reportProblem(pid(r), b?.order_id, b?.reason, b?.note, b?.photos ?? []); }
 }
 

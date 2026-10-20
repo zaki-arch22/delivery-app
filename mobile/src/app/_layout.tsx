@@ -17,7 +17,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AppProvider>
-        <StatusBar style="dark" />
+        <StatusBar style="light" />
         <PushBridge />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.page }, animation: 'fade' }} />
       </AppProvider>

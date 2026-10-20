@@ -1,23 +1,45 @@
 import React from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { useApp } from '../lib/app';
-import { Button, Gap, Screen, T } from '../ui/kit';
+import { color, font, space } from '../lib/theme';
+import { Gap, Screen, T } from '../ui/kit';
+import { Icon, IconName } from '../ui/Icon';
 import { LanguageSwitch } from '../ui/LanguageSwitch';
 
-// First screen: language, then the two paths (CLAUDE.md section 4: one app, two paths).
+// First screen: language, then the two modes (CLAUDE.md section 4: one app, two paths). The other mode can be added later
+// from the side menu.
 export default function Welcome() {
-  const { t } = useApp();
+  const { t, rtl } = useApp();
+  const Path = ({ id, icon, title, sub, path }: { id: string; icon: IconName; title: string; sub: string; path: 'user' | 'driver' }) => (
+    <Pressable testID={id} accessibilityRole="button" accessibilityLabel={title} onPress={() => router.push({ pathname: '/login', params: { path } })}
+      style={({ pressed }) => [s.card, { flexDirection: rtl ? 'row-reverse' : 'row' }, pressed && { opacity: 0.85 }]}>
+      <View style={s.icon}><Icon name={icon} size={30} tint={color.ink} /></View>
+      <View style={{ flex: 1 }}><T style={s.cardTitle}>{title}</T><T kind="muted">{sub}</T></View>
+      <Icon name="chevron-right" tint={color.muted} />
+    </Pressable>
+  );
   return (
     <Screen testID="screen-welcome">
       <LanguageSwitch />
       <Gap n={8} />
-      <T kind="label">{t('app_name')}</T>
-      <T kind="title">{t('welcome_title')}</T>
-      <Gap n={2} />
-      <T kind="muted">{t('welcome_sub')}</T>
-      <Gap n={8} />
-      <Button testID="path-user" label={t('path_user')} sub={t('path_user_sub')} onPress={() => router.push({ pathname: '/login', params: { path: 'user' } })} />
-      <Button testID="path-driver" kind="secondary" label={t('path_driver')} sub={t('path_driver_sub')} onPress={() => router.push({ pathname: '/login', params: { path: 'driver' } })} />
+      <View style={s.hero}>
+        <T style={s.brand}>{t('app_name')}</T>
+        <T style={s.heroTitle}>{t('welcome_title')}</T>
+        <T style={s.heroSub}>{t('welcome_sub')}</T>
+      </View>
+      <Gap n={6} />
+      <Path id="path-user" icon="package" title={t('path_user')} sub={t('path_user_sub')} path="user" />
+      <Path id="path-driver" icon="truck" title={t('path_driver')} sub={t('path_driver_sub')} path="driver" />
     </Screen>
   );
 }
+const s = StyleSheet.create({
+  hero: { backgroundColor: color.lime, borderRadius: 28, padding: space(6) },
+  brand: { color: color.ink, fontFamily: font.bold, fontSize: 15, opacity: 0.7 },
+  heroTitle: { color: color.ink, fontFamily: font.bold, fontSize: 28, lineHeight: 40 },
+  heroSub: { color: color.ink, fontSize: 16, lineHeight: 24, marginTop: space(2) },
+  card: { alignItems: 'center', gap: space(4), backgroundColor: color.card, borderRadius: 24, padding: space(5), marginVertical: space(2) },
+  icon: { width: 56, height: 56, borderRadius: 18, backgroundColor: color.lime, alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { fontFamily: font.bold, fontSize: 20, lineHeight: 30 },
+});

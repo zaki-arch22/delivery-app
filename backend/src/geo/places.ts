@@ -19,6 +19,28 @@ export class Places {
 
   enabled() { return !!cfg.geocoderUrl(); }
 
+  async reverse(profileId: string, at: { lat: number; lng: number }, lang: any): Promise<{ place: Place | null }> {
+    if (!this.enabled()) throw fail(503, 'SEARCH_OFF', 'Place search is not switched on');
+    if (!limitsOff() && !limiter.hit('rev:' + profileId, 60, 60_000).ok) throw fail(429, 'RATE_LIMITED', 'Too many searches. Wait a moment.');
+    const l = lang === 'fr' || lang === 'en' ? lang : 'default';
+    const lat = Math.round(at.lat * 1e4) / 1e4, lng = Math.round(at.lng * 1e4) / 1e4, key = `r|${l}|${lat},${lng}`;
+    const hit = this.cache.get(key);
+    if (hit && Date.now() - hit.at < 60 * 60_000) return { place: hit.places[0] ?? null };
+    const u = new URL(cfg.geocoderUrl().replace(/\/+$/, '') + '/reverse');
+    u.searchParams.set('lat', String(lat)); u.searchParams.set('lon', String(lng)); u.searchParams.set('limit', '1');
+    if (l !== 'default') u.searchParams.set('lang', l);
+    try {
+      const r = await fetch(u, { signal: AbortSignal.timeout(cfg.geocoderTimeoutMs()), redirect: 'error', headers: { 'user-agent': 'delivery-app (test server)' } });
+      if (!r.ok) return { place: null };
+      const text = await r.text();
+      if (text.length > 100_000) return { place: null };
+      const places = parse(JSON.parse(text));
+      if (this.cache.size > 2000) this.cache.clear();
+      this.cache.set(key, { at: Date.now(), places });
+      return { place: places[0] ?? null };
+    } catch { return { place: null }; }
+  }
+
   async search(profileId: string, qRaw: any, lang: any, near: { lat: number; lng: number } | null): Promise<{ places: Place[]; unavailable?: boolean }> {
     if (!this.enabled()) throw fail(503, 'SEARCH_OFF', 'Place search is not switched on');
     const q = typeof qRaw === 'string' ? qRaw.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim() : '';

@@ -25,20 +25,25 @@ repeat offenders are stopped.
 
 ## The life of an order (who proves what)
 1. **Sender creates the order**: pickup, drop-off, receiver name and phone, size, cash to collect, inspection choice, price.
-   The sender gets a **tracking link** to send to the receiver (WhatsApp or SMS from his own phone, free for us).
-2. **A driver accepts**: price locks. The sender sees driver name, vehicle, rating; the receiver's page too.
-3. **Pickup**: the sender shows a **pickup code / QR**; the driver scans or types it, takes a **photo of the parcel**,
+   The sender gets a **tracking link** to send to the receiver (one tap opens WhatsApp with the message ready; free for us).
+2. **The receiver says yes first** on that link (no account needed). Until then no courier sees the request; "no" cancels it
+   with nothing held against anyone; no answer in 60 minutes ends it. A yes sent from the sender's own internet address is
+   recorded for staff (the sender holds the link too; only paid SMS verification could prove who pressed it).
+3. **Couriers answer, the customer chooses**: nearby couriers see the price, accept it or offer more (never above the maximum);
+   the customer picks one (price, time to arrive, rating, deliveries) and the price locks. The sender sees the courier's name,
+   vehicle, rating; the receiver's page too.
+4. **Pickup**: the sender shows a **pickup code / QR**; the driver scans or types it, takes a **photo of the parcel**,
    and the phone's position is recorded. Without the code and photo the parcel is not "picked up".
    The driver may refuse a parcel (prohibited, too big, badly packed) with a reason and photo: no penalty.
-4. **On the way**: sender and receiver see the driver on the map with the time left. If the driver's phone goes silent for
+5. **On the way**: sender and receiver see the driver on the map with the time left. If the driver's phone goes silent for
    20 minutes with a parcel, staff are alerted; after 3 hours a "parcel overdue" case opens.
-5. **At the door**: the receiver checks the parcel (opens it if the seller allowed it), pays the cash shown on his page,
+6. **At the door**: the receiver checks the parcel (opens it if the seller allowed it), pays the cash shown on his page,
    and only then gives the **delivery code or shows the QR**. Giving the code means "I received it and paid".
    The driver confirms the cash amount, scans/types the code; position recorded.
-6. **Refused at the door** (damaged, wrong item, not ordered, changed mind, cannot pay, nobody there, wrong address):
+7. **Refused at the door** (damaged, wrong item, not ordered, changed mind, cannot pay, nobody there, wrong address):
    the driver chooses the reason (+ photo for damaged/wrong item); the parcel automatically goes back to the sender
    (return leg) and staff get a case. The sender confirms getting it back with the return code.
-7. **After**: both sides rate each other. Sender or receiver can report a problem within 24 hours (with photos).
+8. **After**: both sides rate each other. Sender or receiver can report a problem within 24 hours (with photos).
    Every step above is in the order's history, visible to the sender (and the parts that concern them to driver and receiver).
 
 ## Cancelling

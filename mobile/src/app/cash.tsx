@@ -14,9 +14,7 @@ export default function Cash() {
   useFocusEffect(useCallback(() => { driver(services.client).cash().then(setData).catch(() => {}); }, [services]));
   const label = (e: CashEntry) => e.type === 'handover' ? t('cash_handover', { n: e.id }) : e.type === 'adjustment' ? t('cash_adjustment') : t('cash_cod_collected');
   return (
-    <Screen testID="screen-cash">
-      <Button kind="plain" label={'‹ ' + t('back')} onPress={() => router.back()} />
-      <T kind="title">{t('my_cash')}</T>
+    <Screen testID="screen-cash" title={t('my_cash')}>
       {data ? (<>
         <T style={s.balance} testID="cash-balance">{t('cash_balance', { p: money(data.balance_da) })}</T>
         <T kind="muted">{t('cash_explain')}</T>

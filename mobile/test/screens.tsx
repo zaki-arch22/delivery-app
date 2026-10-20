@@ -31,6 +31,11 @@ import Jobs from '../src/app/jobs';
 import Cash from '../src/app/cash';
 import Rules from '../src/app/rules';
 import RecordScreen from '../src/app/record';
+import Profile from '../src/app/profile';
+import Notifications from '../src/app/notifications';
+import Safety from '../src/app/safety';
+import Help from '../src/app/help';
+import AddCustomer from '../src/app/add-customer';
 
 export const API = process.env.API_URL!;
 if (!/_test$/.test(process.env.TEST_DATABASE_URL ?? '')) throw new Error('test database only');
@@ -58,7 +63,7 @@ export function routes(services: Services) {
       <AppProvider services={services}><PushBridge /><Stack screenOptions={{ headerShown: false }} /></AppProvider>
     </SafeAreaProvider>
   );
-  return { _layout: Layout, index: Start, welcome: Welcome, login: Login, 'contact-phone': ContactPhone, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup, 'new-order': NewOrder, 'order-details': OrderDetails, 'order/[id]': OrderScreen, orders: Orders, 'rate/[id]': Rate, 'problem/[id]': Problem, job: JobScreen, jobs: Jobs, cash: Cash, rules: Rules, record: RecordScreen };
+  return { _layout: Layout, index: Start, welcome: Welcome, login: Login, 'contact-phone': ContactPhone, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup, 'new-order': NewOrder, 'order-details': OrderDetails, 'order/[id]': OrderScreen, orders: Orders, 'rate/[id]': Rate, 'problem/[id]': Problem, job: JobScreen, jobs: Jobs, cash: Cash, rules: Rules, record: RecordScreen, profile: Profile, notifications: Notifications, safety: Safety, help: Help, 'add-customer': AddCustomer };
 }
 export async function open(services: Services) {
   const r = await renderRouter(routes(services), { initialUrl: '/' });
@@ -85,3 +90,16 @@ export async function loginThroughScreens(phoneTyped: string, path: 'user' | 'dr
   await act(async () => { await fireEvent.changeText(screen.getByTestId('code-input'), code); });
 }
 
+
+// The inner pages have a back ARROW (testID "back"); the stack keeps earlier screens mounted, so the last one is on top.
+export async function pressBack() { const b = await screen.findAllByTestId('back'); await fireEvent.press(b[b.length - 1]); }
+// Pages are reached through the side menu (menu button on the map, then the item).
+export async function menu(item: string) {
+  const m = await screen.findAllByTestId('open-menu'); await fireEvent.press(m[m.length - 1]);
+  await fireEvent.press(await screen.findByTestId(item));
+}
+// A courier opens the first request in his list (several couriers see a request at once).
+export async function openRequest(timeout = 15000) {
+  const r = await screen.findAllByTestId(/^request-D\d+$/, {}, { timeout }); await fireEvent.press(r[0]);
+  return screen.findByTestId('offer-card');
+}

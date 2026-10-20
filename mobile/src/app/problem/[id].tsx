@@ -33,9 +33,7 @@ export default function Problem() {
     finally { setBusy(false); }
   }
   return (
-    <Screen testID="screen-problem">
-      <Button kind="plain" label={'‹ ' + t('back')} onPress={() => router.back()} />
-      <T kind="title">{t('problem_title')}</T>
+    <Screen testID="screen-problem" title={t('problem_title')}>
       {sent ? null : (<>
         <Choice testID="reason" value={reason} onChange={setReason} options={REASONS.map(v => ({ v, label: t(`pr_${v}`) }))} />
         <Field testID="note" label={t('note_label')} value={note} onChangeText={setNote} maxLength={1000} multiline />

@@ -8,7 +8,7 @@ export const isId = (v: any) => Number.isSafeInteger(v) && v > 0;
 
 export function point(p: any, name: string) {
   const lat = p?.lat, lng = p?.lng;
-  if (typeof lat !== 'number' || typeof lng !== 'number' || lat < -90 || lat > 90 || lng < -180 || lng > 180) throw bad('BAD_POINT', `${name} must be {lat, lng}`);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) throw bad('BAD_POINT', `${name} must be {lat, lng}`);   // also refuses NaN (query strings)
   return { lat, lng };
 }
 const ADDR_KEYS = ['street', 'commune', 'building', 'entrance', 'floor', 'apartment', 'landmark', 'notes'];

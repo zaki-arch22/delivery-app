@@ -5,7 +5,7 @@ import { Alert } from 'react-native';
 import { screen, fireEvent, waitFor, act } from 'expo-router/testing-library';
 import { memoryStore } from '../src/core/storage';
 import { toInternational, display } from '../src/lib/phone';
-import { API, db, devCode, open, svc, uploadDocs, loginThroughScreens } from './screens';
+import { API, db, devCode, open, svc, uploadDocs, loginThroughScreens, pressBack, menu } from './screens';
 import { nodeFetch } from './http';
 
 beforeAll(async () => {
@@ -36,7 +36,7 @@ test('welcome: language switch changes every text and the direction, and is reme
   const flat = (st: any): any => Array.isArray(st) ? Object.assign({}, ...st.map(flat)) : st ?? {};
   const scroll = screen.root!.queryAll((n: any) => flat(n.props?.contentContainerStyle).direction === 'rtl');
   expect(scroll.length).toBeGreaterThan(0);                           // the whole screen is right-to-left
-  expect(flat(screen.getByText('أريد إرسال طرود').props.style).writingDirection).toBeUndefined(); // button text is centred
+  expect(flat(screen.getByText('أريد إرسال طرود').props.style).textAlign).toBe('right');            // card titles read from the right
   await waitFor(async () => expect(await store.get('lang')).toBe('ar'));
   await fireEvent.press(screen.getByTestId('lang-fr'));
   expect(await screen.findByText('Je veux envoyer des colis')).toBeTruthy();
@@ -70,7 +70,7 @@ test('sender sign-up: bad number, wrong code, then code -> name -> home; reopeni
   await fireEvent.press(screen.getByTestId('read-rules'));
   expect(await screen.findByTestId('screen-rules')).toBeTruthy();
   expect(screen.getAllByText(/Prohibited goods/).length).toBeGreaterThan(0);
-  await fireEvent.press(screen.getByText('‹ Back'));
+  await pressBack();
   await fireEvent.press(await screen.findByTestId('accept-rules'));
   await fireEvent.press(screen.getByTestId('create-profile'));
   expect(await screen.findByText('Hello, Lina Haddad')).toBeTruthy();
@@ -112,7 +112,7 @@ test('driver with both profiles: pending status shown, switch to the sender prof
   await loginThroughScreens('0553000003', 'driver');
   expect(await screen.findByText('Hello, Karim Driver')).toBeTruthy();
   expect(screen.getByTestId('driver-status')).toHaveTextContent(/waiting for approval/);
-  await fireEvent.press(screen.getByTestId('open-settings'));
+  await menu('menu-settings');
   await fireEvent.press(await screen.findByTestId('switch-profile'));
   expect(await screen.findByText('Hello, Karim Sender')).toBeTruthy();
 });
@@ -122,11 +122,11 @@ test('settings: add a driver profile opens sign-up, log out, log out of all devi
   await open(svc(store));
   await loginThroughScreens('0553000001', 'user');
   expect(await screen.findByText('Hello, Lina Haddad')).toBeTruthy();
-  await fireEvent.press(screen.getByTestId('open-settings'));
+  await menu('menu-settings');
   await screen.findByTestId('screen-settings');
   await fireEvent.press(screen.getByTestId('add-driver'));
   await screen.findByTestId('screen-driver-signup');
-  await fireEvent.press(screen.getByText('‹ Back'));
+  await pressBack();
   await screen.findByTestId('screen-settings');
   await fireEvent.press(screen.getByTestId('logout'));
   await screen.findByTestId('screen-welcome');
@@ -140,7 +140,7 @@ test('settings: add a driver profile opens sign-up, log out, log out of all devi
   await open(svc(store));
   await loginThroughScreens('0553000001', 'user');
   await screen.findByText('Hello, Lina Haddad');
-  await fireEvent.press(screen.getByTestId('open-settings'));
+  await menu('menu-settings');
   const alert = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => { buttons?.find(b => b.style === 'destructive')?.onPress?.(); });
   await fireEvent.press(await screen.findByTestId('logout-all'));
   await screen.findByTestId('screen-welcome');
@@ -216,12 +216,12 @@ test('my record: a rule break with its reason, an appeal sent once, the block sh
   await loginThroughScreens('0553000001', 'user');
   await screen.findByText('Hello, Lina Haddad');
   const pid = (await db.query(`SELECT p.id FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE a.phone='+213553000001' AND p.type='user'`)).rows[0].id;
-  await fireEvent.press(screen.getByTestId('open-settings'));
+  await menu('menu-settings');
   await fireEvent.press(await screen.findByTestId('open-record'));
   expect(await screen.findByTestId('record-empty')).toHaveTextContent(/No rule broken/);
   await db.query(`INSERT INTO violations(profile_id, rule, points, note, source) VALUES ($1, 'late_cancel', 1, 'Cancelled after a driver had accepted', 'system')`, [pid]);
   await db.query(`INSERT INTO sanctions(profile_id, kind, level, until, reason, source) VALUES ($1, 'block', 5, now() + interval '1 day', 'test block', 'system')`, [pid]);
-  await fireEvent.press(screen.getByText('‹ Back'));
+  await pressBack();
   await fireEvent.press(await screen.findByTestId('open-record'));
   expect(await screen.findByTestId('record-points')).toHaveTextContent(/1 points in the last 90 days/);
   expect(screen.getByTestId('record-block')).toHaveTextContent(/blocked until/);

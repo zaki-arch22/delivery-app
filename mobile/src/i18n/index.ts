@@ -17,6 +17,7 @@ export function deviceLang(): Lang {
 }
 
 export function translate(lang: Lang, key: Key, vars: Record<string, string | number> = {}) {
-  return dict[lang][key].replace(/\{(\w+)\}/g, (_, k) => (k in vars ? String(vars[k]) : `{${k}}`));
+  const text = dict[lang][key] ?? dict.en[key] ?? key;   // an unknown key (e.g. a newer server's notification kind) shows the key, never crashes
+  return text.replace(/\{(\w+)\}/g, (_, k) => (k in vars ? String(vars[k]) : `{${k}}`));
 }
 export type { Key };

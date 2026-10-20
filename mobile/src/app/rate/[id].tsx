@@ -21,9 +21,7 @@ export default function Rate() {
     finally { setBusy(false); }
   }
   return (
-    <Screen testID="screen-rate">
-      <Button kind="plain" label={'‹ ' + t('back')} onPress={() => router.back()} />
-      <T kind="title">{t('rate_title')}</T>
+    <Screen testID="screen-rate" title={t('rate_title')}>
       <View style={s.row} accessibilityRole="radiogroup">
         {[1, 2, 3, 4, 5].map(n => (
           <Pressable key={n} testID={'star-' + n} accessibilityRole="radio" accessibilityLabel={t('stars_label', { n })} accessibilityState={{ selected: stars === n }} onPress={() => { setStars(n); setMsg(null); }} hitSlop={6}>

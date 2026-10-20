@@ -41,6 +41,7 @@ const offerFor = (t: string) => until(async () => (await api('/get_current_offer
 let lastSearch: any = null;
 require('http').createServer((req: any, res: any) => {
   const u = new URL(req.url, 'http://x'); const q = u.searchParams.get('q'); lastSearch = u.searchParams;
+  if (u.pathname === '/reverse') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ features: u.searchParams.get('lat') === '1' ? [] : [{ geometry: { coordinates: [3.0588, 36.7538] }, properties: { name: 'Rue Didouche Mourad', city: 'Alger' } }] })); return; }
   if (q === 'fail') { res.writeHead(500); res.end('down'); return; }
   const features = q === 'broken' ? [{ geometry: { coordinates: ['x', 1] }, properties: { name: 'Bad' } }, { geometry: { coordinates: [3, 36] }, properties: {} }]
     : [{ geometry: { coordinates: [3.0617, 36.7856] }, properties: { name: 'Place des Martyrs', street: 'Rue Bab Azoun', district: 'Casbah', city: 'Alger' } }];
@@ -353,6 +354,9 @@ require('http').createServer((req: any, res: any) => {
     ok('S3 broken entries from the service are dropped', (await api('/search_places?q=broken', undefined, A)).b.places.length === 0);
     ok('S3 the service failing gives an empty list marked "unavailable", never an error page', (await api('/search_places?q=fail', undefined, A)).b.unavailable === true);
     ok('S4 a query of 1 or more than 80 characters is refused', (await api('/search_places?q=a', undefined, A)).b.error === 'BAD_QUERY' && (await api('/search_places?q=' + 'x'.repeat(81), undefined, A)).b.error === 'BAD_QUERY');
+    const rv = await api('/reverse_place?lat=36.75381&lng=3.05882&lang=fr', undefined, A);
+    ok('S5 the name under the pin comes back (position rounded for the cache)', rv.b.place?.name === 'Rue Didouche Mourad' && lastSearch.get('lat') === '36.7538' && lastSearch.get('lon') === '3.0588', rv.b);
+    ok('S5 a bad position is refused', (await api('/reverse_place?lat=abc&lng=3', undefined, A)).b.error === 'BAD_POINT');
     ok('S4 couriers and strangers cannot use it', (await api('/search_places?q=ardis', undefined, D1.token)).b.error === 'WRONG_PROFILE' && (await api('/search_places?q=ardis')).s === 401);
   }
   // ===== N: notifications list, profile name =====

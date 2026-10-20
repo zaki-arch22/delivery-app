@@ -37,9 +37,7 @@ export default function Login() {
   }
 
   return (
-    <Screen testID="screen-login">
-      <Button kind="plain" label={'‹ ' + t('back')} onPress={() => router.back()} />
-      <T kind="title">{t('login_title')}</T>
+    <Screen testID="screen-login" title={t('login_title')}>
       <T kind="muted">{t('login_sub')}</T>
       <Gap />
       {error ? <><Notice testID="login-error" warn text={error} /><Button kind="secondary" label={t('try_again')} onPress={load} /></> : null}

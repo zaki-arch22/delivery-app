@@ -19,9 +19,7 @@ export default function Orders() {
   }, [services]);
   useFocusEffect(useCallback(() => { load(1); }, [load]));
   return (
-    <Screen testID="screen-orders">
-      <Button kind="plain" label={'‹ ' + t('back')} onPress={() => router.back()} />
-      <T kind="title">{t('my_orders')}</T>
+    <Screen testID="screen-orders" title={t('my_orders')}>
       {list && !list.length ? <Notice testID="orders-empty" text={t('no_orders')} /> : null}
       {(list ?? []).map(o => <OrderCard key={o.id} o={o} onPress={() => router.push({ pathname: '/order/[id]', params: { id: o.id } })} />)}
       {more ? <Button testID="load-more" kind="secondary" busy={busy} label={t('load_more')} onPress={() => load(page + 1)} /> : null}

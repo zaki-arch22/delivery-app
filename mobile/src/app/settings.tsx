@@ -33,9 +33,7 @@ export default function Settings() {
   ]);
 
   return (
-    <Screen testID="screen-settings">
-      <Button kind="plain" label={'‹ ' + t('back')} onPress={() => router.back()} />
-      <T kind="title">{t('settings')}</T>
+    <Screen testID="screen-settings" title={t('settings')}>
       <Gap />
       <T kind="label">{t('choose_language')}</T>
       <LanguageSwitch />

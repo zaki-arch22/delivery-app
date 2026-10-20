@@ -4,6 +4,8 @@ import type { Address } from './orders';
 // The driver-path functions of the contract (section C), typed for the screens.
 export interface DriverHome { online: boolean; earnings_today_da: number; cash_held_da: number; cash_limit_da: number | null; rating: string | null; rating_count: number }
 export interface Offer { offer_id: number; expires_at: string; order_id: string; ref: string; price_da: number; payer: 'sender' | 'recipient'; cod_amount_da: number; size: string; vehicle: string; trip_distance_m: number; pickup_distance_m: number | null; pickup_address: Address; sender_rating: string | null }
+// A request shown to this courier (several couriers see it at once): he accepts the customer's price or offers more.
+export interface Request extends Offer { status: 'offered' | 'bid'; max_da: number; my_price_da: number | null; bid_expires_at: string | null; trip_duration_s: number; pickup_lat: number; pickup_lng: number; dropoff_lat: number; dropoff_lng: number; sender_rating_count: number }
 export interface Job {
   id: string; ref: string; leg: 'delivery' | 'return'; status: 'assigned' | 'picked_up' | 'delivered' | 'failed' | 'cancelled' | 'searching' | 'expired';
   payer: 'sender' | 'recipient'; cod_amount_da: number; locked_da: number; distance_m: number; recipient_name: string; recipient_phone: string;
@@ -25,6 +27,9 @@ export const driver = (c: Client) => ({
   setOnline: (online: boolean) => c.call<{ online: boolean }>('/set_online', { online }),
   location: (lat: number, lng: number) => c.call('/update_location', { lat, lng }),
   offer: () => c.call<{ offer: Offer | null }>('/get_current_offer').then(r => r.offer),
+  requests: () => c.call<{ requests: Request[] }>('/list_requests').then(r => r.requests),
+  // price omitted = the customer's own price. Returns the job when the customer had switched on auto-accept.
+  bid: (offerId: number, price?: number) => c.call<{ job: Job | null; bid?: { offer_id: number; price_da: number; eta_s: number | null; expires_in_s: number } }>('/make_bid', { offer_id: offerId, price_da: price }),
   accept: (offerId: number) => c.call<{ job: Job }>('/accept_offer', { offer_id: offerId }).then(r => r.job),
   decline: (offerId: number) => c.call('/decline_offer', { offer_id: offerId }),
   job: () => c.call<{ job: Job | null }>('/get_job').then(r => r.job),

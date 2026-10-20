@@ -2,7 +2,7 @@
 // updated on a language change, and a tapped notification opens the right screen. Real backend, TEST database;
 // only the phone's notification system is replaced (test/mocks/notifications.ts).
 import { screen, fireEvent, act, waitFor } from 'expo-router/testing-library';
-import { API, db, open, svc, loginThroughScreens, devCode } from './screens';
+import { API, db, open, svc, loginThroughScreens, devCode, menu } from './screens';
 import { nodeFetch } from './http';
 const { pushState } = require('./mocks/notifications');
 
@@ -35,7 +35,7 @@ test('registered for the active profile and language; language change and profil
   await screen.findByTestId('send-parcel');
   await waitFor(async () => expect(await device()).toEqual([{ type: 'user', language: 'en' }]));
 
-  await fireEvent.press(screen.getByTestId('open-settings'));
+  await menu('menu-settings');
   await act(async () => { await fireEvent.press(await screen.findByTestId('lang-ar')); });
   await waitFor(async () => expect(await device()).toEqual([{ type: 'user', language: 'ar' }]));   // push texts now in Arabic
   await act(async () => { await fireEvent.press(screen.getByTestId('lang-en')); });
@@ -51,7 +51,7 @@ test('registered for the active profile and language; language change and profil
   const q = await call('/get_quote', { pickup: { lat: 36.7538, lng: 3.0588 }, dropoff: { lat: 36.765, lng: 3.07 }, size: 'small' }, s.client.token!);
   const o = await call('/create_order', { quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: { street: 'Rue A' }, dropoff_address: { street: 'Rue B' }, recipient_name: 'Omar', recipient_phone: '+213661111111', payer: 'sender' }, s.client.token!, { 'idempotency-key': 'push-test-order-1' });
   await act(async () => { pushState.tap({ id: '1', kind: 'order.assigned', order_id: o.id }); });
-  expect(await screen.findByTestId('order-status')).toHaveTextContent(/Looking for a driver/);
+  expect(await screen.findByTestId('order-status')).toHaveTextContent(/Waiting for Omar to confirm/);
 });
 
 test('a registered recipient sees the incoming parcel and its code on the home screen (live, and from a tapped push)', async () => {
@@ -69,7 +69,11 @@ test('a registered recipient sees the incoming parcel and its code on the home s
   await screen.findByTestId('send-parcel');
   await new Promise(r => setTimeout(r, 1000));                                           // the live connection is up
   const o1 = await send('push-incoming-1');
-  expect(await screen.findByTestId('incoming-' + o1.ref)).toHaveTextContent(new RegExp(`Give this code to the driver when you receive it: ${o1.delivery_code}`));
+  // The receiver is asked first (yes / no); after "yes" the order searches for couriers and the card shows the code.
+  expect(await screen.findByTestId('incoming-' + o1.ref)).toHaveTextContent(/Yanis wants to send you a parcel/);
+  await act(async () => { await fireEvent.press(screen.getByTestId('incoming-yes-' + o1.ref)); });
+  await waitFor(() => expect(screen.getByTestId('incoming-' + o1.ref)).toHaveTextContent(new RegExp(`Give this code to the driver when you receive it: ${o1.delivery_code}`)));
+  await waitFor(async () => expect((await db.query(`SELECT status FROM orders WHERE id=$1`, [o1.id])).rows[0].status).toBe('searching'));
   // A push tapped while the app was closed carries the same data.
   await act(async () => { pushState.tap({ id: '99', kind: 'order.incoming', order_id: '11111111-1111-1111-1111-111111111111', ref: 'TEST-REF', delivery_code: '4321' }); });
   expect(await screen.findByTestId('incoming-TEST-REF')).toHaveTextContent(/4321/);

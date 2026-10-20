@@ -20,9 +20,7 @@ export default function Jobs() {
   }, [services]);
   useFocusEffect(useCallback(() => { load(1); }, [load]));
   return (
-    <Screen testID="screen-jobs">
-      <Button kind="plain" label={'‹ ' + t('back')} onPress={() => router.back()} />
-      <T kind="title">{t('my_jobs')}</T>
+    <Screen testID="screen-jobs" title={t('my_jobs')}>
       {list && !list.length ? <Notice testID="jobs-empty" text={t('no_jobs')} /> : null}
       {(list ?? []).map(j => (
         <View key={j.id} style={s.card} testID={'job-' + j.ref}>

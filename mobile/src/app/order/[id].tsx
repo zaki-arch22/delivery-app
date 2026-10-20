@@ -1,152 +1,264 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, Share, StyleSheet, View } from 'react-native';
+import { Alert, Dimensions, Image, Linking, Pressable, ScrollView, Share, StyleSheet, Switch, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp, useNotices } from '../../lib/app';
 import { errorMessage } from '../../lib/errors';
-import { ACTIVE, addressLine, money, Order, orders, RecallReason, when } from '../../lib/orders';
+import { ACTIVE, addressLine, Bid, minutes, money, Order, orders, RecallReason, when, whatsappUrl } from '../../lib/orders';
 import { deliveryQr, pickupQr } from '../../lib/proof';
 import { Qr } from '../../ui/Qr';
 import { Choice } from '../../ui/Choice';
 import { color, font, radius, space } from '../../lib/theme';
 import { AppMap, Pin } from '../../ui/AppMap';
-import { Button, Gap, Notice, Screen, T } from '../../ui/kit';
+import { Sheet } from '../../ui/Sheet';
+import { Button, Card, Gap, Notice, RoundButton, Screen, T } from '../../ui/kit';
+import { Icon } from '../../ui/Icon';
 import type { Key } from '../../i18n';
 
-const POLL_MS = 4000;   // driver position and status, until live location sharing exists (contract B)
+const POLL_MS = 4000;   // status and the courier's position while active; live notifications refresh at once in between
 
-// One order, from "looking for a driver" to "delivered" (contract B: get_order, raise_price, cancel_order, recall_order, get_order_photo).
-// Transparency: the pickup code/QR the sender shows the driver, the receiver's tracking link, the parcel photo and the full history.
+// One order, from "waiting for the receiver" to "delivered" (contract B). The map shows A, B, the route and the courier;
+// the panel follows the order's state; while couriers answer, their offers appear on top for the customer to choose.
 export default function OrderScreen() {
-  const { t, services, lang } = useApp();
+  const { t, services, lang, rtl } = useApp();
   const api = orders(services.client);
   const { id } = useLocalSearchParams<{ id: string }>();
   const [o, setO] = useState<Order | null>(null);
   const [msg, setMsg] = useState<{ text: string; warn?: boolean } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [want, setWant] = useState(0);
+  const [now, setNow] = useState(Date.now());
   const [recalling, setRecalling] = useState(false), [recallReason, setRecallReason] = useState<RecallReason | null>(null);
   const fail = (e: unknown) => { const m = errorMessage(e); setMsg({ text: t(m.key, m.vars), warn: true }); };
 
-  const load = useCallback(() => api.get(id).then(setO).catch(() => {}), [id]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const load = useCallback(() => api.get(id).then(x => { setO(x); setWant(w => (w > x.offered_da ? w : x.offered_da)); }).catch(() => {}), [id]);   // eslint-disable-line react-hooks/exhaustive-deps
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useNotices(n => { if (n.order_id === id) load(); });
   useEffect(() => { if (!o || !ACTIVE.includes(o.status)) return; const h = setInterval(load, POLL_MS); return () => clearInterval(h); }, [o?.status, load]);
+  useEffect(() => { if (!o || !['awaiting_recipient', 'searching'].includes(o.status)) return; const h = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(h); }, [o?.status]);
 
-  async function run(k: string, f: () => Promise<Order>) { setBusy(k); setMsg(null); try { setO(await f()); } catch (e) { fail(e); load(); } finally { setBusy(null); } }
-  const raise = (n: number) => o && run('raise' + n, () => api.raise(o.id, Math.min(o.max_da, o.offered_da + n)));
+  async function run(k: string, f: () => Promise<Order>) { setBusy(k); setMsg(null); try { const x = await f(); setO(x); setWant(x.offered_da); } catch (e) { fail(e); load(); } finally { setBusy(null); } }
   const cancel = () => Alert.alert(t('cancel_confirm'), t('cancel_sub'), [
     { text: t('keep'), style: 'cancel' },
     { text: t('cancel_order'), style: 'destructive', onPress: () => o && run('cancel', () => api.cancel(o.id, 'user_cancelled')) },
   ]);
-
   const recall = () => o && recallReason && run('recall', () => api.recall(o.id, recallReason)).then(() => setRecalling(false));
   const trackUrl = o?.tracking_token ? `${services.client.baseUrl}/t/${o.tracking_token}` : null;
-  const share = () => o && trackUrl && Share.share({ message: t('share_message', { name: o.recipient_name, url: trackUrl }) }).catch(() => {});
+  const shareText = o && trackUrl ? t(o.status === 'awaiting_recipient' ? 'ask_message' : 'share_message', { name: o.recipient_name, url: trackUrl }) : '';
+  const share = () => { if (shareText) Share.share({ message: shareText }).catch(() => {}); };
+  const whatsapp = () => { if (o && shareText) Linking.openURL(whatsappUrl(o.recipient_phone, shareText)).catch(share); };
   const photoSrc = (doc: string) => ({ uri: `${services.client.baseUrl}/get_order_photo?order_id=${o!.id}&id=${doc}`, headers: { Authorization: 'Bearer ' + (services.client.token ?? '') } });
 
-  if (!o) return <Screen testID="screen-order"><Button kind="plain" label={'‹ ' + t('back')} onPress={() => router.back()} /></Screen>;
+  if (!o) return <Screen testID="screen-order" title="" />;
+  const A = { lat: o.pickup_lat, lng: o.pickup_lng }, B = { lat: o.dropoff_lat, lng: o.dropoff_lng };
+  const pins: Pin[] = [{ id: 'A', at: A, kind: 'pickup', label: t('pickup') }, { id: 'B', at: B, kind: 'dropoff', label: t('dropoff') }];
+  if (o.driver?.location) pins.push({ id: 'driver', at: o.driver.location, kind: 'driver', label: t('driver'), vehicle: o.driver.vehicle });
+  const fit = o.driver?.location && ['assigned', 'picked_up'].includes(o.status) ? [o.driver.location, o.status === 'assigned' ? A : B] : [A, B];
+  const H = Dimensions.get('window').height;
+  const left = (iso: string | null) => (iso ? Math.max(0, Math.round((new Date(iso).getTime() - now) / 1000)) : 0);
+  const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
   const price = o.locked_da ?? o.offered_da;
-  const pins: Pin[] = [{ id: 'A', at: { lat: o.pickup_lat, lng: o.pickup_lng }, kind: 'pickup', label: t('pickup') }, { id: 'B', at: { lat: o.dropoff_lat, lng: o.dropoff_lng }, kind: 'dropoff', label: t('dropoff') }];
-  if (o.driver?.location) pins.push({ id: 'driver', at: o.driver.location, kind: 'driver', label: t('driver') });
-  const raises = [50, 100].filter(n => o.offered_da < o.max_da && n > 0);
+  const showBids = o.status === 'searching' && o.bids.length > 0;
 
   return (
-    <Screen testID="screen-order">
-      <Button kind="plain" label={'‹ ' + t('back')} onPress={() => router.canGoBack() ? router.back() : router.replace('/home')} />
-      <T kind="muted">{t('order_ref', { ref: o.ref })}{o.leg === 'return' ? ' · ' + t('return_leg') : ''}</T>
-      <T kind="title" testID="order-status">{t(('st_' + o.status) as Key)}</T>
-      {o.status === 'searching' ? <T kind="muted">{t('st_searching_sub')}</T> : null}
-      {o.status === 'failed' ? <Notice warn text={t('st_failed_sub')} /> : null}
-      {o.status === 'expired' ? <T kind="muted">{t('st_expired_sub')}</T> : null}
+    <View style={s.root} testID="screen-order">
+      <AppMap start={A} zoom={13} pins={pins} route={o.route} fit={fit} pad={{ top: showBids ? H * 0.5 : 110, bottom: H * 0.5 }} />
+      <SafeAreaView edges={['top']} style={s.top} pointerEvents="box-none">
+        <View style={[s.topRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+          <RoundButton testID="back" icon="arrow-left" label={t('back')} onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))} />
+          <View style={s.refChip}><T style={s.refText}>{o.ref}{o.leg === 'return' ? ' · ' + t('return_leg') : ''}</T></View>
+        </View>
+        {showBids ? <Offers bids={o.bids} now={now} busy={busy} onAccept={b => run('acc' + b.offer_id, () => api.acceptBid(o.id, b.offer_id))} onDecline={b => run('dec' + b.offer_id, () => api.declineBid(o.id, b.offer_id))} /> : null}
+      </SafeAreaView>
 
-      <View style={s.mapBox}><AppMap start={{ lat: o.pickup_lat, lng: o.pickup_lng }} zoom={13} pins={pins} /></View>
+      <Sheet testID="order-sheet" maxFraction={showBids ? 0.3 : 0.6} peek={170}>
+        <T kind="title" testID="order-status" style={{ fontSize: 24 }}>{t(('st_' + o.status) as Key, { name: o.recipient_name })}</T>
 
-      <View style={s.box}>
-        <T kind="label" testID="order-price">{t(o.locked_da ? 'price_locked' : 'price_now', { p: money(price) })}</T>
-        {o.payer === 'recipient' ? <T kind="muted">{t('fee_by_recipient')}</T> : null}
-        {o.cod_amount_da > 0 ? <T kind="muted">{t('cod_collect', { p: money(o.cod_amount_da) })}</T> : null}
-        {o.status === 'searching' && raises.length ? (
-          <View style={s.row}>
-            {raises.map(n => <Button key={n} testID={'raise-' + n} kind="secondary" busy={busy === 'raise' + n} label={t('raise_by', { n: Math.min(n, o.max_da - o.offered_da) })} onPress={() => raise(n)} />)}
+        {o.status === 'awaiting_recipient' ? (<>
+          <View style={[s.timerRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}><T kind="muted" style={{ flex: 1 }}>{t('st_awaiting_sub', { name: o.recipient_name })}</T><T style={s.clock} testID="timer">{clock(left(o.recipient_deadline_at))}</T></View>
+          <Progress value={left(o.recipient_deadline_at) / 3600} />
+          <Button testID="ask-whatsapp" icon="message-circle" label={t('ask_whatsapp', { name: o.recipient_name })} onPress={whatsapp} />
+          <Button testID="share-tracking" kind="secondary" icon="share-2" label={t('share_other')} onPress={share} />
+          <AutoAccept o={o} busy={busy === 'auto'} onChange={v => run('auto', () => api.setAutoAccept(o.id, v))} t={t} rtl={rtl} />
+        </>) : null}
+
+        {o.status === 'searching' ? (<>
+          <View style={[s.timerRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+            <T kind="muted" style={{ flex: 1 }} testID="couriers-told">{o.couriers_notified ? t('couriers_told', { n: o.couriers_notified }) : t('st_searching_sub')}</T>
+            <T style={s.clock} testID="timer">{clock(left(o.search_ends_at))}</T>
           </View>
+          <Progress value={left(o.search_ends_at) / 600} />
+          <View style={[s.fareRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+            <RoundButton testID="want-down" icon="minus" label={t('price_down')} light disabled={want - 10 < o.offered_da || want <= o.offered_da} onPress={() => setWant(Math.max(o.offered_da, want - 10))} />
+            <View style={{ flex: 1, alignItems: 'center' }}><T style={s.fare} testID="order-price">{money(want)} {t('da')}</T><T kind="muted">{t('your_offer')}</T></View>
+            <RoundButton testID="want-up" icon="plus" label={t('price_up')} light disabled={want + 10 > o.max_da} onPress={() => setWant(Math.min(o.max_da, want + 10))} />
+          </View>
+          <Button testID="raise" kind="secondary" busy={busy === 'raise'} disabled={want <= o.offered_da} label={want > o.offered_da ? t('raise_to', { p: money(want) }) : t('raise_hint')} onPress={() => run('raise', () => api.raise(o.id, want))} />
+          <AutoAccept o={o} busy={busy === 'auto'} onChange={v => run('auto', () => api.setAutoAccept(o.id, v))} t={t} rtl={rtl} />
+        </>) : null}
+
+        {['assigned', 'picked_up'].includes(o.status) && o.driver ? (
+          <Card testID="driver-card" style={{ backgroundColor: color.card2 }}>
+            <View style={[s.drvRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+              <View style={s.avatar}><T style={s.avatarText}>{o.driver.name.charAt(0).toUpperCase()}</T></View>
+              <View style={{ flex: 1 }}>
+                <T style={s.strong}>{o.driver.name}</T>
+                <T kind="muted">{o.driver.rating ? `★ ${o.driver.rating}` : t('no_rating')} · {t('deliveries_n', { n: o.driver.deliveries })} · {t(o.driver.vehicle === 'car' ? 'by_car' : 'by_motorbike')}</T>
+              </View>
+            </View>
+            {o.eta_s != null ? <T style={s.eta} testID="eta">{t(o.status === 'assigned' ? 'eta_pickup_then' : 'eta_arrive', { m: minutes(o.eta_s) })}{o.eta_estimated ? ' ' + t('estimate') : ''}</T> : null}
+          </Card>
         ) : null}
-      </View>
 
-      {o.driver ? (
-        <View style={s.box} testID="driver-card">
-          <T kind="label">{t('driver')}</T>
-          <T>{o.driver.name} · {t(o.driver.vehicle === 'car' ? 'by_car' : 'by_motorbike')}</T>
-          <T kind="muted">{o.driver.rating ? `★ ${o.driver.rating}` : t('no_rating')}</T>
+        {o.status === 'failed' ? <Notice warn text={t('st_failed_sub')} /> : null}
+        {o.status === 'expired' ? <T kind="muted">{t(o.history.some(e => e.type === 'expired' && e.data?.reason === 'recipient_no_answer') ? 'st_expired_recipient' : 'st_expired_sub')}</T> : null}
+        {o.status === 'cancelled' && o.cancel_reason === 'recipient_declined' ? <Notice warn testID="recipient-declined" text={t('recipient_declined_sub', { name: o.recipient_name })} /> : null}
+
+        {o.status === 'assigned' && o.pickup_code ? (
+          <Card testID="pickup-box" style={s.codeBox}>
+            <T kind="label">{t('pickup_code_title')}</T>
+            <T style={s.code} testID="pickup-code" accessibilityLabel={o.pickup_code.split('').join(' ')}>{o.pickup_code}</T>
+            <Qr value={pickupQr(o.ref, o.pickup_code)} size={180} testID="pickup-qr" />
+            <T kind="muted">{t('pickup_code_sub')}</T>
+          </Card>
+        ) : null}
+
+        {['searching', 'assigned', 'picked_up'].includes(o.status) ? (
+          <Card testID="code-box" style={s.codeBox}>
+            <T kind="label">{t('dcode_title')}</T>
+            <T style={s.code} testID="delivery-code" accessibilityLabel={o.delivery_code.split('').join(' ')}>{o.delivery_code}</T>
+            {o.leg === 'return' ? <Qr value={deliveryQr(o.ref, o.delivery_code)} size={180} testID="return-qr" /> : null}
+            <T kind="muted">{t(o.leg === 'return' ? 'dcode_sub_return' : 'dcode_sub')}</T>
+            {trackUrl && o.leg === 'delivery' ? <Button testID="share-tracking" kind="secondary" icon="share-2" label={t('share_tracking')} onPress={share} /> : null}
+            {o.recipient_expecting_at ? <Notice testID="expecting" text={'✓ ' + t('expecting_yes')} /> : null}
+          </Card>
+        ) : null}
+
+        <Card style={{ backgroundColor: color.card2 }}>
+          <T testID="order-price-line" style={s.strong}>{t(o.locked_da ? 'price_locked' : 'price_now', { p: money(price) })}</T>
+          {o.payer === 'recipient' ? <T kind="muted">{t('fee_by_recipient')}</T> : null}
+          {o.cod_amount_da > 0 ? <T kind="muted">💵 {t('cod_collect', { p: money(o.cod_amount_da) })}</T> : null}
+          <Gap n={2} />
+          <T>📦 {addressLine(o.pickup_address)}</T>
+          <T>🏁 {o.recipient_name} · {addressLine(o.dropoff_address)}</T>
+        </Card>
+
+        {o.pickup_photo_doc || o.evidence_photos.length ? (
+          <Card testID="photos" style={{ backgroundColor: color.card2 }}>
+            {o.pickup_photo_doc ? (<><T kind="label">{t('parcel_photo_title')}</T><Image testID="parcel-photo" source={photoSrc(o.pickup_photo_doc)} style={s.photo} resizeMode="contain" accessibilityLabel={t('parcel_photo_title')} /></>) : null}
+            {o.evidence_photos.map(d => <View key={d}><T kind="label">{t('evidence_title')}</T><Image source={photoSrc(d)} style={s.photo} resizeMode="contain" accessibilityLabel={t('evidence_title')} /></View>)}
+          </Card>
+        ) : null}
+
+        {msg ? <Notice testID="order-msg" warn={msg.warn} text={msg.text} /> : null}
+        {o.status === 'picked_up' && o.leg === 'delivery' ? (recalling ? (<>
+          <T kind="label">{t('recall_title')}</T>
+          <Choice testID="recall" value={recallReason} onChange={setRecallReason} options={(['buyer_cancelled', 'wrong_parcel', 'wrong_address', 'other'] as RecallReason[]).map(v => ({ v, label: t(`recall_${v}`) }))} />
+          <Button testID="recall-confirm" kind="danger" busy={busy === 'recall'} disabled={!recallReason} label={t('recall_confirm')} onPress={recall} />
+        </>) : <Button testID="recall" kind="plain" label={t('recall_btn')} onPress={() => setRecalling(true)} />) : null}
+        {o.status === 'delivered' && o.leg === 'delivery' ? (o.rated ? <Notice text={t('rated_thanks')} /> : <Button testID="rate" label={t('rate_driver')} onPress={() => router.push({ pathname: '/rate/[id]', params: { id: o.id } })} />) : null}
+        {['expired', 'cancelled'].includes(o.status) ? <Button testID="send-again" label={t('send_again')} onPress={() => router.replace('/home')} /> : null}
+        {['awaiting_recipient', 'searching', 'assigned'].includes(o.status) ? <Button testID="cancel-order" kind="danger" icon="x" busy={busy === 'cancel'} label={t(o.status === 'assigned' ? 'cancel_order' : 'cancel_request')} onPress={cancel} /> : null}
+        {!['awaiting_recipient', 'searching', 'expired', 'cancelled'].includes(o.status) ? <Button testID="report-problem" kind="plain" label={t('report_problem')} onPress={() => router.push({ pathname: '/problem/[id]', params: { id: o.id } })} /> : null}
+
+        <View testID="history" style={{ marginTop: space(3) }}>
+          <T kind="label">{t('history_title')}</T>
+          {o.history.map((e, i) => <T key={i} kind="muted">{when(e.at, lang)} · {historyText(e, t, money)}</T>)}
         </View>
-      ) : null}
-
-      {o.status === 'assigned' && o.pickup_code ? (
-        <View style={[s.box, s.codeBox]} testID="pickup-box">
-          <T kind="label">{t('pickup_code_title')}</T>
-          <T style={s.code} testID="pickup-code" accessibilityLabel={o.pickup_code.split('').join(' ')}>{o.pickup_code}</T>
-          <Qr value={pickupQr(o.ref, o.pickup_code)} size={180} testID="pickup-qr" />
-          <T kind="muted">{t('pickup_code_sub')}</T>
-        </View>
-      ) : null}
-
-      {['searching', 'assigned', 'picked_up'].includes(o.status) ? (
-        <View style={[s.box, s.codeBox]} testID="code-box">
-          <T kind="label">{t('dcode_title')}</T>
-          <T style={s.code} testID="delivery-code" accessibilityLabel={o.delivery_code.split('').join(' ')}>{o.delivery_code}</T>
-          {o.leg === 'return' ? <Qr value={deliveryQr(o.ref, o.delivery_code)} size={180} testID="return-qr" /> : null}
-          <T kind="muted">{t(o.leg === 'return' ? 'dcode_sub_return' : 'dcode_sub')}</T>
-          {trackUrl ? <Button testID="share-tracking" kind="secondary" label={'↗ ' + t('share_tracking')} onPress={share} /> : null}
-          {o.recipient_expecting_at ? <Notice testID="expecting" text={'✓ ' + t('expecting_yes')} /> : null}
-        </View>
-      ) : null}
-
-      {o.pickup_photo_doc || o.evidence_photos.length ? (
-        <View style={s.box} testID="photos">
-          {o.pickup_photo_doc ? (<><T kind="label">{t('parcel_photo_title')}</T><Image testID="parcel-photo" source={photoSrc(o.pickup_photo_doc)} style={s.photo} resizeMode="contain" accessibilityLabel={t('parcel_photo_title')} /></>) : null}
-          {o.evidence_photos.map(d => <View key={d}><T kind="label">{t('evidence_title')}</T><Image source={photoSrc(d)} style={s.photo} resizeMode="contain" accessibilityLabel={t('evidence_title')} /></View>)}
-        </View>
-      ) : null}
-
-      <View style={s.box}>
-        <T>A · {addressLine(o.pickup_address)}</T>
-        <T>B · {o.recipient_name} · {addressLine(o.dropoff_address)}</T>
-      </View>
-
-      <View style={s.box} testID="history">
-        <T kind="label">{t('history_title')}</T>
-        {o.history.map((e, i) => <T key={i} kind="muted">{when(e.at, lang)} · {historyText(e, t)}</T>)}
-      </View>
-
-      {msg ? <Notice testID="order-msg" warn={msg.warn} text={msg.text} /> : null}
-      {o.status === 'picked_up' && o.leg === 'delivery' ? (recalling ? (<>
-        <T kind="label">{t('recall_title')}</T>
-        <Choice testID="recall" value={recallReason} onChange={setRecallReason} options={(['buyer_cancelled', 'wrong_parcel', 'wrong_address', 'other'] as RecallReason[]).map(v => ({ v, label: t(`recall_${v}`) }))} />
-        <Button testID="recall-confirm" kind="danger" busy={busy === 'recall'} disabled={!recallReason} label={t('recall_confirm')} onPress={recall} />
-      </>) : <Button testID="recall" kind="plain" label={t('recall_btn')} onPress={() => setRecalling(true)} />) : null}
-      {o.status === 'delivered' && o.leg === 'delivery' ? (o.rated ? <Notice text={t('rated_thanks')} /> : <Button testID="rate" label={t('rate_driver')} onPress={() => router.push({ pathname: '/rate/[id]', params: { id: o.id } })} />) : null}
-      {['expired', 'cancelled'].includes(o.status) ? <Button testID="send-again" label={t('send_again')} onPress={() => router.replace('/new-order')} /> : null}
-      {['searching', 'assigned'].includes(o.status) ? <Button testID="cancel-order" kind="danger" busy={busy === 'cancel'} label={t('cancel_order')} onPress={cancel} /> : null}
-      {!['searching', 'expired', 'cancelled'].includes(o.status) ? <Button testID="report-problem" kind="plain" label={t('report_problem')} onPress={() => router.push({ pathname: '/problem/[id]', params: { id: o.id } })} /> : null}
-      <Gap />
-    </Screen>
+      </Sheet>
+    </View>
   );
 }
+
+function AutoAccept({ o, busy, onChange, t, rtl }: { o: Order; busy: boolean; onChange: (v: boolean) => void; t: (k: Key, v?: Record<string, string | number>) => string; rtl: boolean }) {
+  return (
+    <View style={[s.autoRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+      <Icon name="zap" tint={color.lime} />
+      <T style={{ flex: 1 }}>{t('auto_accept', { p: money(o.offered_da) })}</T>
+      <Switch testID="auto-accept" disabled={busy} value={o.auto_accept} onValueChange={onChange} trackColor={{ true: color.lime, false: color.card2 }} thumbColor={color.pureWhite} accessibilityLabel={t('auto_accept', { p: money(o.offered_da) })} />
+    </View>
+  );
+}
+
+function Progress({ value }: { value: number }) {
+  return <View style={s.bar}><View style={[s.barFill, { width: `${Math.round(Math.min(1, Math.max(0, value)) * 100)}%` }]} /></View>;
+}
+
+// Couriers' offers, cheapest first (inDrive's "choose a driver"): price and time to arrive first, then who, then Decline/Accept.
+function Offers({ bids, now, busy, onAccept, onDecline }: { bids: Bid[]; now: number; busy: string | null; onAccept: (b: Bid) => void; onDecline: (b: Bid) => void }) {
+  const { t, rtl } = useApp();
+  return (
+    <View style={s.offers} testID="offers">
+      <T style={s.offersTitle}>{t('choose_courier')}</T>
+      <ScrollView style={{ maxHeight: Dimensions.get('window').height * 0.5 }}>
+        {bids.map(b => {
+          const sec = Math.max(0, Math.round((new Date(b.expires_at).getTime() - now) / 1000));
+          return (
+            <View key={b.offer_id} style={s.offer} testID={'offer-' + b.offer_id}>
+              <View style={[s.offerTop, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+                <T style={s.offerPrice}>{money(b.price_da)} {t('da')}</T>
+                {b.eta_s != null ? <T style={s.offerEta}>{t('min_n', { n: minutes(b.eta_s) })}</T> : null}
+              </View>
+              <View style={[s.drvRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+                <View style={s.avatar}><T style={s.avatarText}>{b.driver.name.charAt(0).toUpperCase()}</T></View>
+                <View style={{ flex: 1 }}>
+                  <T style={s.strong}>{b.driver.name} {b.driver.rating ? `★ ${b.driver.rating}` : ''}</T>
+                  <T kind="muted">{t('deliveries_n', { n: b.driver.deliveries })} · {t(b.driver.vehicle === 'car' ? 'by_car' : 'by_motorbike')}</T>
+                </View>
+              </View>
+              <View style={s.bar}><View style={[s.barFill, { width: `${Math.min(100, Math.round((sec / 40) * 100))}%` }]} /></View>
+              <View style={[s.offerBtns, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+                <Button testID={'decline-' + b.offer_id} kind="secondary" style={{ flex: 1 }} busy={busy === 'dec' + b.offer_id} label={t('decline')} onPress={() => onDecline(b)} />
+                <Button testID={'accept-' + b.offer_id} style={{ flex: 1 }} busy={busy === 'acc' + b.offer_id} label={t('accept')} onPress={() => onAccept(b)} />
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
 // One line of the order's history, in plain words (reasons and distances included: nothing is hidden from the sender).
-function historyText(e: { type: string; data: any }, t: (k: Key, v?: Record<string, string | number>) => string) {
+function historyText(e: { type: string; data: any }, t: (k: Key, v?: Record<string, string | number>) => string, m: (n: number) => string) {
   const base = t(('h_' + e.type) as Key);
   const d = e.data ?? {};
   if (d.reason && ['delivery_failed', 'released_by_driver', 'recalled_by_sender'].includes(e.type)) {
     const k = (e.type === 'delivery_failed' ? 'fail_' : e.type === 'released_by_driver' ? 'release_' : 'recall_') + d.reason;
     return `${base}: ${t(k as Key)}`;
   }
+  if (e.type === 'bid_made' && d.price_da) return `${base}: ${m(d.price_da)} ${t('da')}`;
   if (e.type === 'flag_far_away') return t('h_flag_far_away', { m: d.distance_m });
   if (e.type === 'cancelled' && d.late) return `${base} (${t('late')})`;
   return base;
 }
+
 const s = StyleSheet.create({
-  photo: { width: '100%', height: 220, borderRadius: radius, marginVertical: space(2), backgroundColor: color.soft },
-  mapBox: { height: 220, borderRadius: radius, overflow: 'hidden', borderWidth: 1, borderColor: color.border, marginVertical: space(3) },
-  box: { backgroundColor: color.white, borderRadius: radius, borderWidth: 1, borderColor: color.border, padding: space(4), marginVertical: space(1.5) },
-  row: { flexDirection: 'row', gap: space(3), flexWrap: 'wrap' },
-  codeBox: { backgroundColor: color.soft, borderColor: color.primary },
-  code: { fontFamily: font.bold, fontSize: 40, lineHeight: 56, letterSpacing: 8, color: color.navy, textAlign: 'center', writingDirection: 'ltr' },
+  root: { flex: 1, backgroundColor: color.page },
+  top: { position: 'absolute', top: 0, left: 0, right: 0 },
+  topRow: { alignItems: 'center', gap: space(3), padding: space(4) },
+  refChip: { backgroundColor: color.card, borderRadius: 999, paddingHorizontal: space(4), paddingVertical: space(2) },
+  refText: { fontFamily: font.semibold, fontSize: 14 },
+  timerRow: { alignItems: 'center', gap: space(2) },
+  clock: { fontFamily: font.bold, fontSize: 22 },
+  bar: { height: 5, borderRadius: 3, backgroundColor: color.card2, overflow: 'hidden', marginVertical: space(2) },
+  barFill: { height: 5, backgroundColor: color.pureWhite },
+  fareRow: { alignItems: 'center', gap: space(2), backgroundColor: color.card2, borderRadius: 20, padding: space(3), marginTop: space(2) },
+  fare: { fontFamily: font.bold, fontSize: 28, lineHeight: 40, textAlign: 'center' },
+  autoRow: { alignItems: 'center', gap: space(3), paddingVertical: space(3) },
+  drvRow: { alignItems: 'center', gap: space(3) },
+  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: color.lime, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: color.ink, fontFamily: font.bold, fontSize: 20, textAlign: 'center' },
+  strong: { fontFamily: font.semibold },
+  eta: { fontFamily: font.bold, fontSize: 20, color: color.lime, marginTop: space(2) },
+  codeBox: { backgroundColor: color.card2, borderWidth: 2, borderColor: color.lime },
+  code: { fontFamily: font.bold, fontSize: 40, lineHeight: 56, letterSpacing: 8, color: color.lime, textAlign: 'center', writingDirection: 'ltr' },
+  photo: { width: '100%', height: 220, borderRadius: radius, marginVertical: space(2), backgroundColor: color.card },
+  offers: { marginHorizontal: space(3) },
+  offersTitle: { fontFamily: font.bold, fontSize: 24, lineHeight: 34, marginBottom: space(2), textShadowColor: '#000', textShadowRadius: 6 },
+  offer: { backgroundColor: color.card, borderRadius: 24, padding: space(4), marginBottom: space(3), elevation: 8 },
+  offerTop: { alignItems: 'baseline', gap: space(3) },
+  offerPrice: { fontFamily: font.bold, fontSize: 30, lineHeight: 42 },
+  offerEta: { fontFamily: font.bold, fontSize: 22, color: color.muted },
+  offerBtns: { gap: space(3) },
 });
