@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '../lib/app';
 import { ALGIERS } from '../lib/config';
 import { currentPosition, Point } from '../lib/location';
@@ -11,12 +10,13 @@ import { color, font, radius, space } from '../lib/theme';
 import { AppMap, AppMapRef } from '../ui/AppMap';
 import { Sheet } from '../ui/Sheet';
 import { PlaceSearch } from '../ui/PlaceSearch';
-import { Button, Notice, RoundButton, T } from '../ui/kit';
+import { MapOverlay, Button, Notice, RoundButton, T } from '../ui/kit';
 import { Icon } from '../ui/Icon';
 
 // Where the parcel goes: search a place, or move the map under the flag pin. The pickup point (chosen on the home map)
 // stays visible. Without params (older links), the pickup is chosen here first.
 export default function NewOrder() {
+  const [mapTouch, setMapTouch] = useState(false);   // a finger is moving the map: floating buttons step aside
   const { t, rtl, lang, services } = useApp();
   const prm = useLocalSearchParams<{ plat?: string; plng?: string; pname?: string }>();
   const given = prm.plat && prm.plng ? { lat: Number(prm.plat), lng: Number(prm.plng) } : null;
@@ -49,9 +49,9 @@ export default function NewOrder() {
   return (
     <View style={s.root} testID="screen-new-order">
       <View style={{ flex: 1 }}>
-        <AppMap ref={map} start={given ?? ALGIERS} zoom={given ? 14 : 13} onMoved={setCenter} centerPin={{ kind: step, label: t(step === 'pickup' ? 'pickup' : 'dropoff') }}
+        <AppMap onTouching={setMapTouch} ref={map} start={given ?? ALGIERS} zoom={given ? 14 : 13} onMoved={setCenter} centerPin={{ kind: step, label: t(step === 'pickup' ? 'pickup' : 'dropoff') }}
           pins={pickup ? [{ id: 'A', at: pickup, kind: 'pickup', label: t('pickup') }] : []} />
-        <SafeAreaView edges={['top']} style={s.top} pointerEvents="box-none">
+        <MapOverlay hidden={mapTouch} style={s.top}>
           <View style={[s.topRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
             <RoundButton testID="back" icon="arrow-left" label={t('back')} onPress={() => (step === 'dropoff' && !given ? setPickup(null) : router.back())} />
             {pickup ? (
@@ -61,8 +61,8 @@ export default function NewOrder() {
               </View>
             ) : null}
           </View>
-        </SafeAreaView>
-        <View style={[s.locate, rtl ? { left: space(4) } : { right: space(4) }]}><RoundButton testID="my-location" icon="navigation" label={t('my_location')} onPress={locate} /></View>
+        </MapOverlay>
+        <MapOverlay hidden={mapTouch} style={[s.locate, rtl ? { left: space(4) } : { right: space(4) }]}><RoundButton testID="my-location" icon="navigation" label={t('my_location')} onPress={locate} /></MapOverlay>
       </View>
       <Sheet inline maxFraction={0.55} testID="dest-sheet"
         footer={<Button testID="confirm-point" label={t(step === 'pickup' ? 'confirm_pickup' : 'confirm_dropoff')} onPress={confirm} />}>

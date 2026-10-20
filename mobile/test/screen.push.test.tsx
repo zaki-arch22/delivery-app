@@ -42,7 +42,7 @@ test('registered for the active profile and language; language change and profil
 
   // A driver profile on the same number: after switching, this phone's pushes belong to the driver profile only.
   const up = async (kind: string) => (await (await nodeFetch(API + '/upload_document?kind=' + kind, { method: 'POST', headers: { authorization: 'Bearer ' + s.client.token, 'content-type': 'image/jpeg' }, body: require('fs').readFileSync(require('path').join(__dirname, '../../backend/test/fixtures/photo.jpg')) })).json() as any).document_id;
-  await act(async () => { await s.session.addProfile('driver', 'Hana Driver', true, { vehicle: 'motorbike', id_photo: await up('id_photo'), licence_photo: await up('licence_photo'), vehicle_photo: await up('vehicle_photo') }, '100000000002'); });
+  await act(async () => { await s.session.addProfile('driver', 'Hana Driver', true, { vehicle: 'motorbike', first_name: 'Karim', last_name: 'Test', birth_date: '1995-04-12', vehicle_color: 'Blue', plate_number: '12345 113 16', ownership_photo: await up('ownership_photo'), id_photo: await up('id_photo'), licence_photo: await up('licence_photo'), vehicle_photo: await up('vehicle_photo') }, '100000000002'); });
   await waitFor(async () => expect(await device()).toEqual([{ type: 'driver', language: 'en' }]));
   await act(async () => { await s.session.switchProfile('user'); });
   await waitFor(async () => expect(await device()).toEqual([{ type: 'user', language: 'en' }]));
@@ -51,7 +51,7 @@ test('registered for the active profile and language; language change and profil
   const q = await call('/get_quote', { pickup: { lat: 36.7538, lng: 3.0588 }, dropoff: { lat: 36.765, lng: 3.07 }, size: 'small' }, s.client.token!);
   const o = await call('/create_order', { quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: { street: 'Rue A' }, dropoff_address: { street: 'Rue B' }, recipient_name: 'Omar', recipient_phone: '+213661111111', payer: 'sender' }, s.client.token!, { 'idempotency-key': 'push-test-order-1' });
   await act(async () => { pushState.tap({ id: '1', kind: 'order.assigned', order_id: o.id }); });
-  expect(await screen.findByTestId('order-status')).toHaveTextContent(/Waiting for Omar to confirm/);
+  expect(await screen.findByTestId('order-status')).toHaveTextContent(/Looking for a courier/);
 });
 
 test('a registered recipient sees the incoming parcel and its code on the home screen (live, and from a tapped push)', async () => {
@@ -69,11 +69,10 @@ test('a registered recipient sees the incoming parcel and its code on the home s
   await screen.findByTestId('send-parcel');
   await new Promise(r => setTimeout(r, 1000));                                           // the live connection is up
   const o1 = await send('push-incoming-1');
-  // The receiver is asked first (yes / no); after "yes" the order searches for couriers and the card shows the code.
-  expect(await screen.findByTestId('incoming-' + o1.ref)).toHaveTextContent(/Yanis wants to send you a parcel/);
-  await act(async () => { await fireEvent.press(screen.getByTestId('incoming-yes-' + o1.ref)); });
-  await waitFor(() => expect(screen.getByTestId('incoming-' + o1.ref)).toHaveTextContent(new RegExp(`Give this code to the driver when you receive it: ${o1.delivery_code}`)));
-  await waitFor(async () => expect((await db.query(`SELECT status FROM orders WHERE id=$1`, [o1.id])).rows[0].status).toBe('searching'));
+  // The card shows who sends it and the delivery code at once (no yes/no step); the search for couriers already runs.
+  expect(await screen.findByTestId('incoming-' + o1.ref)).toHaveTextContent(/Yanis is sending you a parcel/);
+  expect(screen.getByTestId('incoming-' + o1.ref)).toHaveTextContent(new RegExp(`Give this code to the driver when you receive it: ${o1.delivery_code}`));
+  expect((await db.query(`SELECT status FROM orders WHERE id=$1`, [o1.id])).rows[0].status).toBe('searching');
   // A push tapped while the app was closed carries the same data.
   await act(async () => { pushState.tap({ id: '99', kind: 'order.incoming', order_id: '11111111-1111-1111-1111-111111111111', ref: 'TEST-REF', delivery_code: '4321' }); });
   expect(await screen.findByTestId('incoming-TEST-REF')).toHaveTextContent(/4321/);

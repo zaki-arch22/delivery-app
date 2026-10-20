@@ -190,7 +190,10 @@ export class AuthService {
       // The three photos are uploaded first (upload_document); here the app sends their ids.
       const d = docs ?? {};
       if (!KINDS.every(k => typeof d[k] === 'string' && UUID.test(d[k])) || !['motorbike', 'car'].includes(d.vehicle))
-        throw bad('DRIVER_DOCS_MISSING', 'ID photo, licence photo, vehicle photo and vehicle type are required');
+        throw bad('DRIVER_DOCS_MISSING', 'ID card, driving licence, ownership document, a vehicle photo and the vehicle type are required');
+      if (d.vehicle_photos !== undefined && (!Array.isArray(d.vehicle_photos) || d.vehicle_photos.length > 3 || !d.vehicle_photos.every((x: any) => typeof x === 'string' && UUID.test(x))))
+        throw bad('BAD_DOCUMENT', 'vehicle_photos must be up to 3 more photo ids');
+      driverInfo(d);   // names, date of birth, colour, plate (throws a clear error)
       // One person = one driver profile: the national ID number (from the ID card, checked by staff against the photo).
       if (typeof nationalId !== 'string' || !NATIONAL_ID.test(nationalId)) throw bad('BAD_NATIONAL_ID', 'Enter the number written on your national ID card (9 to 18 digits)');
       if (await this.db.one(`SELECT 1 FROM banned_identifiers WHERE kind='national_id' AND value_hash=$1`, [idHash('national_id', nationalId)])) throw new ForbiddenException({ error: 'ID_BANNED', message: 'This ID card cannot be used to drive with us.' });
@@ -210,9 +213,12 @@ export class AuthService {
       const status = type === 'user' ? 'active' : 'pending_approval';
       const p = await client.query(`INSERT INTO profiles(account_id,type,display_name,status,rules_version) VALUES ($1,$2,$3,$4,$5) RETURNING id`, [accountId, type, name, status, RULES_VERSION]);
       if (type === 'driver') {
-        await this.documents.attach((s, v = []) => client.query(s, v).then(x => x.rows), accountId, p.rows[0].id, docs);
-        await client.query(`INSERT INTO driver_details(profile_id,id_photo_doc,licence_photo_doc,vehicle,vehicle_photo_doc,national_id_hash,national_id_last3) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [p.rows[0].id, docs.id_photo, docs.licence_photo, docs.vehicle, docs.vehicle_photo, idHash('national_id', nationalId), nationalId.slice(-3)]);
+        await this.documents.attach((s, v = []) => client.query(s, v).then(x => x.rows), accountId, p.rows[0].id, docs, docs.vehicle_photos ?? []);
+        const info = driverInfo(docs);
+        await client.query(`INSERT INTO driver_details(profile_id,id_photo_doc,licence_photo_doc,vehicle,vehicle_photo_doc,ownership_photo_doc,national_id_hash,national_id_last3,first_name,last_name,birth_date,vehicle_color,plate_number)
+                            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          [p.rows[0].id, docs.id_photo, docs.licence_photo, docs.vehicle, docs.vehicle_photo, docs.ownership_photo, idHash('national_id', nationalId), nationalId.slice(-3),
+           info.first_name, info.last_name, info.birth_date, info.vehicle_color, info.plate_number]);
       }
       await client.query('COMMIT');
       await this.profileChanged(sid, p.rows[0].id);
@@ -252,4 +258,18 @@ export class AuthService {
     });
     return { token: signAccess({ sid, acc: accountId, pid: profileId, typ: null }), refresh_token: refresh };
   }
+}
+
+// The courier's identity and vehicle as typed at sign-up (staff compare them with the photos before approving).
+export function driverInfo(d: any) {
+  const txt = (v: any, min: number, max: number) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ') : '');
+  const first = txt(d.first_name, 1, 40), last = txt(d.last_name, 1, 40), colour = txt(d.vehicle_color, 2, 30);
+  if (!first || first.length > 40 || CONTROL.test(first) || !last || last.length > 40 || CONTROL.test(last)) throw bad('BAD_DRIVER_NAME', 'Enter your first name and last name as written on your ID card');
+  const b = typeof d.birth_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.birth_date) ? new Date(d.birth_date + 'T00:00:00Z') : null;
+  const age = b && !isNaN(b.getTime()) && b.toISOString().slice(0, 10) === d.birth_date ? (Date.now() - b.getTime()) / (365.25 * 24 * 3600_000) : -1;
+  if (age < 18 || age > 80) throw bad('BAD_BIRTH_DATE', 'Enter your date of birth (you must be at least 18)');
+  if (colour.length < 2 || colour.length > 30 || CONTROL.test(colour)) throw bad('BAD_VEHICLE_COLOR', 'Enter the colour of your vehicle');
+  const plate = typeof d.plate_number === 'string' ? d.plate_number.toUpperCase().replace(/[^0-9A-Z]+/g, ' ').trim() : '';
+  if (!/^[0-9A-Z][0-9A-Z ]{4,18}[0-9A-Z]$/.test(plate) || plate.replace(/ /g, '').length < 5) throw bad('BAD_PLATE', 'Enter the registration plate number of your vehicle');
+  return { first_name: first, last_name: last, birth_date: d.birth_date as string, vehicle_color: colour, plate_number: plate };
 }

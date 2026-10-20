@@ -26,9 +26,8 @@ repeat offenders are stopped.
 ## The life of an order (who proves what)
 1. **Sender creates the order**: pickup, drop-off, receiver name and phone, size, cash to collect, inspection choice, price.
    The sender gets a **tracking link** to send to the receiver (one tap opens WhatsApp with the message ready; free for us).
-2. **The receiver says yes first** on that link (no account needed). Until then no courier sees the request; "no" cancels it
-   with nothing held against anyone; no answer in 60 minutes ends it. A yes sent from the sender's own internet address is
-   recorded for staff (the sender holds the link too; only paid SMS verification could prove who pressed it).
+2. **No waiting for the receiver** (owner's decision, Oct 2026): couriers are searched as soon as the order exists. On the
+   link the receiver may say "I am expecting it" (optional; the sender and driver see it) or report a problem.
 3. **Couriers answer, the customer chooses**: nearby couriers see the price, accept it or offer more (never above the maximum);
    the customer picks one (price, time to arrive, rating, deliveries) and the price locks. The sender sees the courier's name,
    vehicle, rating; the receiver's page too.

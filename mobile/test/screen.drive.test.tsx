@@ -43,7 +43,6 @@ async function newOrder(extra: any = {}) {
   const q = await call('/get_quote', { pickup: P, dropoff: D, size: 'small' }, sender);
   // auto-accept on: the courier who accepts the customer's price gets the job at once (choosing among offers has its own test).
   const o = await call('/create_order', { auto_accept: true, quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: { street: 'Rue Larbi Ben Mhidi 5' }, dropoff_address: { landmark: 'Jardin d’Essai' }, recipient_name: 'Samir Recipient', recipient_phone: '+213661234567', payer: 'sender', ...extra }, sender, { 'idempotency-key': 'drive-test-' + (++n) + '-' + Date.now() });
-  await call('/track_confirm', { t: o.tracking_token });   // the receiver says yes first
   return o;
 }
 

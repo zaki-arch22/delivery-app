@@ -31,7 +31,7 @@ export const Field = ({ label, hint, children }: { label: string; hint?: string;
   <label className="field"><span className="field-label">{label}</span>{children}{hint && <span className="hint">{hint}</span>}</label>
 );
 
-const TONE: Record<string, string> = { awaiting_recipient: 'warn', searching: 'info', assigned: 'info', picked_up: 'info', delivered: 'good', failed: 'bad', cancelled: 'muted', expired: 'muted', active: 'good', pending_approval: 'warn', rejected: 'bad', suspended: 'bad', open: 'warn', in_progress: 'info', resolved: 'good' };
+const TONE: Record<string, string> = { searching: 'info', assigned: 'info', picked_up: 'info', delivered: 'good', failed: 'bad', cancelled: 'muted', expired: 'muted', active: 'good', pending_approval: 'warn', rejected: 'bad', suspended: 'bad', open: 'warn', in_progress: 'info', resolved: 'good' };
 export const Status = ({ s }: { s: string }) => <span className={'pill ' + (TONE[s] ?? 'muted')}>{tx('status.' + s, s)}</span>;
 export const Pill = ({ tone, children }: { tone: 'good' | 'bad' | 'warn' | 'info' | 'muted'; children: ReactNode }) => <span className={'pill ' + tone}>{children}</span>;
 

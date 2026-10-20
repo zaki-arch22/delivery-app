@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '../lib/app';
 import { errorMessage } from '../lib/errors';
 import { color, font, space } from '../lib/theme';
@@ -31,6 +31,7 @@ const COURIER: Item[] = [
 // Customer mode and Courier mode. A missing second profile is created from here (Courier: sign-up with documents).
 export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t, rtl, state, services } = useApp();
+  const insets = useSafeAreaInsets();
   const width = Math.min(360, Dimensions.get('window').width * 0.84);
   const x = useRef(new Animated.Value(-width)).current;
   const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
@@ -50,10 +51,10 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
   const stars = p.rating ? Number(p.rating).toFixed(2) : null;
   const side = rtl ? { right: 0 } : { left: 0 };
   return (
-    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={s.overlay} onPress={onClose} accessibilityLabel={t('close')} testID="menu-close" />
       <Animated.View style={[s.panel, side, { width, transform: [{ translateX: rtl ? Animated.multiply(x, -1) : x }] }]} testID="menu">
-        <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+        <View style={{ flex: 1, paddingBottom: insets.bottom }}>
           <Pressable testID="menu-profile" accessibilityRole="button" onPress={() => go('/profile')} style={[s.head, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
             <View style={s.avatar}><Text style={s.avatarText}>{p.display_name.trim().charAt(0).toUpperCase()}</Text></View>
             <View style={{ flex: 1 }}>
@@ -75,7 +76,7 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
             <Button testID="switch-mode" busy={busy} icon={courier ? 'package' : 'truck'} label={t(courier ? 'to_customer_mode' : 'to_courier_mode')}
               sub={hasOther ? undefined : t(courier ? 'to_customer_new' : 'to_courier_new')} onPress={switchMode} />
           </View>
-        </SafeAreaView>
+        </View>
       </Animated.View>
     </Modal>
   );

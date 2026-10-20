@@ -57,7 +57,6 @@ export class Matching implements OnModuleInit, OnModuleDestroy {
     if (!lock.ok) return;
     try {
       await this.endBids();
-      await this.endUnanswered();
       const rows = await this.db.query(`SELECT id FROM orders WHERE status='searching' ORDER BY created_at LIMIT 200`);
       for (const r of rows) await this.offerNext(r.id);
     } finally { await this.db.query(`SELECT pg_advisory_unlock(727001)`); }
@@ -73,17 +72,6 @@ export class Matching implements OnModuleInit, OnModuleDestroy {
         const [o] = await q(`SELECT user_profile_id FROM orders WHERE id=$1`, [e.order_id]);
         await notify(q, { profile: e.driver_profile_id, kind: 'bid.expired', order: e.order_id, push: false, dedupe: `offer:${e.id}:bidend:${e.made}`, data: { offer_id: Number(e.id) } });
         await notify(q, { profile: o.user_profile_id, kind: 'order.bid_withdrawn', order: e.order_id, push: false, dedupe: `offer:${e.id}:bidgone:${e.made}`, data: { offer_id: Number(e.id) } });
-      }
-    });
-  }
-
-  // The receiver did not answer in time: the order ends before any courier was bothered.
-  private async endUnanswered() {
-    await this.db.tx(async q => {
-      const late = await q(`UPDATE orders SET status='expired' WHERE status='awaiting_recipient' AND created_at <= now() - make_interval(mins => $1) RETURNING id, ref, user_profile_id`, [cfg.recipientWindowMin()]);
-      for (const o of late) {
-        await q(`INSERT INTO order_events(order_id,type,data) VALUES ($1,'expired','{"reason":"recipient_no_answer"}')`, [o.id]);
-        await notify(q, { profile: o.user_profile_id, kind: 'order.expired', order: o.id, dedupe: `order:${o.id}:expired`, data: { ref: o.ref, reason: 'recipient_no_answer' } });
       }
     });
   }

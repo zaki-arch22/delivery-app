@@ -5,7 +5,7 @@ import { ActionDialog, addressText, Empty, ErrorBox, Field, Loading, Modal, Page
 import type { Nav } from '../App';
 import { DocPhoto } from './Drivers';
 
-const STATUSES = ['awaiting_recipient', 'searching', 'assigned', 'picked_up', 'delivered', 'failed', 'cancelled', 'expired'];
+const STATUSES = ['searching', 'assigned', 'picked_up', 'delivered', 'failed', 'cancelled', 'expired'];
 
 export function Orders({ nav, openId }: { nav: Nav; openId?: string }) {
   useLang();
@@ -55,7 +55,7 @@ export function OrderDetail({ id, onClose }: { id: string; nav: Nav; onClose: ()
   const o = data?.order;
   // Each action is offered ONLY in the states where the server accepts it.
   const can: Record<Act, boolean> = o ? {
-    cancel: ['awaiting_recipient', 'searching', 'assigned'].includes(o.status), reassign: o.status === 'assigned', start_return: o.status === 'picked_up' && o.leg === 'delivery',
+    cancel: ['searching', 'assigned'].includes(o.status), reassign: o.status === 'assigned', start_return: o.status === 'picked_up' && o.leg === 'delivery',
     reset_code_attempts: o.status === 'picked_up' && o.code_attempts > 0, correct_address: ['searching', 'assigned', 'picked_up'].includes(o.status),
   } : { cancel: false, reassign: false, start_return: false, reset_code_attempts: false, correct_address: false };
   const run = async (reason: string) => {

@@ -10,6 +10,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppProvider } from '../lib/app';
 import { PushBridge } from '../lib/PushBridge';
 import { color } from '../lib/theme';
+import { AppFrame } from '../ui/Frame';
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({ Cairo_400Regular, Cairo_600SemiBold, Cairo_700Bold });
@@ -19,7 +20,9 @@ export default function RootLayout() {
       <AppProvider>
         <StatusBar style="light" />
         <PushBridge />
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.page }, animation: 'fade' }} />
+        <AppFrame>
+          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.page }, animation: 'fade' }} />
+        </AppFrame>
       </AppProvider>
     </SafeAreaProvider>
   );

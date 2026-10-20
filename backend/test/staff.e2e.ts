@@ -27,9 +27,7 @@ const P = { lat: 36.7538, lng: 3.0588 }, D = { lat: 36.765, lng: 3.07 }, adr = {
 async function order(tok: string, key: string, extra: any = {}) {
   const q = (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, tok)).b;
   const o = (await api('/create_order', { auto_accept: true, quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Amine', recipient_phone: '+213770000001', payer: 'sender', ...extra }, tok, { 'idempotency-key': key })).b;
-  // The receiver says yes first (tracking link), then couriers are searched. Auto-accept: the first courier who accepts gets it.
-  if (o?.status === 'awaiting_recipient') { await api('/track_confirm', { t: o.tracking_token }); return { ...o, status: 'searching' }; }
-  return o;
+  return o;   // auto-accept: the first courier who accepts the customer's price gets it
 }
 const PW = 'correct-horse-battery-1';
 const BOX = { type: 'Polygon', coordinates: [[[2.9, 36.6], [3.3, 36.6], [3.3, 36.9], [2.9, 36.9], [2.9, 36.6]]] };
@@ -78,7 +76,8 @@ const BOX = { type: 'Polygon', coordinates: [[[2.9, 36.6], [3.3, 36.6], [3.3, 36
   const sD1 = new Sock(D1.token), sD2 = new Sock(D2.token), sDR = new Sock(DR.token), sU = new Sock(U.token); await until(() => sD1.ready && sD2.ready && sDR.ready && sU.ready);
   ok('S3 a pending driver cannot go online', (await api('/set_online', { online: true }, D1.token)).b.error === 'PROFILE_NOT_ACTIVE');
   const pend = (await S('/list_pending_drivers')).b.drivers;
-  ok('S3 pending drivers are listed with their documents', pend.length === 3 && pend.every((d: any) => ['id_photo', 'licence_photo', 'vehicle_photo'].every(k => /^[0-9a-f-]{36}$/.test(d.documents?.[k]))), pend[0]);
+  ok('S3 pending drivers are listed with their documents', pend.length === 3 && pend.every((d: any) => ['id_photo', 'licence_photo', 'ownership_photo', 'vehicle_photo'].every(k => /^[0-9a-f-]{36}$/.test(d.documents?.[k])) && d.documents.vehicle_photos.length >= 1), pend[0]);
+  ok('S3 ...with the identity and vehicle they typed, for a person to compare with the photos', pend.every((d: any) => d.first_name === 'Karim' && d.last_name === 'Test' && d.birth_date === '1995-04-12' && d.vehicle_color === 'Blue' && d.plate_number === '12345 113 16'), pend[0]);
   const docId = pend.find((d: any) => d.id === D1.id).documents.id_photo;
   const img = await fetch(HTTP + '/get_document?id=' + docId, { headers: { authorization: 'Bearer ' + ST } });
   const bytes = Buffer.from(await img.arrayBuffer());

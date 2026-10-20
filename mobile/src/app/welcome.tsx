@@ -5,10 +5,9 @@ import { useApp } from '../lib/app';
 import { color, font, space } from '../lib/theme';
 import { Gap, Screen, T } from '../ui/kit';
 import { Icon, IconName } from '../ui/Icon';
-import { LanguageSwitch } from '../ui/LanguageSwitch';
 
-// First screen: language, then the two modes (CLAUDE.md section 4: one app, two paths). The other mode can be added later
-// from the side menu.
+// First screen: the two modes (CLAUDE.md section 4: one app, two paths), in the phone's language (changed later only in
+// Settings). The other mode can be added later from the side menu.
 export default function Welcome() {
   const { t, rtl } = useApp();
   const Path = ({ id, icon, title, sub, path }: { id: string; icon: IconName; title: string; sub: string; path: 'user' | 'driver' }) => (
@@ -21,8 +20,7 @@ export default function Welcome() {
   );
   return (
     <Screen testID="screen-welcome">
-      <LanguageSwitch />
-      <Gap n={8} />
+      <Gap n={6} />
       <View style={s.hero}>
         <T style={s.brand}>{t('app_name')}</T>
         <T style={s.heroTitle}>{t('welcome_title')}</T>

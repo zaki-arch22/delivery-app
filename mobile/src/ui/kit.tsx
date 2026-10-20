@@ -1,6 +1,6 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, TextInputProps, TextProps, View, ViewStyle } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, TextInputProps, TextProps, View, ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useApp } from '../lib/app';
 import { color, font, minTouch, radius, space } from '../lib/theme';
@@ -16,11 +16,12 @@ export function T({ style, kind = 'body', ...p }: TextProps & { kind?: 'title' |
 // With `title`, a header with a back arrow and the centred title (like every inner page).
 export function Screen({ children, testID, title, onBack }: { children?: React.ReactNode; testID?: string; title?: string; onBack?: () => void }) {
   const { rtl } = useApp();
+  const insets = useSafeAreaInsets();   // top is taken by the grey status band (AppFrame); bottom = the phone's gesture bar
   return (
-    <SafeAreaView style={s.safe} testID={testID}>
+    <View style={[s.safe, { paddingBottom: insets.bottom }]} testID={testID}>
       {title !== undefined ? <Header title={title} onBack={onBack} /> : null}
       <ScrollView contentContainerStyle={[s.screen, { direction: rtl ? 'rtl' : 'ltr' }]} keyboardShouldPersistTaps="handled">{children}</ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -108,6 +109,13 @@ export function Row({ icon, label, value, onPress, testID, danger = false }: { i
       {onPress ? <Icon name="chevron-right" size={20} tint={color.muted} /> : null}
     </Pressable>
   );
+}
+
+// Buttons and cards floating over a map: they fade away while a finger moves the map, and come back when it is lifted.
+export function MapOverlay({ hidden, children, style }: { hidden: boolean; children: React.ReactNode; style?: ViewStyle | ViewStyle[] }) {
+  const o = React.useRef(new Animated.Value(1)).current;
+  React.useEffect(() => { Animated.timing(o, { toValue: hidden ? 0 : 1, duration: hidden ? 120 : 200, useNativeDriver: true }).start(); }, [hidden, o]);
+  return <Animated.View pointerEvents={hidden ? 'none' : 'box-none'} style={[style as any, { opacity: o }]}>{children}</Animated.View>;
 }
 
 export const Gap = ({ n = 4 }: { n?: number }) => <View style={{ height: space(n) }} />;

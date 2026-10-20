@@ -13,15 +13,15 @@ import { addressLine, money } from '../lib/orders';
 import { color, font, radius, space } from '../lib/theme';
 import { AppMap, Pin } from '../ui/AppMap';
 import { Sheet } from '../ui/Sheet';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { lastPosition, onPosition } from '../lib/tracker';
 import { Choice } from '../ui/Choice';
-import { Button, Card, Field, Gap, Notice, RoundButton, Screen, T } from '../ui/kit';
+import { MapOverlay, Button, Card, Field, Gap, Notice, RoundButton, Screen, T } from '../ui/kit';
 
 // The driver's active delivery (contract C: get_job, update_job_step, report_delivery_failure, release_job).
 // Every handover is proved (TRUST_AND_SAFETY.md): at pickup the SENDER's code (or QR) + a photo of the parcel, at the door the
 // RECEIVER's code (or QR); the phone's position is sent with each step.
 export default function JobScreen() {
+  const [mapTouch, setMapTouch] = useState(false);   // a finger is moving the map: floating buttons step aside
   const { t, services } = useApp();
   const api = driver(services.client);
   const [job, setJob] = useState<Job | null | undefined>(undefined);
@@ -149,14 +149,14 @@ export default function JobScreen() {
   return (
     <View style={s.root} testID="screen-job">
       <View style={s.mapBox}>
-        <AppMap start={target} zoom={14} pins={pins} fit={me ? [me, target] : [target]} pad={{ top: 110, bottom: 60 }} />
-        <SafeAreaView edges={['top']} style={s.top} pointerEvents="box-none">
+        <AppMap onTouching={setMapTouch} start={target} zoom={14} pins={pins} fit={me ? [me, target] : [target]} pad={{ top: 110, bottom: 60 }} />
+        <MapOverlay hidden={mapTouch} style={s.top}>
           <View style={s.topRow}>
             <RoundButton testID="back-home-top" icon="arrow-left" label={t('back_home')} onPress={() => router.replace('/home')} />
             <View style={s.refChip}><T style={s.refText}>{job.ref}</T></View>
             <RoundButton testID="sos" icon="alert-octagon" label={t('sos_btn')} onPress={() => setSos(true)} />
           </View>
-        </SafeAreaView>
+        </MapOverlay>
       </View>
       <Sheet inline maxFraction={0.66} testID="job-sheet">
       {unsent ? <Notice testID="unsent" text={t('sync_pending')} /> : null}

@@ -1,5 +1,5 @@
 // The customer path, driven like a person would, against the REAL backend and the TEST database:
-// pickup on the home map -> destination -> details and fare -> the receiver confirms through the link -> couriers answer with
+// pickup on the home map -> destination -> details and fare -> the link goes to the receiver -> couriers answer with
 // prices -> the customer chooses one -> pickup -> delivered -> rating -> problem report; a receiver who declines; a cancelled
 // order; an area we do not serve; my orders. Only the map drawing, the phone's GPS and the share/WhatsApp sheet are replaced.
 import { Alert, Linking, Share } from 'react-native';
@@ -89,7 +89,7 @@ test('new sender: "My parcels" starts empty with a clear message', async () => {
   expect(await screen.findByTestId('orders-empty')).toHaveTextContent(/No orders yet/);
 });
 
-test('a full order: route, fare, receiver confirms, couriers offer, choose one, delivered, rating, problem report', async () => {
+test('a full order: route, fare, distance, couriers offer, choose one, delivered, rating, problem report', async () => {
   const s = svc(kept);
   await open(s);
   await sender('0555000001');
@@ -99,6 +99,13 @@ test('a full order: route, fare, receiver confirms, couriers offer, choose one, 
   await fireEvent.press(screen.getByTestId('send-parcel'));
   expect(await screen.findByTestId('pick-title')).toHaveTextContent(/Where does it go\?/);
   expect(screen.getByTestId('marker-A')).toBeTruthy();                                 // the pickup stays on the map
+  expect(screen.getByTestId('status-bar-area')).toHaveStyle({ height: 24, backgroundColor: '#26282E' });   // our grey band, the status bar's height
+  // A finger on the map: the pins and floating buttons step aside; they come back when it is lifted.
+  const mapEl = screen.getAllByTestId('map').slice(-1)[0];
+  await act(async () => { fireEvent(mapEl, 'touchStart', { nativeEvent: { touches: [{}] } }); });
+  expect(screen.queryByTestId('marker-A')).toBeNull();
+  await act(async () => { fireEvent(mapEl, 'touchEnd', { nativeEvent: { touches: [] } }); });
+  expect(screen.getByTestId('marker-A')).toBeTruthy();
   await moveMapTo(D);
   await fireEvent.press(screen.getByTestId('confirm-point'));
   await screen.findByTestId('screen-order-details');
@@ -124,22 +131,21 @@ test('a full order: route, fare, receiver confirms, couriers offer, choose one, 
   expect(screen.getByTestId('price')).toHaveTextContent(new RegExp(`${rec + 10} DA`));
   await fireEvent.press(screen.getByTestId('payer-recipient'));
   await fireEvent.changeText(screen.getByTestId('cod'), '2500');
-  expect(screen.getByTestId('confirm-order')).toHaveTextContent(/Amine Recipient confirms first/);
   await act(async () => { await fireEvent.press(screen.getByTestId('confirm-order')); });
 
-  // Waiting for the receiver: the order exists once, nobody is searched yet; the link goes out by WhatsApp.
-  expect(await screen.findByTestId('order-status')).toHaveTextContent(/Waiting for Amine Recipient to confirm/);
+  // The search starts at once (no waiting for the receiver); the link goes out by WhatsApp.
+  expect(await screen.findByTestId('order-status')).toHaveTextContent(/Looking for a courier/);
   const [o] = (await db.query(`SELECT id, ref, status, offered_da, payer, cod_amount_da, recipient_phone, pickup_address, dropoff_address, delivery_code, pickup_code, inspection, auto_accept FROM orders`)).rows;
-  expect(o).toMatchObject({ status: 'awaiting_recipient', offered_da: rec + 10, payer: 'recipient', cod_amount_da: 2500, recipient_phone: '+213770112233', inspection: 'open', auto_accept: false });
+  expect(o).toMatchObject({ status: 'searching', offered_da: rec + 10, payer: 'recipient', cod_amount_da: 2500, recipient_phone: '+213770112233', inspection: 'open', auto_accept: false });
   expect(o.dropoff_address).toEqual({ landmark: 'Next to the Grande Poste' });
   const wa = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as any);
-  await fireEvent.press(screen.getByTestId('ask-whatsapp'));
+  await fireEvent.press(screen.getByTestId('share-whatsapp'));
   const url = wa.mock.calls[0][0] as string; wa.mockRestore();
   expect(url).toMatch(/^https:\/\/wa\.me\/213770112233\?text=/);                       // a WhatsApp chat with the receiver, message ready
   const msg = decodeURIComponent(url.split('text=')[1]);
   expect(msg).toMatch(/Amine Recipient/); expect(msg).toMatch(new RegExp(`${API}/t/[A-Za-z0-9_-]{32}`));
-  expect((await call('/track_confirm', { t: tokenOf(msg) })).status).toBe('searching');  // the receiver opens the link and says yes
-  expect(await screen.findByText(/Looking for a courier/)).toBeTruthy();
+  expect(screen.getByTestId('order-distance')).toHaveTextContent(/km · ~\d+ min/);
+  expect((await call('/track_expecting', { t: tokenOf(msg) })).ok).toBe(true);  // the receiver opens the link: "I am expecting it"
   expect(screen.getByTestId('delivery-code')).toHaveTextContent(o.delivery_code);       // the sender sees the code
 
   // The customer raises his offer with + (by 10) and confirms.
@@ -173,8 +179,8 @@ test('a full order: route, fare, receiver confirms, couriers offer, choose one, 
   await apiPickup(o.id, d1);
   expect(await screen.findByText('On the way to Amine Recipient')).toBeTruthy();
   expect(await screen.findByTestId('parcel-photo')).toBeTruthy();
-  expect(screen.getByTestId('expecting')).toHaveTextContent(/expecting the parcel/);    // the receiver's yes counts as "expecting it"
-  expect(screen.getByTestId('history')).toHaveTextContent(/The receiver confirmed/);
+  expect(screen.getByTestId('expecting')).toHaveTextContent(/expecting the parcel/);    
+  expect(screen.getByTestId('history')).toHaveTextContent(/The receiver confirmed he is expecting it/);
   expect(screen.getByTestId('history')).toHaveTextContent(/Parcel collected \(code \+ photo\)/);
   expect(screen.queryByTestId('pickup-box')).toBeNull();
   expect(screen.queryByTestId('cancel-order')).toBeNull();
@@ -202,27 +208,24 @@ test('a full order: route, fare, receiver confirms, couriers offer, choose one, 
   await db.query(`UPDATE driver_details SET is_online=false`);
 });
 
-test('the receiver declines: the request ends and the sender sees why; it is remembered in "recent" places', async () => {
+test('the last destination is remembered in "recent" places, with the receiver', async () => {
   await open(svc(kept));                                   // same phone, still logged in
   await screen.findByTestId('send-parcel');
   expect(await screen.findByTestId('recent-0')).toHaveTextContent(/Next to the Grande Poste/);   // the last destination, one tap away
   await fireEvent.press(screen.getByTestId('recent-0'));
   await screen.findByTestId('screen-order-details');
   expect(screen.getByTestId('r-name').props.value).toBe('Amine Recipient');              // receiver filled in from that time
+  expect(await screen.findByTestId('route-distance')).toHaveTextContent(/km/);          // both points known: the distance shows
   await fireEvent.changeText(screen.getByTestId('pa-street'), 'Rue Didouche Mourad 12');
   await act(async () => { await fireEvent.press(await screen.findByTestId('confirm-order')); });
-  await screen.findByText(/Waiting for Amine Recipient to confirm/);
-  const o = (await db.query(`SELECT id, tracking_hash FROM orders ORDER BY created_at DESC LIMIT 1`)).rows[0];
+  await screen.findByText(/Looking for a courier/);
   const shared = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as any);
   await fireEvent.press(screen.getByTestId('share-tracking'));
-  const msg = (shared.mock.calls[0][0] as any).message as string; shared.mockRestore();
-  await call('/track_decline', { t: tokenOf(msg), reason: 'not_ordered' });
-  expect(await screen.findByTestId('recipient-declined')).toHaveTextContent(/Amine Recipient said he is not expecting this parcel/);
-  expect(screen.getByTestId('order-status')).toHaveTextContent(/Cancelled/);
-  expect((await db.query(`SELECT status, cancel_reason FROM orders WHERE id=$1`, [o.id])).rows[0]).toEqual({ status: 'cancelled', cancel_reason: 'recipient_declined' });
+  expect((shared.mock.calls[0][0] as any).message).toMatch(new RegExp(`${API}/t/[A-Za-z0-9_-]{32}`));
+  shared.mockRestore();
 });
 
-test('cancel while waiting; the order list shows the orders', async () => {
+test('cancel while searching; the order list shows the orders', async () => {
   await open(svc());
   await sender('0555000001');
   await chooseRoute(P, D);
@@ -230,7 +233,7 @@ test('cancel while waiting; the order list shows the orders', async () => {
   await act(async () => { await fireEvent.press(screen.getByTestId('size-large')); });
   await waitFor(() => expect(screen.getByTestId('trip-info')).toHaveTextContent(/By car/));   // large parcel -> car, new price shown
   await act(async () => { await fireEvent.press(screen.getByTestId('confirm-order')); });
-  await screen.findByText(/Waiting for Amine Recipient to confirm/);
+  await screen.findByText(/Looking for a courier/);
   expect((await db.query(`SELECT vehicle FROM orders ORDER BY created_at DESC LIMIT 1`)).rows[0].vehicle).toBe('car');   // large parcel -> car
   const alert = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, b) => { b?.find(x => x.style === 'destructive')?.onPress?.(); });
   await act(async () => { await fireEvent.press(screen.getByTestId('cancel-order')); });
@@ -241,7 +244,7 @@ test('cancel while waiting; the order list shows the orders', async () => {
   await menu('menu-orders');
   await screen.findByTestId('screen-orders');
   expect((await screen.findAllByText(/^→ Amine Recipient/)).length).toBeGreaterThanOrEqual(3);
-  expect(screen.getAllByText('Cancelled').length).toBeGreaterThanOrEqual(2);
+  expect(screen.getAllByText('Cancelled').length).toBeGreaterThanOrEqual(1);
   expect(screen.getByText('Delivered')).toBeTruthy();
 });
 
@@ -259,7 +262,6 @@ test('after pickup the sender calls the parcel back: it returns to him, with a c
   await call('/send_code', { phone }); const v = await call('/verify_code', { phone, code: await devCode(phone), path: 'user' });
   const q = await call('/get_quote', { pickup: P, dropoff: D, size: 'small' }, v.token);
   const o = await (await nodeFetch(API + '/create_order', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + v.token, 'idempotency-key': 'recall-test-0001' }, body: JSON.stringify({ auto_accept: true, quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: { street: 'Rue Hassiba 3' }, dropoff_address: { street: 'Kouba' }, recipient_name: 'Recall Recipient', recipient_phone: '+213770998877', payer: 'sender' }) })).json() as any;
-  await call('/track_confirm', { t: o.tracking_token });
   const dTok = await driverOnline('+213555000019', { lat: 36.7545, lng: 3.0590 });
   const r = await requestsOf(dTok, o.ref);
   await call('/make_bid', { offer_id: r.offer_id }, dTok);   // auto-accept: the job is his at once
@@ -289,14 +291,14 @@ test('side menu: profile name, notifications, safety and help pages', async () =
   expect((await db.query(`SELECT display_name FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE a.phone='+213555000001' AND p.type='user'`)).rows[0].display_name).toBe('Nora S.');
   await pressBack();
   await menu('menu-notifications');
-  expect((await screen.findAllByText(/The receiver confirmed: looking for couriers/)).length).toBeGreaterThan(0);   // from the first order
+  expect((await screen.findAllByText(/A courier is coming to pick up your parcel/)).length).toBeGreaterThan(0);   // from the first order
   expect(screen.queryByText(/delivery_code/)).toBeNull();
   await pressBack();
   await menu('menu-safety');
-  expect(await screen.findByText(/The receiver confirms before any courier moves/)).toBeTruthy();
+  expect(await screen.findByText(/The receiver gets a tracking link/)).toBeTruthy();
   await pressBack();
   await menu('menu-help');
   expect(await screen.findByText(/How does sending a parcel work\?/)).toBeTruthy();
-  await fireEvent.press(screen.getByTestId('faq-2'));
+  await fireEvent.press(screen.getByTestId('faq-1'));
   expect(await screen.findByText(/Couriers nearby see your price/)).toBeTruthy();
 });

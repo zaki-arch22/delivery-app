@@ -32,9 +32,7 @@ const P = { lat: 36.7538, lng: 3.0588 }, D = { lat: 36.765, lng: 3.07 }, adr = {
 async function order(tok: string, key: string, extra: any = {}) {
   const q = (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, tok)).b;
   const o = (await api('/create_order', { auto_accept: true, quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Amine', recipient_phone: '+213770000001', payer: 'sender', ...extra }, tok, { 'idempotency-key': key })).b;
-  // The receiver says yes first (tracking link), then couriers are searched. Auto-accept: the first courier who accepts gets it.
-  if (o?.status === 'awaiting_recipient') { await api('/track_confirm', { t: o.tracking_token }); return { ...o, status: 'searching' }; }
-  return o;
+  return o;   // auto-accept: the first courier who accepts the customer's price gets it
 }
 const b64 = (o: any) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const PW = 'correct-horse-battery-1'; const secrets: Record<string, string> = {};
@@ -218,9 +216,10 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
     const rbig = await up(U, 'id_photo', big);
     ok('SEC16 a file over 6 MB is refused with a clear error', rbig.s === 413 && rbig.b.error === 'TOO_LARGE', rbig);
     const tiny = await sharp({ create: { width: 60, height: 60, channels: 3, background: '#fff' } }).jpeg().toBuffer();
-    ok('SEC16 a picture too small to read is refused', (await up(U, 'id_photo', tiny)).b.error === 'IMAGE_TOO_SMALL');
+    const rt = await up(U, 'id_photo', tiny);
+    ok('SEC16 a very small picture is still accepted (a person reviews documents) and stored as a clean JPEG', rt.s === 200 && /^[0-9a-f-]{36}$/.test(rt.b.document_id), rt.b);
     ok('SEC16 a path trick in the kind is refused', (await up(U, '../../etc/passwd', PHOTO)).b.error === 'BAD_KIND');
-    let last: any; for (let i = 0; i < 12; i++) last = await up(U, 'vehicle_photo', PHOTO);
+    let last: any; for (let i = 0; i < 12; i++) last = await up(U, 'vehicle_photo', PHOTO);   // (the small picture above already counts)
     ok('SEC16 filling the disk is stopped: at most 10 unused photos per account', last.s === 429 && last.b.error === 'TOO_MANY_UPLOADS', last);
     const notJpeg = (await pool.query(`SELECT count(*)::int n FROM document_files WHERE substring(data from 1 for 3) <> '\\xffd8ff'::bytea`)).rows[0].n;
     ok('SEC16 every stored photo is a clean JPEG made by the server', notJpeg === 0, notJpeg);
@@ -334,22 +333,17 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
     ok('SEC21 garbage in evidence photos is refused cleanly', bad === 4, bad);
   }
 
-  // ===== SEC22 receiver confirmation, courier offers, place search, notifications list, profile name =====
+  // ===== SEC22 receiver link, courier offers, place search, notifications list, profile name =====
   {
-    let badLink = 0; for (const t of ['', 'x', "' OR 1=1 --", 'A'.repeat(33), { a: 1 }]) { const r = await api('/track_confirm', { t }); if (r.b.error === 'BAD_LINK') badLink++; }
+    let badLink = 0; for (const t of ['', 'x', "' OR 1=1 --", 'A'.repeat(33), { a: 1 }]) { const r = await api('/track_expecting', { t }); if (r.b.error === 'BAD_LINK') badLink++; }
     ok('SEC22 malformed receiver links are refused before touching the database', badLink === 5, badLink);
-    const unknown = await api('/track_confirm', { t: 'Z'.repeat(32) }), unknownD = await api('/track_decline', { t: 'Z'.repeat(32) });
-    ok('SEC22 an unknown link looks exactly like an ended one (no hint that an order exists)', unknown.b.error === 'LINK_ENDED' && unknownD.b.error === 'LINK_ENDED');
+    ok('SEC22 an unknown link looks exactly like an ended one (no hint that an order exists)', (await api('/track_expecting', { t: 'Z'.repeat(32) })).b.error === 'LINK_ENDED');
     let limited = false; const ipx = '10.250.0.1';
-    for (let i = 0; i < 35 && !limited; i++) if ((await api('/track_confirm', { t: 'Q'.repeat(32) }, undefined, { 'x-forwarded-for': ipx })).s === 429) limited = true;
-    ok('SEC22 guessing confirmation links from one address is cut off (rate limit)', limited);
-    // the sender confirms his own request from his own connection: allowed (cannot be told apart) but recorded for staff
+    for (let i = 0; i < 35 && !limited; i++) if ((await api('/track_expecting', { t: 'Q'.repeat(32) }, undefined, { 'x-forwarded-for': ipx })).s === 429) limited = true;
+    ok('SEC22 guessing receiver links from one address is cut off (rate limit)', limited);
+    ok('SEC22 the removed receiver-confirmation functions do not exist', (await api('/track_confirm', { t: 'Q'.repeat(32) })).s === 404 && (await api('/track_decline', { t: 'Q'.repeat(32) })).s === 404);
     const q = (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, A.token)).b;
     const self = (await api('/create_order', { quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Myself', recipient_phone: '+213770000002', payer: 'sender' }, A.token, { 'idempotency-key': 'sec-self-confirm-1' })).b;
-    const myIp = (await pool.query(`SELECT s.last_ip FROM sessions s JOIN profiles p ON p.account_id=s.account_id WHERE p.id=$1 AND NOT s.revoked AND s.last_ip IS NOT NULL ORDER BY s.created_at DESC LIMIT 1`, [A.id])).rows[0].last_ip;
-    const cf = await api('/track_confirm', { t: self.tracking_token }, undefined, { 'x-forwarded-for': myIp });
-    ok('SEC22 a "yes" sent from the sender\'s own internet address is recorded for staff', (await pool.query(`SELECT 1 FROM order_events WHERE order_id=$1 AND type='flag_same_network'`, [self.id])).rowCount === 1, { myIp, cf: cf.b, self: self.status });
-    ok('SEC22 ...and that flag is not shown in the sender\'s own history', !(await api('/get_order?id=' + self.id, undefined, A.token)).b.history.some((e: any) => e.type === 'flag_same_network'));
     await api('/set_auto_accept', { order_id: self.id, on: false }, A.token);
     // offers: only the right people, only sane prices
     const D3 = await makeDriver('+213550960003', 'Driver Three', 36.7570, 3.0588);   // D1 is busy with an earlier job

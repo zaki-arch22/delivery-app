@@ -30,8 +30,11 @@ function Pending() {
         <div className="table-wrap"><table>
           <thead><tr><th>{t('col.name')}</th><th>{t('col.phone')}</th><th>{t('col.vehicle')}</th><th>{t('col.docs')}</th><th>{t('col.created')}</th><th>{t('col.actions')}</th></tr></thead>
           <tbody>{data.drivers.map(d => (
-            <tr key={d.id}><td><strong>{d.display_name}</strong></td><td>{d.phone}</td><td>{tx('vehicle.' + d.vehicle)}</td>
-              <td><div className="docs">{(['id_photo', 'licence_photo', 'vehicle_photo'] as const).map(k => <DocPhoto key={k} id={d.documents?.[k]} label={tx('doc.' + k)} />)}</div></td><td className="num">{fmtDate(d.created_at)}</td>
+            <tr key={d.id}><td><strong>{d.display_name}</strong>
+                {d.first_name ? <div className="muted">{d.first_name} {d.last_name} · {t('drivers.born')} {d.birth_date} · ID …{d.national_id_last3}</div> : null}</td><td>{d.phone}</td>
+              <td>{tx('vehicle.' + d.vehicle)}{d.plate_number ? <div className="muted">{d.vehicle_color} · <strong>{d.plate_number}</strong></div> : null}</td>
+              <td><div className="docs">{(['id_photo', 'licence_photo', 'ownership_photo'] as const).filter(k => d.documents?.[k]).map(k => <DocPhoto key={k} id={d.documents?.[k]} label={tx('doc.' + k)} />)}
+                {(d.documents?.vehicle_photos?.length ? d.documents.vehicle_photos : [d.documents?.vehicle_photo]).filter(Boolean).map((v: string, i: number) => <DocPhoto key={v} id={v} label={`${tx('doc.vehicle_photo')} ${i + 1}`} />)}</div></td><td className="num">{fmtDate(d.created_at)}</td>
               <td><div className="row"><button type="button" className="primary" onClick={() => { setLimit(''); setApprove(d); }}>{t('drivers.approve')}</button><button type="button" onClick={() => setReject(d)}>{t('drivers.reject')}</button></div></td></tr>))}</tbody>
         </table></div>)}
       {approve && <ActionDialog title={`${t('drivers.approve')} · ${approve.display_name}`} needReason={false} onClose={() => setApprove(null)}

@@ -26,14 +26,10 @@ async function makeDriver(phone: string, name: string, lat: number, lng: number,
 }
 const P = { lat: 36.7538, lng: 3.0588 }, D = { lat: 36.765, lng: 3.07 };
 const adr = { street: 'Rue Didouche Mourad', entrance: 'B', floor: '2' };
-// Creates an order and (unless confirm=false) lets the receiver say yes through the tracking link, as in real life.
 // auto_accept is on by default here: the first courier who accepts the customer's price gets the job (the offers flow has its own tests).
-async function order(tok: string, key: string, extra: any = {}, size = 'small', offered?: number, confirm = true) {
+async function order(tok: string, key: string, extra: any = {}, size = 'small', offered?: number) {
   const q = (await api('/get_quote', { pickup: P, dropoff: D, size }, tok)).b;
-  const r = await api('/create_order', { quote_id: q.quote_id, offered_da: offered ?? q.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Amine', recipient_phone: '+213770000000', payer: 'sender', auto_accept: true, ...extra }, tok, { 'idempotency-key': key });
-  if (r.s !== 200 || !confirm || r.b.status !== 'awaiting_recipient') return r;
-  await api('/track_confirm', { t: r.b.tracking_token });
-  return api('/get_order?id=' + r.b.id, undefined, tok);
+  return api('/create_order', { quote_id: q.quote_id, offered_da: offered ?? q.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Amine', recipient_phone: '+213770000000', payer: 'sender', auto_accept: true, ...extra }, tok, { 'idempotency-key': key });
 }
 const offerFor = (t: string) => until(async () => (await api('/get_current_offer', undefined, t)).b.offer);
 
@@ -76,7 +72,7 @@ require('http').createServer((req: any, res: any) => {
   r = await order(A, 'test-key-bad3', { pickup_address: { floor: '2' } }); ok('T4 address without street or landmark refused', r.b.error === 'BAD_ADDRESS');
   // T5 create + idempotency
   r = await order(A, 'test-key-001'); const o1 = r.b;
-  ok('T5 order created; after the receiver\'s yes it is searching; 4-digit code', r.s === 200 && o1.status === 'searching' && /^\d{4}$/.test(o1.delivery_code), r.b);
+  ok('T5 order created, searching at once, 4-digit code', r.s === 200 && o1.status === 'searching' && /^\d{4}$/.test(o1.delivery_code), r.b);
   ok('T5 same key again returns the SAME order, no duplicate', (await order(A, 'test-key-001')).b.id === o1.id && (await pool.query(`SELECT 1 FROM orders`)).rowCount === 1);
   // T6/T7 matching chain: nearest first, decline -> next, expiry -> widen radius, never the same account
   const of1 = await offerFor(D1.token); ok('T6 the nearest couriers (D1) see the request', !!of1 && of1.price_da === o1.offered_da && of1.pickup_distance_m < 1000, of1);
@@ -94,6 +90,7 @@ require('http').createServer((req: any, res: any) => {
   ok('T8 the other couriers lose the request at once', (await api('/list_requests', undefined, D2.token)).b.requests.length === 0);
   const g = (await api('/get_order?id=' + o1.id, undefined, A)).b;
   ok('T8 user sees driver, price LOCKED at the offered price', g.status === 'assigned' && g.locked_da === o1.offered_da && g.driver?.name === 'Driver Three', g);
+  ok('T8 the customer sees the vehicle colour and plate (to recognise the courier at the door)', g.driver?.vehicle_color === 'Blue' && g.driver?.plate_number === '12345 113 16', g.driver);
   ok('T8 price can no longer be raised', (await api('/raise_price', { order_id: o1.id, new_offered_da: o1.max_da }, A)).b.error === 'PRICE_LOCKED');
   // T9 steps
   const PR = proof(api, async t => (await upload(B, t, 'parcel_photo')).b.document_id);
@@ -182,12 +179,13 @@ require('http').createServer((req: any, res: any) => {
     await api('/update_location', { lat: 36.756, lng: 3.06 }, D1.token);
     let td = (await api('/track_data?t=' + T)).b;
     ok('P10 the receiver\'s link shows status, amount, code, driver first name and phone (on the way), time left', td.status === 'picked_up' && td.delivery_code === sv.delivery_code && td.driver?.first_name === 'Driver' && /^\+213/.test(td.driver.phone) && typeof td.eta_s === 'number' && td.has_parcel_photo === true && td.inspection === 'open', td);
+    ok('P10 the receiver sees the vehicle colour and plate too', td.driver?.vehicle_color === 'Blue' && td.driver?.plate_number === '12345 113 16', td.driver);
     ok('P10 the link never shows the pickup code, the sender\'s phone or internal ids', !('pickup_code' in td) && !JSON.stringify(td).includes('+213550100001') && !('id' in td) && !JSON.stringify(td).includes(o.id), td);
     const qr = await fetch(`${B}/track_qr?t=${T}`);
     ok('P10 the QR code is an image (SVG) that cannot run scripts', qr.status === 200 && qr.headers.get('content-type') === 'image/svg+xml' && (await qr.text()).startsWith('<svg') && /default-src 'none'/.test(qr.headers.get('content-security-policy') ?? ''));
     ok('P10 the parcel photo is visible on the link', (await fetch(`${B}/track_photo?t=${T}`)).headers.get('content-type') === 'image/jpeg');
-    ok('P10 the receiver\'s yes already counts as "I am expecting it"; pressing it again records nothing new', (await api('/track_expecting', { t: T })).b.expecting === true && (await pool.query(`SELECT count(*)::int n FROM order_events WHERE order_id=$1 AND type IN ('recipient_expecting','recipient_confirmed')`, [o.id])).rows[0].n === 1);
-    ok('P10 ...and the sender was told when the receiver said yes', (await pool.query(`SELECT 1 FROM notifications WHERE type='order.recipient_confirmed' AND order_id=$1`, [o.id])).rowCount === 1);
+    ok('P10 "I am expecting this parcel" is recorded once', (await api('/track_expecting', { t: T })).b.expecting === true && (await api('/track_expecting', { t: T })).b.expecting === true && (await pool.query(`SELECT count(*)::int n FROM order_events WHERE order_id=$1 AND type='recipient_expecting'`, [o.id])).rows[0].n === 1);
+    ok('P10 ...and the sender is told', (await pool.query(`SELECT 1 FROM notifications WHERE type='order.recipient_expecting' AND order_id=$1`, [o.id])).rowCount === 1);
     const rp = await api('/track_report', { t: T, reason: 'damaged', note: 'box is wet' });
     ok('P10 the receiver can report a problem without an account', rp.s === 200 && (await pool.query(`SELECT reporter_kind FROM problem_reports WHERE id=$1`, [rp.b.id])).rows[0].reporter_kind === 'recipient');
     await api('/track_report', { t: T, reason: 'other' }); await api('/track_report', { t: T, reason: 'other' });
@@ -243,40 +241,16 @@ require('http').createServer((req: any, res: any) => {
     ok('P11 the sender sees how parcels to a number ended (counts only)', h.delivered >= 1 && h.refused >= 2 && Object.keys(h).sort().join() === 'delivered,no_answer,refused', h);
     ok('P11 a badly written number is refused', (await api('/recipient_history?phone=0550', undefined, A)).b.error === 'BAD_PHONE');
   }
-  // ===== R: the receiver says yes BEFORE any courier is searched (owner's wish, Oct 2026) =====
+  // ===== R: a receiver who has the app with a VERIFIED number is told, with the delivery code =====
   {
-    const R = await makeUser('+213770000000', 'Amine Receiver');   // the receiver also has the app, with a VERIFIED number
-    let r = await order(A, 'recv-key-1', {}, 'small', undefined, false); const o = r.b;
-    ok('R1 a new order waits for the receiver: status awaiting_recipient, a deadline, no courier told', o.status === 'awaiting_recipient' && !!o.recipient_deadline_at && o.couriers_notified === 0, o);
-    await sleep(1500);
-    ok('R1 no courier sees it while the receiver has not answered', (await pool.query(`SELECT 1 FROM offers WHERE order_id=$1`, [o.id])).rowCount === 0);
+    const R = await makeUser('+213770000000', 'Amine Receiver');
+    const o = (await order(A, 'recv-key-1')).b;
+    ok('R1 a new order searches for couriers at once (no waiting for the receiver)', o.status === 'searching' && !!(await until(async () => (await pool.query(`SELECT 1 FROM offers WHERE order_id=$1`, [o.id])).rowCount)), o.status);
     const inc = (await pool.query(`SELECT data FROM notifications WHERE type='order.incoming' AND order_id=$1`, [o.id])).rows[0]?.data;
-    ok('R2 a receiver whose VERIFIED number matches gets an in-app request with the link key and the sender\'s first name', inc?.t === o.tracking_token && inc?.sender === 'Amina', inc);
-    let td = (await api('/track_data?t=' + o.tracking_token)).b;
-    ok('R3 the receiver\'s page shows the request, the size and pickup area, but NOT the delivery code yet', td.status === 'awaiting_recipient' && td.delivery_code === null && td.size === 'small' && td.pickup_area === 'Rue Didouche Mourad', td);
-    ok('R4 a bad link key is refused', (await api('/track_confirm', { t: 'x' })).b.error === 'BAD_LINK' && (await api('/track_confirm', { t: 'A'.repeat(32) })).b.error === 'LINK_ENDED');
-    const c = await api('/track_confirm', { t: o.tracking_token });
-    ok('R5 the receiver confirms: the order starts searching', c.s === 200 && c.b.status === 'searching' && (await api('/get_order?id=' + o.id, undefined, A)).b.status === 'searching', c.b);
-    ok('R5 confirming twice is harmless', (await api('/track_confirm', { t: o.tracking_token })).b.ok === true);
-    ok('R5 the sender is told at once (high priority)', (await pool.query(`SELECT priority FROM notifications WHERE type='order.recipient_confirmed' AND order_id=$1`, [o.id])).rows[0]?.priority === 'high');
-    ok('R5 couriers see it right away', !!(await until(async () => (await pool.query(`SELECT 1 FROM offers WHERE order_id=$1`, [o.id])).rowCount)));
-    td = (await api('/track_data?t=' + o.tracking_token)).b;
-    ok('R5 now the receiver sees the code; "expecting" is recorded too', /^\d{4}$/.test(td.delivery_code) && td.expecting === true && td.recipient_answer === 'confirmed', td);
-    ok('R5 declining after saying yes is refused', (await api('/track_decline', { t: o.tracking_token })).b.error === 'ORDER_ENDED');
+    ok('R2 the registered receiver gets the code and the sender\'s first name', inc?.delivery_code === o.delivery_code && inc?.sender === 'Amina', inc);
+    ok('R3 the old confirmation functions are gone', (await api('/track_confirm', { t: o.tracking_token })).s === 404);
+    ok('R4 the receiver\'s notifications list never shows the delivery code', !JSON.stringify((await api('/list_notifications', undefined, R)).b).includes('delivery_code'));
     await api('/cancel_order', { order_id: o.id }, A);
-    r = await order(A, 'recv-key-2', {}, 'small', undefined, false); const o2 = r.b;
-    const d = await api('/track_decline', { t: o2.tracking_token, reason: 'not_ordered' });
-    const v2 = (await api('/get_order?id=' + o2.id, undefined, A)).b;
-    ok('R6 the receiver declines: the request is cancelled before any courier moves', d.b.status === 'cancelled' && v2.status === 'cancelled' && v2.cancel_reason === 'recipient_declined' && v2.history.some((e: any) => e.type === 'recipient_declined' && e.data.reason === 'not_ordered'), v2);
-    ok('R6 the sender is told; nobody gets rule points for it', (await pool.query(`SELECT 1 FROM notifications WHERE type='order.recipient_declined' AND order_id=$1`, [o2.id])).rowCount === 1 && (await pool.query(`SELECT 1 FROM violations WHERE order_id=$1`, [o2.id])).rowCount === 0);
-    ok('R6 confirming after declining is refused', (await api('/track_confirm', { t: o2.tracking_token })).b.error === 'ORDER_ENDED');
-    r = await order(A, 'recv-key-3', {}, 'small', undefined, false);
-    ok('R7 the sender may cancel while waiting for the receiver', (await api('/cancel_order', { order_id: r.b.id }, A)).b.status === 'cancelled');
-    r = await order(A, 'recv-key-4', {}, 'small', undefined, false);
-    await pool.query(`UPDATE orders SET created_at = now() - interval '2 hours' WHERE id=$1`, [r.b.id]);
-    const gone = await until(async () => { const x = (await api('/get_order?id=' + r.b.id, undefined, A)).b; return x.status === 'expired' ? x : null; });
-    ok('R8 no answer in time: the request expires and the sender is told why', !!gone && gone.history.some((e: any) => e.type === 'expired') && (await pool.query(`SELECT data->>'reason' r FROM notifications WHERE type='order.expired' AND order_id=$1`, [r.b.id])).rows[0]?.r === 'recipient_no_answer', gone);
-    ok('R9 the receiver\'s notifications list never shows the delivery code', !JSON.stringify((await api('/list_notifications', undefined, R)).b).includes('delivery_code'));
   }
   // ===== M: couriers answer with a price, the customer chooses (inDrive style) =====
   {
@@ -362,12 +336,12 @@ require('http').createServer((req: any, res: any) => {
   // ===== N: notifications list, profile name =====
   {
     const n = (await api('/list_notifications', undefined, A)).b.notifications;
-    ok('N1 the sender\'s list holds his notifications, newest first', n.length > 5 && n[0].id > n[1].id && n.some((x: any) => x.type === 'order.recipient_confirmed'), { len: n.length, first: n.slice(0, 2) });
+    ok('N1 the sender\'s list holds his notifications, newest first', n.length > 5 && n[0].id > n[1].id && n.some((x: any) => x.type === 'order.assigned'), { len: n.length, first: n.slice(0, 2) });
     ok('N1 internal signals stay out of the list', !n.some((x: any) => x.type === 'offer.withdrawn' || x.type === 'order.bid_withdrawn'));
     const page2 = (await api('/list_notifications?before=' + n[n.length - 1].id, undefined, A)).b.notifications;
     ok('N2 older ones come page by page', Array.isArray(page2) && page2.every((x: any) => x.id < n[n.length - 1].id));
     ok('N2 a bad page id is refused', (await api('/list_notifications?before=abc', undefined, A)).b.error === 'BAD_ID');
-    ok('N3 each profile sees only its own list', (await api('/list_notifications', undefined, D2.token)).b.notifications.every((x: any) => x.type !== 'order.recipient_confirmed'));
+    ok('N3 each profile sees only its own list', (await api('/list_notifications', undefined, D2.token)).b.notifications.every((x: any) => x.type !== 'order.assigned'));
     ok('N4 a customer can change his name', (await api('/rename_profile', { display_name: 'Amina S.' }, A)).b.display_name === 'Amina S.');
     ok('N4 a courier\'s name (checked against his ID) cannot be changed by him', (await api('/rename_profile', { display_name: 'Someone Else' }, D1.token)).b.error === 'NAME_LOCKED');
     ok('N4 an empty or hidden-character name is refused', (await api('/rename_profile', { display_name: ' ' }, A)).b.error === 'BAD_NAME' && (await api('/rename_profile', { display_name: 'Ami\u202Ena' }, A)).b.error === 'BAD_NAME');
@@ -379,6 +353,6 @@ require('http').createServer((req: any, res: any) => {
   const ex = await until(async () => (await api('/get_order?id=' + o6.id, undefined, A)).b.status === 'expired', 25000);
   ok('T15 with no driver available the order expires', !!ex);
   const ev = await pool.query(`SELECT type FROM order_events WHERE order_id=$1 ORDER BY id`, [o1.id]);
-  ok('T16 every step was recorded in the order history', ['created', 'recipient_confirmed', 'offer_sent', 'offer_declined', 'assigned', 'picked_up', 'delivered'].every(t => ev.rows.some(x => x.type === t)), ev.rows.map(x => x.type));
+  ok('T16 every step was recorded in the order history', ['created', 'offer_sent', 'offer_declined', 'assigned', 'picked_up', 'delivered'].every(t => ev.rows.some(x => x.type === t)), ev.rows.map(x => x.type));
   console.log(`\n${pass} passed, ${fail} failed`); await pool.end(); process.exit(fail ? 1 : 0);
 })();

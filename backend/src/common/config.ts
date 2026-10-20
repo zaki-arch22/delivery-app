@@ -4,7 +4,6 @@ export const cfg = {
   tickMs: () => n('TICK_MS', 3000),
   bidTtlS: () => n('BID_TTL_S', 40),              // how long a courier's price offer waits for the customer's answer
   broadcastMax: () => n('BROADCAST_MAX', 10),     // a request is shown to at most this many nearby couriers at once
-  recipientWindowMin: () => n('RECIPIENT_WINDOW_MIN', 60), // the receiver has this long to confirm, then the order expires
   searchWindowS: () => n('SEARCH_WINDOW_S', 600), // how long an order searches before it expires
   radius1: () => n('RADIUS_1_M', 3000),           // first search radius
   radius2: () => n('RADIUS_2_M', 8000),           // widened radius

@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Switch, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { idempotencyKey, ApiError } from '../core/api';
 import { useApp } from '../lib/app';
 import { errorMessage } from '../lib/errors';
@@ -11,16 +10,17 @@ import { addRecent } from '../lib/recent';
 import { color, font, radius, space } from '../lib/theme';
 import { AppMap } from '../ui/AppMap';
 import { Sheet } from '../ui/Sheet';
-import { Button, Field, Gap, Notice, RoundButton, T } from '../ui/kit';
+import { MapOverlay, Button, Field, Gap, Notice, RoundButton, T } from '../ui/kit';
 import { Choice } from '../ui/Choice';
 import { Icon, IconName } from '../ui/Icon';
 
 const SIZES: { v: Size; icon: IconName }[] = [{ v: 'small', icon: 'mail' }, { v: 'medium', icon: 'package' }, { v: 'large', icon: 'archive' }];
 
 // The route preview and the request (inDrive-style): the map shows A -> B, the panel holds the parcel size, the fare with
-// minus/plus, the receiver, the address details, payment, and "auto-accept". The receiver confirms first, then couriers are
-// searched (contract B: get_quote, create_order).
+// minus/plus, the receiver, the address details, payment, and "auto-accept". Once sent, couriers are
+// searched at once (contract B: get_quote, create_order).
 export default function OrderDetails() {
+  const [mapTouch, setMapTouch] = useState(false);   // a finger is moving the map: floating buttons step aside
   const { t, rtl, services } = useApp();
   const api = orders(services.client);
   const prm = useLocalSearchParams<{ plat: string; plng: string; dlat: string; dlng: string; pname?: string; dname?: string; daddr?: string; rname?: string; rphone?: string }>();
@@ -86,23 +86,29 @@ export default function OrderDetails() {
     <View>
       {msg ? <Notice testID="order-msg" warn text={msg} /> : null}
       <Button testID="confirm-order" busy={busy} disabled={quoting || !quote} label={quote ? t('request_delivery', { p: money(price) }) : t('continue')}
-        sub={rName.trim().length >= 2 ? t('request_sub', { name: rName.trim() }) : t('request_sub_generic')} onPress={submit} />
+        onPress={submit} />
     </View>
   );
   return (
     <View style={s.root} testID="screen-order-details">
       <View style={s.mapBox}>
-        <AppMap start={pickup} zoom={13} route={quote?.route ?? null} fit={[pickup, dropoff]} pad={{ top: 130, bottom: 50 }}
+        <AppMap onTouching={setMapTouch} start={pickup} zoom={13} route={quote?.route ?? null} fit={[pickup, dropoff]} pad={{ top: 130, bottom: 50 }}
           pins={[{ id: 'A', at: pickup, kind: 'pickup', label: t('pickup') }, { id: 'B', at: dropoff, kind: 'dropoff', label: t('dropoff') }]} />
-        <SafeAreaView edges={['top']} style={s.top} pointerEvents="box-none">
+        <MapOverlay hidden={mapTouch} style={s.top}>
           <View style={[s.summary, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
             <RoundButton icon="arrow-left" label={t('back')} onPress={() => router.back()} size={44} light testID="back" />
             <View style={{ flex: 1, gap: 2 }}>
               <T numberOfLines={1} style={s.sumLine}>📦 {pa.street || pa.landmark || t('pickup')}</T>
-              <T numberOfLines={1} style={s.sumLine}>🏁 {da.street || da.landmark || t('dropoff')}{quote ? `  ·  ~${minutes(quote.duration_s)} ${t('min')}` : ''}</T>
+              <T numberOfLines={1} style={s.sumLine}>🏁 {da.street || da.landmark || t('dropoff')}</T>
             </View>
+            {quote ? (
+              <View style={s.distBox} testID="route-distance" accessibilityLabel={t('distance_a11y', { km: km(quote.distance_m), min: minutes(quote.duration_s) })}>
+                <T style={s.distKm}>{quote.distance_estimated ? '≈ ' : ''}{km(quote.distance_m)} {t('km')}</T>
+                <T kind="muted" style={{ fontSize: 13 }}>~{minutes(quote.duration_s)} {t('min')}</T>
+              </View>
+            ) : null}
           </View>
-        </SafeAreaView>
+        </MapOverlay>
       </View>
       <Sheet inline maxFraction={0.62} footer={footer} testID="details-sheet">
         <View style={[s.sizes, { flexDirection: rtl ? 'row-reverse' : 'row' }]} accessibilityRole="radiogroup">
@@ -141,7 +147,6 @@ export default function OrderDetails() {
 
         <Gap n={2} />
         <T kind="label">{t('recipient_title')}</T>
-        <T kind="muted">{t('recipient_confirm_hint')}</T>
         <Field testID="r-name" label={t('recipient_name')} value={rName} onChangeText={setRName} error={errs.rName} maxLength={60} autoComplete="name" />
         <Field testID="r-phone" label={t('recipient_phone')} hint={t('phone_hint')} value={rPhone} onChangeText={setRPhone} error={errs.rPhone} keyboardType="phone-pad" maxLength={18} />
         {hist ? <Notice testID="r-history" warn={hist.refused > 0} text={hist.delivered + hist.refused + hist.no_answer === 0 ? t('rhist_none') : t('rhist_line', { d: hist.delivered, r: hist.refused, n: hist.no_answer })} /> : null}
@@ -176,6 +181,8 @@ const s = StyleSheet.create({
   top: { position: 'absolute', top: 0, left: 0, right: 0 },
   summary: { margin: space(3), backgroundColor: color.card, borderRadius: 20, padding: space(3), alignItems: 'center', gap: space(3) },
   sumLine: { fontFamily: font.semibold, fontSize: 15 },
+  distBox: { alignItems: 'center', backgroundColor: color.card2, borderRadius: radius, paddingHorizontal: space(3), paddingVertical: space(1) },
+  distKm: { fontFamily: font.bold, fontSize: 18, lineHeight: 26 },
   sizes: { gap: space(2) },
   size: { flex: 1, alignItems: 'center', gap: 2, backgroundColor: color.card2, borderRadius: radius, paddingVertical: space(3), borderWidth: 2, borderColor: 'transparent' },
   sizeOn: { borderColor: color.lime },

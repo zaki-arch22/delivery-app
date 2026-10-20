@@ -1,17 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Dimensions, Image, Linking, Pressable, ScrollView, Share, StyleSheet, Switch, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp, useNotices } from '../../lib/app';
 import { errorMessage } from '../../lib/errors';
-import { ACTIVE, addressLine, Bid, minutes, money, Order, orders, RecallReason, when, whatsappUrl } from '../../lib/orders';
+import { ACTIVE, addressLine, Bid, km, minutes, money, Order, orders, RecallReason, when, whatsappUrl } from '../../lib/orders';
 import { deliveryQr, pickupQr } from '../../lib/proof';
 import { Qr } from '../../ui/Qr';
 import { Choice } from '../../ui/Choice';
 import { color, font, radius, space } from '../../lib/theme';
 import { AppMap, Pin } from '../../ui/AppMap';
 import { Sheet } from '../../ui/Sheet';
-import { Button, Card, Gap, Notice, RoundButton, Screen, T } from '../../ui/kit';
+import { MapOverlay, Button, Card, Gap, Notice, RoundButton, Screen, T } from '../../ui/kit';
 import { Icon } from '../../ui/Icon';
 import type { Key } from '../../i18n';
 
@@ -20,6 +19,7 @@ const POLL_MS = 4000;   // status and the courier's position while active; live 
 // One order, from "waiting for the receiver" to "delivered" (contract B). The map shows A, B, the route and the courier;
 // the panel follows the order's state; while couriers answer, their offers appear on top for the customer to choose.
 export default function OrderScreen() {
+  const [mapTouch, setMapTouch] = useState(false);   // a finger is moving the map: floating buttons step aside
   const { t, services, lang, rtl } = useApp();
   const api = orders(services.client);
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -35,7 +35,7 @@ export default function OrderScreen() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useNotices(n => { if (n.order_id === id) load(); });
   useEffect(() => { if (!o || !ACTIVE.includes(o.status)) return; const h = setInterval(load, POLL_MS); return () => clearInterval(h); }, [o?.status, load]);
-  useEffect(() => { if (!o || !['awaiting_recipient', 'searching'].includes(o.status)) return; const h = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(h); }, [o?.status]);
+  useEffect(() => { if (!o || o.status !== 'searching') return; const h = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(h); }, [o?.status]);
 
   async function run(k: string, f: () => Promise<Order>) { setBusy(k); setMsg(null); try { const x = await f(); setO(x); setWant(x.offered_da); } catch (e) { fail(e); load(); } finally { setBusy(null); } }
   const cancel = () => Alert.alert(t('cancel_confirm'), t('cancel_sub'), [
@@ -44,7 +44,7 @@ export default function OrderScreen() {
   ]);
   const recall = () => o && recallReason && run('recall', () => api.recall(o.id, recallReason)).then(() => setRecalling(false));
   const trackUrl = o?.tracking_token ? `${services.client.baseUrl}/t/${o.tracking_token}` : null;
-  const shareText = o && trackUrl ? t(o.status === 'awaiting_recipient' ? 'ask_message' : 'share_message', { name: o.recipient_name, url: trackUrl }) : '';
+  const shareText = o && trackUrl ? t('share_message', { name: o.recipient_name, url: trackUrl }) : '';
   const share = () => { if (shareText) Share.share({ message: shareText }).catch(() => {}); };
   const whatsapp = () => { if (o && shareText) Linking.openURL(whatsappUrl(o.recipient_phone, shareText)).catch(share); };
   const photoSrc = (doc: string) => ({ uri: `${services.client.baseUrl}/get_order_photo?order_id=${o!.id}&id=${doc}`, headers: { Authorization: 'Bearer ' + (services.client.token ?? '') } });
@@ -62,25 +62,18 @@ export default function OrderScreen() {
 
   return (
     <View style={s.root} testID="screen-order">
-      <AppMap start={A} zoom={13} pins={pins} route={o.route} fit={fit} pad={{ top: showBids ? H * 0.5 : 110, bottom: H * 0.5 }} />
-      <SafeAreaView edges={['top']} style={s.top} pointerEvents="box-none">
+      <AppMap onTouching={setMapTouch} start={A} zoom={13} pins={pins} route={o.route} fit={fit} pad={{ top: showBids ? H * 0.5 : 110, bottom: H * 0.5 }} />
+      <MapOverlay hidden={mapTouch} style={s.top}>
         <View style={[s.topRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
           <RoundButton testID="back" icon="arrow-left" label={t('back')} onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))} />
           <View style={s.refChip}><T style={s.refText}>{o.ref}{o.leg === 'return' ? ' · ' + t('return_leg') : ''}</T></View>
         </View>
         {showBids ? <Offers bids={o.bids} now={now} busy={busy} onAccept={b => run('acc' + b.offer_id, () => api.acceptBid(o.id, b.offer_id))} onDecline={b => run('dec' + b.offer_id, () => api.declineBid(o.id, b.offer_id))} /> : null}
-      </SafeAreaView>
+      </MapOverlay>
 
       <Sheet testID="order-sheet" maxFraction={showBids ? 0.3 : 0.6} peek={170}>
         <T kind="title" testID="order-status" style={{ fontSize: 24 }}>{t(('st_' + o.status) as Key, { name: o.recipient_name })}</T>
 
-        {o.status === 'awaiting_recipient' ? (<>
-          <View style={[s.timerRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}><T kind="muted" style={{ flex: 1 }}>{t('st_awaiting_sub', { name: o.recipient_name })}</T><T style={s.clock} testID="timer">{clock(left(o.recipient_deadline_at))}</T></View>
-          <Progress value={left(o.recipient_deadline_at) / 3600} />
-          <Button testID="ask-whatsapp" icon="message-circle" label={t('ask_whatsapp', { name: o.recipient_name })} onPress={whatsapp} />
-          <Button testID="share-tracking" kind="secondary" icon="share-2" label={t('share_other')} onPress={share} />
-          <AutoAccept o={o} busy={busy === 'auto'} onChange={v => run('auto', () => api.setAutoAccept(o.id, v))} t={t} rtl={rtl} />
-        </>) : null}
 
         {o.status === 'searching' ? (<>
           <View style={[s.timerRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
@@ -111,8 +104,7 @@ export default function OrderScreen() {
         ) : null}
 
         {o.status === 'failed' ? <Notice warn text={t('st_failed_sub')} /> : null}
-        {o.status === 'expired' ? <T kind="muted">{t(o.history.some(e => e.type === 'expired' && e.data?.reason === 'recipient_no_answer') ? 'st_expired_recipient' : 'st_expired_sub')}</T> : null}
-        {o.status === 'cancelled' && o.cancel_reason === 'recipient_declined' ? <Notice warn testID="recipient-declined" text={t('recipient_declined_sub', { name: o.recipient_name })} /> : null}
+        {o.status === 'expired' ? <T kind="muted">{t('st_expired_sub')}</T> : null}
 
         {o.status === 'assigned' && o.pickup_code ? (
           <Card testID="pickup-box" style={s.codeBox}>
@@ -129,13 +121,17 @@ export default function OrderScreen() {
             <T style={s.code} testID="delivery-code" accessibilityLabel={o.delivery_code.split('').join(' ')}>{o.delivery_code}</T>
             {o.leg === 'return' ? <Qr value={deliveryQr(o.ref, o.delivery_code)} size={180} testID="return-qr" /> : null}
             <T kind="muted">{t(o.leg === 'return' ? 'dcode_sub_return' : 'dcode_sub')}</T>
-            {trackUrl && o.leg === 'delivery' ? <Button testID="share-tracking" kind="secondary" icon="share-2" label={t('share_tracking')} onPress={share} /> : null}
+            {trackUrl && o.leg === 'delivery' ? (<>
+              <Button testID="share-whatsapp" icon="message-circle" label={t('share_whatsapp', { name: o.recipient_name })} onPress={whatsapp} />
+              <Button testID="share-tracking" kind="secondary" icon="share-2" label={t('share_other')} onPress={share} />
+            </>) : null}
             {o.recipient_expecting_at ? <Notice testID="expecting" text={'✓ ' + t('expecting_yes')} /> : null}
           </Card>
         ) : null}
 
         <Card style={{ backgroundColor: color.card2 }}>
           <T testID="order-price-line" style={s.strong}>{t(o.locked_da ? 'price_locked' : 'price_now', { p: money(price) })}</T>
+          <T kind="muted" testID="order-distance">{km(o.distance_m)} {t('km')} · ~{minutes(o.duration_s)} {t('min')}</T>
           {o.payer === 'recipient' ? <T kind="muted">{t('fee_by_recipient')}</T> : null}
           {o.cod_amount_da > 0 ? <T kind="muted">💵 {t('cod_collect', { p: money(o.cod_amount_da) })}</T> : null}
           <Gap n={2} />
@@ -158,8 +154,8 @@ export default function OrderScreen() {
         </>) : <Button testID="recall" kind="plain" label={t('recall_btn')} onPress={() => setRecalling(true)} />) : null}
         {o.status === 'delivered' && o.leg === 'delivery' ? (o.rated ? <Notice text={t('rated_thanks')} /> : <Button testID="rate" label={t('rate_driver')} onPress={() => router.push({ pathname: '/rate/[id]', params: { id: o.id } })} />) : null}
         {['expired', 'cancelled'].includes(o.status) ? <Button testID="send-again" label={t('send_again')} onPress={() => router.replace('/home')} /> : null}
-        {['awaiting_recipient', 'searching', 'assigned'].includes(o.status) ? <Button testID="cancel-order" kind="danger" icon="x" busy={busy === 'cancel'} label={t(o.status === 'assigned' ? 'cancel_order' : 'cancel_request')} onPress={cancel} /> : null}
-        {!['awaiting_recipient', 'searching', 'expired', 'cancelled'].includes(o.status) ? <Button testID="report-problem" kind="plain" label={t('report_problem')} onPress={() => router.push({ pathname: '/problem/[id]', params: { id: o.id } })} /> : null}
+        {['searching', 'assigned'].includes(o.status) ? <Button testID="cancel-order" kind="danger" icon="x" busy={busy === 'cancel'} label={t(o.status === 'assigned' ? 'cancel_order' : 'cancel_request')} onPress={cancel} /> : null}
+        {!['searching', 'expired', 'cancelled'].includes(o.status) ? <Button testID="report-problem" kind="plain" label={t('report_problem')} onPress={() => router.push({ pathname: '/problem/[id]', params: { id: o.id } })} /> : null}
 
         <View testID="history" style={{ marginTop: space(3) }}>
           <T kind="label">{t('history_title')}</T>

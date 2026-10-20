@@ -5,14 +5,13 @@ import { Db } from '../db/db.service';
 import { SecurityLog } from '../security/security-log.service';
 import { bad, fail, UUID } from '../common/errors';
 
-export const KINDS = ['id_photo', 'licence_photo', 'vehicle_photo'] as const;   // driver sign-up
+export const KINDS = ['id_photo', 'licence_photo', 'ownership_photo', 'vehicle_photo'] as const;   // driver sign-up (all required; up to 3 more vehicle photos)
 export type Kind = typeof KINDS[number];
 export const ORDER_KINDS = ['parcel_photo', 'evidence_photo'] as const;         // tied to an order: parcel at pickup, evidence of a refusal or problem
 export type OrderKind = typeof ORDER_KINDS[number];
 const ALL_KINDS: readonly string[] = [...KINDS, ...ORDER_KINDS, 'selfie_photo'];
 export const MAX_UPLOAD_BYTES = 6 * 1024 * 1024;   // a phone photo; the server shrinks it anyway
 const MAX_UNUSED = 10;          // uploaded but not yet used by a driver profile, per account (stops storage filling)
-const MIN_SIDE = 300;           // smaller pictures cannot be read by staff
 const MAX_SIDE = 2000;          // stored size: enough to read an ID card, small to store
 sharp.cache(false);             // never keep decoded images in memory between requests
 
@@ -33,7 +32,7 @@ export class Documents {
   constructor(private db: Db, private sec: SecurityLog) {}
 
   async upload(accountId: string, ip: string, kind: any, body: any) {
-    if (!ALL_KINDS.includes(kind)) throw bad('BAD_KIND', 'kind must be id_photo, licence_photo, vehicle_photo, parcel_photo, evidence_photo or selfie_photo');
+    if (!ALL_KINDS.includes(kind)) throw bad('BAD_KIND', 'kind must be id_photo, licence_photo, ownership_photo, vehicle_photo, parcel_photo, evidence_photo or selfie_photo');
     if (!Buffer.isBuffer(body) || body.length === 0) throw fail(415, 'IMAGE_ONLY', 'Send a JPEG, PNG or WebP photo');
     if (!sniff(body)) { this.sec.event('upload_not_image', ip, { kind }, { account: accountId }); throw fail(415, 'IMAGE_ONLY', 'Send a JPEG, PNG or WebP photo'); }
     const unused = await this.db.one(`SELECT count(*)::int n FROM documents WHERE account_id=$1 AND profile_id IS NULL AND order_id IS NULL`, [accountId]);
@@ -52,7 +51,7 @@ export class Documents {
       this.sec.event('upload_bad_image', ip, { kind }, { account: accountId });
       throw bad('BAD_IMAGE', 'This photo could not be read. Take a new photo.');
     }
-    if (Math.min(w, h) < MIN_SIDE) throw bad('IMAGE_TOO_SMALL', 'This photo is too small to read. Take a closer, sharper photo.');
+    // No automatic rejection for quality (owner's rule, Oct 2026): a person reviews every driver document.
 
     const id = randomUUID();
     await this.db.tx(async q => {
@@ -63,11 +62,14 @@ export class Documents {
     return { document_id: id, kind };
   }
 
-  // Inside the add_profile transaction: the three photos must belong to this account, be of the right kind and unused.
-  async attach(q: (sql: string, p?: any[]) => Promise<any[]>, accountId: string, profileId: string, docs: Record<Kind, string>) {
-    const ids = KINDS.map(k => docs[k]);
+  // Inside the add_profile transaction: every photo must belong to this account, be of the right kind and unused.
+  // `extra` = more vehicle photos (the plate must be readable on at least one; staff check).
+  async attach(q: (sql: string, p?: any[]) => Promise<any[]>, accountId: string, profileId: string, docs: Record<Kind, string>, extra: string[] = []) {
+    const ids = [...KINDS.map(k => docs[k]), ...extra];
+    if (new Set(ids).size !== ids.length) throw bad('BAD_DOCUMENT', 'Each photo can be used once');
     const rows = await q(`SELECT id, kind FROM documents WHERE id = ANY($1::uuid[]) AND account_id=$2 AND profile_id IS NULL AND order_id IS NULL FOR UPDATE`, [ids, accountId]);
     for (const k of KINDS) if (!rows.some(r => r.id === docs[k] && r.kind === k)) throw bad('BAD_DOCUMENT', `${k} must be a photo you uploaded for this sign-up`);
+    for (const x of extra) if (!rows.some(r => r.id === x && r.kind === 'vehicle_photo')) throw bad('BAD_DOCUMENT', 'Extra vehicle photos must be photos you uploaded for this sign-up');
     await q(`UPDATE documents SET profile_id=$1 WHERE id = ANY($2::uuid[])`, [profileId, ids]);
   }
 

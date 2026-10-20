@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp, useNotices } from '../lib/app';
 import { ALGIERS } from '../lib/config';
 import { currentPosition, Point } from '../lib/location';
 import { ACTIVE, Order, orders, Place } from '../lib/orders';
-import { addIncoming, Incoming, listIncoming, markIncoming } from '../lib/incoming';
+import { addIncoming, Incoming, listIncoming } from '../lib/incoming';
 import { listRecent, RecentPlace } from '../lib/recent';
 import { usePlaceSearch } from '../lib/features';
 import { errorMessage } from '../lib/errors';
@@ -16,13 +15,14 @@ import { AppMap, AppMapRef } from './AppMap';
 import { Sheet } from './Sheet';
 import { Drawer } from './Drawer';
 import { PlaceSearch } from './PlaceSearch';
-import { Button, Notice, RoundButton, T } from './kit';
+import { MapOverlay, Button, Notice, RoundButton, T } from './kit';
 import { Icon } from './Icon';
 
 // Customer mode home (inDrive-style): the map fills the screen, the pickup point is under the fixed pin (move the map, or
 // search), and the panel below asks "Where to, and for how much?". Parcels on their way and requests to receive a parcel
 // appear on top of the panel.
 export function CustomerHome() {
+  const [mapTouch, setMapTouch] = useState(false);   // a finger is moving the map: floating buttons step aside
   const { t, lang, rtl, services, state } = useApp();
   const api = orders(services.client);
   const map = useRef<AppMapRef>(null);
@@ -65,18 +65,12 @@ export function CustomerHome() {
   const whereTo = () => router.push({ pathname: '/new-order', params: pickupParams });
   const again = (r: RecentPlace) => router.push({ pathname: '/order-details', params: { ...pickupParams, dlat: String(r.lat), dlng: String(r.lng), dname: r.name, daddr: JSON.stringify(r.address), rname: r.recipient_name ?? '', rphone: r.recipient_phone ?? '' } });
   const pickPickup = (p: Place) => { setSearching(false); setCenter({ lat: p.lat, lng: p.lng }); setPlace(p.name); map.current?.moveTo({ lat: p.lat, lng: p.lng }, 17); };
-  const answer = async (i: Incoming, yes: boolean) => {
-    if (!i.t) return;
-    setMsg(null);
-    try { await api.answerIncoming(i.t, yes); setIncoming(await markIncoming(services.store, i.order_id, yes ? 'yes' : 'no')); }
-    catch (e) { const m = errorMessage(e); setMsg(t(m.key, m.vars)); }
-  };
 
   return (
     <View style={s.root} testID="screen-home">
       <View style={{ flex: 1 }}>
-        <AppMap ref={map} start={ALGIERS} zoom={13} onMoved={setCenter} centerPin={{ kind: 'pickup', label: t('pickup') }} />
-        <SafeAreaView edges={['top']} style={s.top} pointerEvents="box-none">
+        <AppMap onTouching={setMapTouch} ref={map} start={ALGIERS} zoom={13} onMoved={setCenter} centerPin={{ kind: 'pickup', label: t('pickup') }} />
+        <MapOverlay hidden={mapTouch} style={s.top}>
           {noLoc ? (
             <Pressable testID="location-banner" onPress={locate} style={s.banner} accessibilityRole="button">
               <T style={s.bannerTitle}>{t('loc_banner_title')}</T><T style={s.bannerSub}>{t('loc_banner_sub')}</T>
@@ -92,8 +86,8 @@ export function CustomerHome() {
               {search ? <Icon name="search" size={18} tint={color.muted} /> : null}
             </Pressable>
           </View>
-        </SafeAreaView>
-        <View style={[s.locate, rtl ? { left: space(4) } : { right: space(4) }]}><RoundButton testID="my-location" icon="navigation" label={t('my_location')} onPress={locate} /></View>
+        </MapOverlay>
+        <MapOverlay hidden={mapTouch} style={[s.locate, rtl ? { left: space(4) } : { right: space(4) }]}><RoundButton testID="my-location" icon="navigation" label={t('my_location')} onPress={locate} /></MapOverlay>
       </View>
 
       <Sheet inline maxFraction={0.5} testID="home-sheet">
@@ -103,18 +97,12 @@ export function CustomerHome() {
         </>) : (<>
           <T kind="muted" testID="home-hello">{t('home_hello', { name: state.active?.display_name ?? '' })}</T>
           {state.notice?.code === 'NO_PROFILE_FOR_PATH' ? <Notice testID="notice-no-profile" text={t(state.notice.missing === 'driver' ? 'notice_no_profile_driver' : 'notice_no_profile_user')} /> : null}
-          {incoming.filter(i => !i.answered || i.answered === 'yes').map(i => (
+          {incoming.map(i => (
             <View key={i.order_id} style={s.incoming} testID={'incoming-' + i.ref}>
               <T style={s.strong}>📦 {i.sender ? t('incoming_from', { name: i.sender }) : t('incoming_title')} · {i.ref}</T>
-              {i.answered === 'yes' || !i.t ? <T>{t('incoming_code', { code: i.delivery_code })}</T> : (
-                <View style={[s.row2, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
-                  <Button testID={'incoming-no-' + i.ref} kind="secondary" style={{ flex: 1 }} label={t('no')} onPress={() => answer(i, false)} />
-                  <Button testID={'incoming-yes-' + i.ref} style={{ flex: 1 }} label={t('incoming_yes')} onPress={() => answer(i, true)} />
-                </View>
-              )}
+              <T>{t('incoming_code', { code: i.delivery_code })}</T>
             </View>
           ))}
-          {msg ? <Notice warn text={msg} /> : null}
           {active.map(o => (
             <Pressable key={o.id} testID={'order-' + o.ref} onPress={() => router.push({ pathname: '/order/[id]', params: { id: o.id } })} style={[s.active, { flexDirection: rtl ? 'row-reverse' : 'row' }]} accessibilityRole="button">
               <Icon name="package" tint={color.lime} />

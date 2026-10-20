@@ -7,7 +7,7 @@ import { Card, Gap, Row, Screen, T } from '../ui/kit';
 
 // Help and support: short answers to the questions people ask most, and the way to reach our team about an order
 // (a problem report from that order: staff see it with all the evidence). No phone line exists yet, so none is shown.
-const QA: [Key, Key][] = [['faq_how_q', 'faq_how_a'], ['faq_confirm_q', 'faq_confirm_a'], ['faq_offers_q', 'faq_offers_a'], ['faq_codes_q', 'faq_codes_a'], ['faq_cash_q', 'faq_cash_a'], ['faq_problem_q', 'faq_problem_a']];
+const QA: [Key, Key][] = [['faq_how_q', 'faq_how_a'], ['faq_offers_q', 'faq_offers_a'], ['faq_codes_q', 'faq_codes_a'], ['faq_cash_q', 'faq_cash_a'], ['faq_problem_q', 'faq_problem_a']];
 export default function Help() {
   const { t, state } = useApp();
   const [open, setOpen] = useState<number | null>(0);

@@ -21,8 +21,6 @@ export class TrackingController {
   @Public() @Get('track_data') data(@Query('t') t: string) { return this.t.data(t); }
   @Public() @Get('track_qr') async qr(@Query('t') t: string, @Res() res: any) { const svg = await this.t.qr(t); res.setHeader('Content-Type', 'image/svg+xml'); res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'"); res.end(svg); }
   @Public() @Get('track_photo') async photo(@Query('t') t: string, @Res() res: any) { jpeg(res, await this.t.photo(t)); }
-  @Public() @Post('track_confirm') @HttpCode(200) confirm(@Req() r: any, @Body() b: any) { return this.t.confirm(b?.t, r.ip); }
-  @Public() @Post('track_decline') @HttpCode(200) decline(@Body() b: any) { return this.t.decline(b?.t, b?.reason); }
   @Public() @Post('track_expecting') @HttpCode(200) expecting(@Body() b: any) { return this.t.expecting(b?.t); }
   @Public() @Post('track_report') @HttpCode(200) report(@Body() b: any) { return this.t.report(b?.t, b?.reason, b?.note); }
 }

@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { photoBlob, pickPhoto } from '../lib/photos';
 import { ApiError } from '../core/api';
 import { useApp, useNotices } from '../lib/app';
@@ -14,7 +13,7 @@ import { color, font, radius, space } from '../lib/theme';
 import { AppMap, AppMapRef, Pin } from './AppMap';
 import { Sheet } from './Sheet';
 import { Drawer } from './Drawer';
-import { Button, Notice, RoundButton, T } from './kit';
+import { MapOverlay, Button, Notice, RoundButton, T } from './kit';
 import { Icon } from './Icon';
 
 const REQUEST_CHECK_MS = 5000;   // fallback check while online (the live connection normally brings requests at once)
@@ -22,6 +21,7 @@ const REQUEST_CHECK_MS = 5000;   // fallback check while online (the live connec
 // Courier mode home (contract C): the map with my position, the big online switch, and while online the requests near me.
 // Several couriers see a request at once: I accept the customer's price or offer a higher one, then the customer chooses.
 export function DriverHome() {
+  const [mapTouch, setMapTouch] = useState(false);   // a finger is moving the map: floating buttons step aside
   const { t, rtl, state, services } = useApp();
   const api = driver(services.client);
   const p = state.active!;
@@ -114,8 +114,8 @@ export function DriverHome() {
 
   return (
     <View style={s.root} testID="screen-home">
-      <AppMap ref={map} start={me ?? ALGIERS} zoom={me ? 15 : 12} pins={pins} fit={fit} pad={{ top: 120, bottom: 420 }} />
-      <SafeAreaView edges={['top']} style={s.top} pointerEvents="box-none">
+      <AppMap onTouching={setMapTouch} ref={map} start={me ?? ALGIERS} zoom={me ? 15 : 12} pins={pins} fit={fit} pad={{ top: 120, bottom: 420 }} />
+      <MapOverlay hidden={mapTouch} style={s.top}>
         <View style={[s.topRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
           <RoundButton testID="open-menu" icon="menu" label={t('menu')} onPress={() => setMenu(true)} />
           {active && home ? (
@@ -125,7 +125,7 @@ export function DriverHome() {
             </Pressable>
           ) : null}
         </View>
-      </SafeAreaView>
+      </MapOverlay>
 
       <Sheet testID="driver-sheet" maxFraction={0.62} peek={150}>
         {!sel ? <T kind="title" testID="home-hello" style={{ fontSize: 22 }}>{t('home_hello', { name: p.display_name })}</T> : null}

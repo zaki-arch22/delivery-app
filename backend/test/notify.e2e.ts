@@ -36,9 +36,7 @@ const P = { lat: 36.7538, lng: 3.0588 }, D = { lat: 36.765, lng: 3.07 }, adr = {
 async function order(tok: string, key: string, phone = '+213770000001') {
   const q = (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, tok)).b;
   const o = (await api('/create_order', { auto_accept: true, quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: adr, dropoff_address: adr, recipient_name: 'Amine', recipient_phone: phone, payer: 'sender' }, tok, { 'idempotency-key': key })).b;
-  // The receiver says yes first (tracking link), then couriers are searched. Auto-accept: the first courier who accepts gets it.
-  if (o?.status === 'awaiting_recipient') { await api('/track_confirm', { t: o.tracking_token }); return { ...o, status: 'searching' }; }
-  return o;
+  return o;   // auto-accept: the first courier who accepts the customer's price gets it
 }
 const profileOf = async (id: number) => (await pool.query(`SELECT profile_id FROM notifications WHERE id=$1`, [id])).rows[0]?.profile_id;
 
@@ -93,8 +91,8 @@ const profileOf = async (id: number) => (await pool.query(`SELECT profile_id FRO
   const off2b = sD1.msgs.filter(m => m.kind === 'offer.new').pop();
   await api('/accept_offer', { offer_id: off2b.data.offer_id }, D1.token); await step(O2.id, { step: 'picked_up' });
   const code2 = (await api('/get_order?id=' + O2.id, undefined, U1.token)).b.delivery_code; await step(O2.id, { step: 'delivered', delivery_code: code2 });
-  const sU1b = new Sock(U1.token, lastSeen); await until(() => sU1b.msgs.length >= 4, 3000);
-  ok('N7 reconnect replays exactly what was missed, in order', sU1b.msgs.map(m => m.kind).join() === 'order.recipient_confirmed,order.assigned,order.picked_up,order.delivered' && sU1b.msgs.every(m => m.id > lastSeen), sU1b.msgs.map(m => m.kind));
+  const sU1b = new Sock(U1.token, lastSeen); await until(() => sU1b.msgs.length >= 3, 3000);
+  ok('N7 reconnect replays exactly what was missed, in order', sU1b.msgs.map(m => m.kind).join() === 'order.assigned,order.picked_up,order.delivered' && sU1b.msgs.every(m => m.id > lastSeen), sU1b.msgs.map(m => m.kind));
   const last2 = Math.max(...sU1b.msgs.map(m => m.id)); sU1b.close(); await sleep(200);
   const sU1c = new Sock(U1.token, last2); await sleep(900);
   ok('N7 reconnecting again replays nothing (no duplicates)', sU1c.msgs.length === 0, sU1c.msgs);
@@ -162,7 +160,7 @@ const profileOf = async (id: number) => (await pool.query(`SELECT profile_id FRO
   const inc = await sR.waitKind('order.incoming');
   ok('N14 a recipient who is a registered user is told LIVE, with the delivery code', !!inc && inc.data.delivery_code === code9, inc);
   const pr = await until(async () => (await api('/dev/pushes?token=tok-recipient-0001')).b.sent?.find((x: any) => x.m.data.kind === 'order.incoming'));
-  ok('N14 ...and gets a PUSH in French asking to confirm', !!pr && pr.m.title === 'Un colis pour vous' && pr.m.body.startsWith('Sara veut vous envoyer un colis'), pr);
+  ok('N14 ...and gets a PUSH in French with the code', !!pr && pr.m.title === 'Un colis arrive' && pr.m.body === `De Sara. Code de livraison : ${code9}`, pr);
   ok('N14 the sender always sees the code in the app (the way to give it to anyone)', /^\d{4}$/.test(code9));
   await api('/cancel_order', { order_id: O9.id }, U1.token);
   const O10 = await order(U1.token, 'notify-order-010', '+213770099999'); await sleep(800);
@@ -183,7 +181,7 @@ const profileOf = async (id: number) => (await pool.query(`SELECT profile_id FRO
   ok('N16 English is accepted', (await api('/register_device', { token: 'tok-recipient-0001', platform: 'android', language: 'en' }, R.token)).s === 200);
   const O12 = await order(U1.token, 'notify-order-012', '+213770000009'); const code12 = (await api('/get_order?id=' + O12.id, undefined, U1.token)).b.delivery_code;
   const pe = await until(async () => (await api('/dev/pushes?token=tok-recipient-0001')).b.sent?.find((x: any) => x.m.data.ref === O12.ref));
-  ok('N16 the same device now gets the push in ENGLISH', !!pe && pe.m.title === 'A parcel for you' && pe.m.body === 'Sara wants to send you a parcel. Open the app to confirm.' && /^\d{4}$/.test(code12), pe);
+  ok('N16 the same device now gets the push in ENGLISH', !!pe && pe.m.title === 'A parcel is on its way to you' && pe.m.body === `From Sara. Delivery code: ${code12}`, pe);
   await api('/cancel_order', { order_id: O12.id }, U1.token);
   // N15 isolation of every message, by database proof
   let leaks = 0; for (const [s, id] of [[sD1, D1.id], [sU1, U1.id], [sU1b, U1.id], [sAU, A.id], [sAD, AD.id], [sR, R.id]] as [Sock, string][]) for (const m of s.msgs) if ((await profileOf(m.id)) !== id) leaks++;

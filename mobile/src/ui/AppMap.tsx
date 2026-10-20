@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Camera, CameraRef, GeoJSONSource, Layer, Map, Marker } from '@maplibre/maplibre-react-native';
 import { mapStyleUrl } from '../lib/config';
@@ -17,10 +17,15 @@ type Pad = { top: number; bottom: number; left: number; right: number };
 // With `centerPin`, a fixed pin sits in the middle and the person moves the map under it (`onMoved` gives the new centre).
 export const AppMap = forwardRef<AppMapRef, {
   start: Point; zoom?: number; pins?: Pin[]; centerPin?: { label: string; kind: 'pickup' | 'dropoff' }; onMoved?: (p: Point) => void;
-  route?: [number, number][] | null; fit?: Point[]; pad?: Partial<Pad>; testID?: string;
-}>(function AppMap({ start, zoom = 15, pins = [], centerPin, onMoved, route, fit, pad, testID = 'map' }, ref) {
+  route?: [number, number][] | null; fit?: Point[]; pad?: Partial<Pad>; testID?: string; onTouching?: (touching: boolean) => void;
+}>(function AppMap({ start, zoom = 15, pins = [], centerPin, onMoved, route, fit, pad, testID = 'map', onTouching }, ref) {
   const { t } = useApp();
   const cam = useRef<CameraRef>(null);
+  // While a finger is on the map, every icon on it disappears (only the centre pin, which marks the chosen point, stays);
+  // they come back when the last finger is lifted. The screen hides its own buttons and cards too (onTouching).
+  const [touching, setTouching] = useState(false);
+  const isTouching = useRef(false);
+  const touch = (on: boolean) => { if (isTouching.current === on) return; isTouching.current = on; setTouching(on); onTouching?.(on); };
   const padding: Pad = { top: 80, bottom: 80, left: 50, right: 50, ...pad };
   const fitNow = (pts: Point[]) => {
     if (pts.length === 0) return;
@@ -41,6 +46,7 @@ export const AppMap = forwardRef<AppMapRef, {
 
   return (
     <View style={s.wrap}>
+      <View style={StyleSheet.absoluteFill} onTouchStart={() => touch(true)} onTouchEnd={e => { if (!e.nativeEvent.touches?.length) touch(false); }} onTouchCancel={() => touch(false)}>
       <Map testID={testID} style={StyleSheet.absoluteFill} mapStyle={mapStyleUrl()} logo={false} attribution compass={false}
         onRegionDidChange={e => { const c = e.nativeEvent.center; onMoved?.({ lng: c[0], lat: c[1] }); }}>
         <Camera ref={cam} initialViewState={{ center: [start.lng, start.lat], zoom }} />
@@ -51,18 +57,19 @@ export const AppMap = forwardRef<AppMapRef, {
               paint={line.dashed ? { 'line-color': color.lime, 'line-width': 4, 'line-dasharray': [1.5, 1.5] } : { 'line-color': color.lime, 'line-width': 5 }} />
           </GeoJSONSource>
         ) : null}
-        {pins.map(p => (
+        {touching ? null : pins.map(p => (
           <Marker key={p.id} id={p.id} lngLat={[p.at.lng, p.at.lat]} anchor={p.kind === 'driver' ? 'center' : 'bottom'}>
             <PinView kind={p.kind} label={p.label} vehicle={p.vehicle} />
           </Marker>
         ))}
       </Map>
+      </View>
       {centerPin ? (
         <View pointerEvents="none" style={s.centerWrap} accessibilityLabel={centerPin.label} testID="center-pin">
           <PinView kind={centerPin.kind} label={centerPin.label} />
         </View>
       ) : null}
-      <Text style={s.credit}>{t('map_credit')}</Text>
+      {touching ? null : <Text style={s.credit}>{t('map_credit')}</Text>}
     </View>
   );
 });

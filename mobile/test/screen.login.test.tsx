@@ -25,21 +25,21 @@ test('phone numbers: what people type in Algeria becomes the international forma
   expect(display('+213550123456')).toBe('0550 12 34 56');
 });
 
-test('welcome: language switch changes every text and the direction, and is remembered', async () => {
-  const store = memoryStore();
-  await open(svc(store));
+test('first launch speaks the phone\'s language (no language step); a language chosen in Settings wins, right-to-left for Arabic', async () => {
+  const loc = require('expo-localization');
+  const spy = jest.spyOn(loc, 'getLocales').mockReturnValue([{ languageCode: 'fr' }] as any);
+  await open(svc(memoryStore()));
   await screen.findByTestId('screen-welcome');
-  expect(screen.getByText('I want to send parcels')).toBeTruthy();
-  await fireEvent.press(screen.getByTestId('lang-ar'));
+  expect(screen.getByText('Je veux envoyer des colis')).toBeTruthy();                  // the phone is in French
+  expect(screen.queryByTestId('lang-fr')).toBeNull();                                   // no language buttons for visitors
+  spy.mockRestore();
+  await screen.unmount();
+  const store = memoryStore(); await store.set('lang', 'ar');                            // chosen earlier in Settings
+  await open(svc(store));
   expect(await screen.findByText('أريد إرسال طرود')).toBeTruthy();
-  expect(screen.getByText('أريد التوصيل')).toBeTruthy();
   const flat = (st: any): any => Array.isArray(st) ? Object.assign({}, ...st.map(flat)) : st ?? {};
-  const scroll = screen.root!.queryAll((n: any) => flat(n.props?.contentContainerStyle).direction === 'rtl');
-  expect(scroll.length).toBeGreaterThan(0);                           // the whole screen is right-to-left
-  expect(flat(screen.getByText('أريد إرسال طرود').props.style).textAlign).toBe('right');            // card titles read from the right
-  await waitFor(async () => expect(await store.get('lang')).toBe('ar'));
-  await fireEvent.press(screen.getByTestId('lang-fr'));
-  expect(await screen.findByText('Je veux envoyer des colis')).toBeTruthy();
+  expect(screen.root!.queryAll((n: any) => flat(n.props?.contentContainerStyle).direction === 'rtl').length).toBeGreaterThan(0);   // the whole screen is right-to-left
+  expect(flat(screen.getByText('أريد إرسال طرود').props.style).textAlign).toBe('right');
 });
 
 test('sender sign-up: bad number, wrong code, then code -> name -> home; reopening the app needs no new SMS', async () => {
@@ -189,7 +189,8 @@ test('Google login, driver: phone number, then the driver sign-up with the Googl
   await fireEvent.changeText(await screen.findByTestId('contact-phone-input'), '0664000008');
   await fireEvent.press(screen.getByTestId('save-phone'));
   await screen.findByTestId('screen-driver-signup');
-  expect(screen.getByTestId('name-input').props.value).toBe('Yacine Driver');
+  expect(screen.getByTestId('first-input').props.value).toBe('Yacine');                 // the Google name, split, can be changed
+  expect(screen.getByTestId('last-input').props.value).toBe('Driver');
   const n = await db.query(`SELECT count(*)::int n FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE a.google_sub='g-mobile-driver'`);
   expect(n.rows[0].n).toBe(0);                                                          // nothing is created before the photos
 });

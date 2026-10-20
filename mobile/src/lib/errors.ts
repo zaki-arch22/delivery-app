@@ -43,6 +43,10 @@ export function errorMessage(e: unknown): { key: Key; vars?: Record<string, numb
     case 'DEVICE_BANNED': return { key: 'err_device_banned' };
     case 'RULES_REQUIRED': return { key: 'rules_needed' };
     case 'BAD_NATIONAL_ID': return { key: 'nid_invalid' };
+    case 'BAD_DRIVER_NAME': return { key: 'driver_name_missing' };
+    case 'BAD_BIRTH_DATE': return { key: 'birth_invalid' };
+    case 'BAD_VEHICLE_COLOR': return { key: 'colour_missing' };
+    case 'BAD_PLATE': return { key: 'plate_invalid' };
     case 'ID_ALREADY_USED': return { key: 'err_nid_used' };
     case 'ID_BANNED': return { key: 'err_nid_banned' };
     case 'CANNOT_APPEAL': return { key: 'err_cannot_appeal' };

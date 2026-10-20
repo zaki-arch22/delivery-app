@@ -47,7 +47,12 @@ export class StaffService {
 
   // ---------- drivers ----------
   pendingDrivers() {
-    return this.db.query(`SELECT p.id, p.display_name, a.phone, d.vehicle, json_build_object('id_photo', d.id_photo_doc, 'licence_photo', d.licence_photo_doc, 'vehicle_photo', d.vehicle_photo_doc, 'selfie', (SELECT s.id FROM documents s WHERE s.profile_id=p.id AND s.kind='selfie_photo' ORDER BY s.created_at DESC LIMIT 1)) AS documents, p.created_at
+    // Everything a person needs to decide: identity and vehicle as typed, and every photo (ID card, licence, ownership,
+    // all vehicle photos, the latest selfie). Nothing is approved automatically.
+    return this.db.query(`SELECT p.id, p.display_name, a.phone, d.vehicle, d.first_name, d.last_name, to_char(d.birth_date, 'YYYY-MM-DD') birth_date, d.vehicle_color, d.plate_number, d.national_id_last3,
+      json_build_object('id_photo', d.id_photo_doc, 'licence_photo', d.licence_photo_doc, 'ownership_photo', d.ownership_photo_doc, 'vehicle_photo', d.vehicle_photo_doc,
+        'vehicle_photos', (SELECT COALESCE(json_agg(v.id ORDER BY v.created_at), '[]') FROM documents v WHERE v.profile_id=p.id AND v.kind='vehicle_photo'),
+        'selfie', (SELECT s.id FROM documents s WHERE s.profile_id=p.id AND s.kind='selfie_photo' ORDER BY s.created_at DESC LIMIT 1)) AS documents, p.created_at
       FROM profiles p JOIN accounts a ON a.id=p.account_id JOIN driver_details d ON d.profile_id=p.id WHERE p.type='driver' AND p.status='pending_approval' ORDER BY p.created_at`).then(drivers => ({ drivers }));
   }
 
@@ -170,7 +175,7 @@ export class StaffService {
         await notify(q, { profile: x.driver_profile_id, kind: 'offer.withdrawn', order: oid, push: false, dedupe: `offer:${x.id}:end`, data: { offer_id: Number(x.id), reason: 'support' } }); };
       const stamp = Date.now();
       if (action === 'cancel') {
-        if (!['awaiting_recipient', 'searching', 'assigned'].includes(o.status)) throw fail(409, 'CANNOT_CANCEL', `Order is ${o.status}. After pickup use start_return.`);
+        if (!['searching', 'assigned'].includes(o.status)) throw fail(409, 'CANNOT_CANCEL', `Order is ${o.status}. After pickup use start_return.`);
         await q(`UPDATE orders SET status='cancelled', cancel_reason=$2 WHERE id=$1`, [oid, `support: ${reason}`]); await withdraw();
         if (o.status === 'assigned') await notify(q, { profile: o.driver_profile_id, kind: 'job.cancelled', order: oid, priority: 'high', dedupe: `order:${oid}:cancelled`, data: { ref: o.ref } });
         await notify(q, { profile: o.user_profile_id, kind: 'order.cancelled', order: oid, dedupe: `order:${oid}:cancelled_by_support`, data: { ref: o.ref } });

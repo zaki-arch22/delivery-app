@@ -21,7 +21,7 @@ const code4 = () => String(randomInt(0, 10000)).padStart(4, '0');
 export const RECALL_REASONS = ['buyer_cancelled', 'wrong_parcel', 'wrong_address', 'other'];
 export const PROBLEM_REASONS = ['driver_late', 'damaged', 'not_delivered', 'wrong_item', 'missing_item', 'driver_behaviour', 'price', 'other'];
 // What the sender sees in the order's history (everything that happened, without internal ids).
-const USER_EVENTS = ['created', 'recipient_confirmed', 'recipient_declined', 'bid_made', 'bid_declined', 'price_raised', 'assigned', 'released_by_driver', 'reassigned', 'pickup_code_wrong', 'picked_up', 'flag_far_away', 'code_wrong',
+const USER_EVENTS = ['created', 'bid_made', 'bid_declined', 'price_raised', 'assigned', 'released_by_driver', 'reassigned', 'pickup_code_wrong', 'picked_up', 'flag_far_away', 'code_wrong',
   'delivered', 'delivery_failed', 'recalled_by_sender', 'returned_by_support', 'cancelled', 'cancelled_by_support', 'expired', 'recipient_expecting', 'recipient_reported', 'address_corrected', 'return_created', 'flag_check', 'emergency'];
 
 const SIZES = ['small', 'medium', 'large'];
@@ -75,33 +75,34 @@ export class OrdersService {
              size, vehicle, payer, cod_amount_da, pricing_version, distance_m, duration_s, recommended_da, min_da, max_da, offered_da, delivery_code, idempotency_key,
              pickup_code, inspection, status, auto_accept, route_line)
            VALUES ($1, ST_SetSRID(ST_MakePoint($2,$3),4326)::geography, $4, ST_SetSRID(ST_MakePoint($5,$6),4326)::geography, $7, $8,$9,
-             $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'awaiting_recipient',$25,$26) RETURNING id, ref`,
+             $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'searching',$25,$26) RETURNING id, ref`,
           [userId, d.pickup.lng, d.pickup.lat, pickup_address, d.dropoff.lng, d.dropoff.lat, dropoff_address, name, b.recipient_phone,
            d.size, vehicleFor(d.size), b.payer, cod, d.pricing_version, d.distance_m, d.duration_s, d.recommended_da, d.min_da, d.max_da, b.offered_da, code, key,
            pickupCode, inspection, autoAccept, d.line ? JSON.stringify(d.line) : null]);
         await q(`UPDATE orders SET tracking_hash=$2 WHERE id=$1`, [o.id, trackingHash(trackingToken(o.id))]);
         await q(`INSERT INTO order_events(order_id, type, actor_profile_id, data) VALUES ($1,'created',$2,$3)`, [o.id, userId, { offered_da: b.offered_da, inspection, auto_accept: autoAccept }]);
-        // The order now WAITS for the receiver's yes (tracking link, sent by the sender through WhatsApp/SMS from his phone).
-        // No SMS from us. If the receiver's number is the VERIFIED number of a registered user, that user also gets a PUSH
-        // and can answer in the app. Typed, unverified numbers never do (anyone could type someone else's number).
+        // No SMS from us. If the receiver's number is the VERIFIED number of a registered user, that user gets a PUSH with the
+        // delivery code. Typed, unverified numbers never do (anyone could type someone else's number). Everyone else gets the
+        // code (and the tracking link) from the sender.
         const [rp] = await q(`SELECT p.id FROM accounts a JOIN profiles p ON p.account_id=a.id AND p.type='user' AND p.status='active'
                               WHERE a.phone=$1 AND a.phone_verified AND a.id <> (SELECT account_id FROM profiles WHERE id=$2)`, [b.recipient_phone, userId]);
-        if (rp) await notify(q, { profile: rp.id, kind: 'order.incoming', order: o.id, dedupe: `order:${o.id}:incoming`, data: { ref: o.ref, delivery_code: code, t: trackingToken(o.id), sender: (await q(`SELECT split_part(display_name, ' ', 1) n FROM profiles WHERE id=$1`, [userId]))[0].n } });
+        if (rp) await notify(q, { profile: rp.id, kind: 'order.incoming', order: o.id, dedupe: `order:${o.id}:incoming`, data: { ref: o.ref, delivery_code: code, sender: (await q(`SELECT split_part(display_name, ' ', 1) n FROM profiles WHERE id=$1`, [userId]))[0].n } });
         return o.id;
       });
     } catch (e: any) {
       if (e.code === '23505') { const x = await this.db.one(`SELECT id FROM orders WHERE user_profile_id=$1 AND idempotency_key=$2`, [userId, key]); if (x) return this.viewForUser(x.id, userId); }
       throw e;
     }
+    await this.matching.offerNext(id);   // nearby couriers see it at once, not at the next tick
     return this.viewForUser(id, userId);
   }
 
-  // "Take the first courier who accepts my price" (inDrive's auto-accept), on or off while the order waits or searches.
+  // "Take the first courier who accepts my price" (inDrive's auto-accept), on or off while the order searches.
   async setAutoAccept(userId: string, orderId: any, on: any) {
     uuid(orderId, 'order_id');
     if (typeof on !== 'boolean') throw bad('BAD_INPUT', 'on must be true or false');
-    const r = await this.db.one(`UPDATE orders SET auto_accept=$3 WHERE id=$1 AND user_profile_id=$2 AND status IN ('awaiting_recipient','searching') RETURNING id`, [orderId, userId, on]);
-    if (!r) { await this.viewForUser(orderId, userId); throw fail(409, 'WRONG_STATE', 'Only while waiting or searching'); }
+    const r = await this.db.one(`UPDATE orders SET auto_accept=$3 WHERE id=$1 AND user_profile_id=$2 AND status='searching' RETURNING id`, [orderId, userId, on]);
+    if (!r) { await this.viewForUser(orderId, userId); throw fail(409, 'WRONG_STATE', 'Only while searching'); }
     return this.viewForUser(orderId, userId);
   }
 
@@ -159,7 +160,7 @@ export class OrdersService {
     const r = await this.db.tx(async q => {
       const [o] = await q(`SELECT status, driver_profile_id, ref, extract(epoch FROM now() - assigned_at)::int AS since_assigned FROM orders WHERE id=$1 AND user_profile_id=$2 FOR UPDATE`, [orderId, userId]);
       if (!o) throw fail(404, 'NOT_FOUND', 'Order not found');
-      if (!['awaiting_recipient', 'searching', 'assigned'].includes(o.status)) throw fail(409, 'CANNOT_CANCEL', 'After pickup an order cannot be cancelled; report a problem instead');
+      if (!['searching', 'assigned'].includes(o.status)) throw fail(409, 'CANNOT_CANCEL', 'After pickup an order cannot be cancelled; report a problem instead');
       await q(`UPDATE orders SET status='cancelled', cancel_reason=$2 WHERE id=$1`, [orderId, txt]);
       const w = await q(`UPDATE offers SET status='expired' WHERE order_id=$1 AND status IN ('offered','bid') RETURNING id, driver_profile_id`, [orderId]);
       for (const x of w) await notify(q, { profile: x.driver_profile_id, kind: 'offer.withdrawn', order: orderId, push: false, dedupe: `offer:${x.id}:end`, data: { offer_id: Number(x.id), reason: 'cancelled' } });
@@ -240,21 +241,21 @@ export class OrdersService {
       `SELECT o.id, o.ref, o.leg, o.parent_order_id, o.status, o.size, o.vehicle, o.payer, o.cod_amount_da, o.recommended_da, o.min_da, o.max_da, o.offered_da, o.locked_da,
          o.distance_m, o.duration_s, o.delivery_code, o.pickup_code, o.inspection, o.recipient_expecting_at, o.pickup_photo_doc, o.pickup_distance_m, o.delivery_distance_m, o.tracking_hash IS NOT NULL has_tracking, o.cancel_reason, o.pickup_address, o.dropoff_address, o.recipient_name, o.recipient_phone,
          ST_Y(o.pickup_point::geometry) pickup_lat, ST_X(o.pickup_point::geometry) pickup_lng, ST_Y(o.dropoff_point::geometry) dropoff_lat, ST_X(o.dropoff_point::geometry) dropoff_lng,
-         o.created_at, o.assigned_at, o.picked_up_at, o.delivered_at, o.auto_accept, o.recipient_answer, o.recipient_answered_at, o.route_line route, o.search_started_at,
-         CASE WHEN o.status='awaiting_recipient' THEN o.created_at + make_interval(mins => $3) END recipient_deadline_at,
-         CASE WHEN o.status='searching' THEN o.search_started_at + make_interval(secs => $4) END search_ends_at,
+         o.created_at, o.assigned_at, o.picked_up_at, o.delivered_at, o.auto_accept, o.route_line route, o.search_started_at,
+         CASE WHEN o.status='searching' THEN o.search_started_at + make_interval(secs => $3) END search_ends_at,
          (SELECT count(*)::int FROM offers f WHERE f.order_id=o.id AND f.status IN ('offered','bid')) couriers_notified,
          (SELECT count(*)::int FROM orders x WHERE x.driver_profile_id=o.driver_profile_id AND x.status='delivered' AND x.leg='delivery') driver_deliveries,
          dp.id driver_id, dp.display_name driver_name, dp.photo_url driver_photo,
          CASE WHEN dp.rating_count = 0 THEN NULL ELSE round(dp.rating_sum::numeric / dp.rating_count, 2) END driver_rating, dd.vehicle driver_vehicle,
+         CASE WHEN o.status IN ('assigned','picked_up') THEN dd.vehicle_color END driver_vehicle_color, CASE WHEN o.status IN ('assigned','picked_up') THEN dd.plate_number END driver_plate,
          CASE WHEN o.status IN ('assigned','picked_up') THEN ST_Y(dd.last_location::geometry) END driver_lat,
          CASE WHEN o.status IN ('assigned','picked_up') THEN ST_X(dd.last_location::geometry) END driver_lng,
          dd.last_location_at driver_location_at,
          EXISTS (SELECT 1 FROM ratings r WHERE r.order_id = o.id AND r.rater_profile_id = o.user_profile_id) AS rated
        FROM orders o LEFT JOIN profiles dp ON dp.id = o.driver_profile_id LEFT JOIN driver_details dd ON dd.profile_id = dp.id
-       WHERE o.id=$1 AND o.user_profile_id=$2`, [orderId, userId, cfg.recipientWindowMin(), cfg.searchWindowS()]);
+       WHERE o.id=$1 AND o.user_profile_id=$2`, [orderId, userId, cfg.searchWindowS()]);
     if (!o) throw fail(404, 'NOT_FOUND', 'Order not found');
-    const { driver_id, driver_name, driver_photo, driver_rating, driver_vehicle, driver_lat, driver_lng, driver_location_at, driver_deliveries, has_tracking, ...rest } = o;
+    const { driver_id, driver_name, driver_photo, driver_rating, driver_vehicle, driver_vehicle_color, driver_plate, driver_lat, driver_lng, driver_location_at, driver_deliveries, has_tracking, ...rest } = o;
     // Couriers' offers waiting for the customer's choice (price, time to reach the pickup, who they are). Only while searching.
     const bids = o.status !== 'searching' ? [] : await this.db.query(
       `SELECT f.id offer_id, f.bid_da price_da, f.eta_s, f.bid_expires_at expires_at, p.display_name name, p.photo_url,
@@ -269,6 +270,6 @@ export class OrdersService {
       bids: bids.map((x: any) => ({ offer_id: Number(x.offer_id), price_da: x.price_da, eta_s: x.eta_s, expires_at: x.expires_at, driver: { name: x.name, photo_url: x.photo_url, rating: x.rating, rating_count: x.rating_count, vehicle: x.vehicle, deliveries: x.deliveries } })),
       eta_s: eta.s, eta_estimated: eta.estimated,
       history: events.map((e: any) => ({ type: e.type, at: e.created_at, data: e.data })),
-      driver: driver_id ? { name: driver_name, photo_url: driver_photo, rating: driver_rating, vehicle: driver_vehicle, deliveries: driver_deliveries, location: driver_lat == null ? null : { lat: driver_lat, lng: driver_lng, at: driver_location_at } } : null };
+      driver: driver_id ? { name: driver_name, photo_url: driver_photo, rating: driver_rating, vehicle: driver_vehicle, vehicle_color: driver_vehicle_color, plate_number: driver_plate, deliveries: driver_deliveries, location: driver_lat == null ? null : { lat: driver_lat, lng: driver_lng, at: driver_location_at } } : null };
   }
 }

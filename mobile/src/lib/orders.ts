@@ -4,7 +4,7 @@ import type { Lang } from '../i18n';
 
 // The user-path functions of the contract (section B), typed for the screens.
 export type Size = 'small' | 'medium' | 'large';
-export type Status = 'awaiting_recipient' | 'searching' | 'assigned' | 'picked_up' | 'delivered' | 'failed' | 'cancelled' | 'expired';
+export type Status = 'searching' | 'assigned' | 'picked_up' | 'delivered' | 'failed' | 'cancelled' | 'expired';
 export interface Address { street?: string; landmark?: string; building?: string; notes?: string }
 export interface Quote { quote_id: string; expires_at: string; vehicle: 'motorbike' | 'car'; distance_m: number; duration_s: number; distance_estimated: boolean; recommended_da: number; min_da: number; max_da: number; route: [number, number][] | null }
 // A courier's answer to a request: his price and how long he needs to reach the pickup point.
@@ -16,7 +16,7 @@ export interface Order {
   distance_m: number; duration_s: number; delivery_code: string; pickup_address: Address; dropoff_address: Address; recipient_name: string; recipient_phone: string;
   pickup_lat: number; pickup_lng: number; dropoff_lat: number; dropoff_lng: number; created_at: string; rated: boolean;
   driver: null | { name: string; photo_url: string | null; rating: string | null; vehicle: 'motorbike' | 'car'; deliveries: number; location: null | { lat: number; lng: number; at: string } };
-  bids: Bid[]; auto_accept: boolean; recipient_answer: 'confirmed' | 'declined' | null; recipient_deadline_at: string | null; search_ends_at: string | null; search_started_at: string;
+  bids: Bid[]; auto_accept: boolean; search_ends_at: string | null; search_started_at: string;
   couriers_notified: number; eta_s: number | null; eta_estimated: boolean; route: [number, number][] | null; cancel_reason: string | null;
   pickup_code: string | null; inspection: 'outside' | 'open'; tracking_token: string | null; recipient_expecting_at: string | null;
   pickup_photo_doc: string | null; pickup_distance_m: number | null; delivery_distance_m: number | null; evidence_photos: string[];
@@ -24,7 +24,7 @@ export interface Order {
 }
 export type RecallReason = 'buyer_cancelled' | 'wrong_parcel' | 'wrong_address' | 'other';
 export interface RecipientHistory { delivered: number; refused: number; no_answer: number }
-export const ACTIVE: Status[] = ['awaiting_recipient', 'searching', 'assigned', 'picked_up'];
+export const ACTIVE: Status[] = ['searching', 'assigned', 'picked_up'];
 
 export const orders = (c: Client) => ({
   quote: (pickup: Point, dropoff: Point, size: Size) => c.call<Quote>('/get_quote', { pickup, dropoff, size }),
@@ -42,8 +42,6 @@ export const orders = (c: Client) => ({
   declineBid: (id: string, offerId: number) => c.call<Order>('/decline_bid', { order_id: id, offer_id: offerId }),
   search: (q: string, lang: Lang, near?: Point) => c.call<{ places: Place[]; unavailable?: boolean }>(`/search_places?q=${encodeURIComponent(q)}&lang=${lang}` + (near ? `&lat=${near.lat.toFixed(5)}&lng=${near.lng.toFixed(5)}` : '')),
   reverse: (at: Point, lang: Lang) => c.call<{ place: Place | null }>(`/reverse_place?lat=${at.lat.toFixed(5)}&lng=${at.lng.toFixed(5)}&lang=${lang}`),
-  // The receiver's yes/no, for a receiver who has the app (same public function as the tracking page).
-  answerIncoming: (token: string, yes: boolean) => c.publicCall(yes ? '/track_confirm' : '/track_decline', yes ? { t: token } : { t: token, reason: 'not_ordered' }),
   recipientHistory: (phone: string) => c.call<RecipientHistory>('/recipient_history?phone=' + encodeURIComponent(phone)),
 });
 

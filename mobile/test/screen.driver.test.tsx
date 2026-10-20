@@ -25,13 +25,23 @@ test('new driver: name, vehicle, three photos, send for approval -> waiting for 
   await screen.findByTestId('screen-driver-signup');
 
   await fireEvent.press(screen.getByTestId('submit-driver'));
-  expect(await screen.findByTestId('signup-error')).toHaveTextContent(/name needs 2 to 60/);   // nothing typed yet
-  await fireEvent.changeText(screen.getByTestId('name-input'), 'Yacine Rider');
+  expect(await screen.findByTestId('signup-error')).toHaveTextContent(/first name and last name/);   // nothing typed yet
+  await fireEvent.changeText(screen.getByTestId('first-input'), 'Yacine');
+  await fireEvent.changeText(screen.getByTestId('last-input'), 'Rider');
+  await fireEvent.changeText(screen.getByTestId('birth-input'), '31022001');
+  await fireEvent.press(screen.getByTestId('submit-driver'));
+  expect(await screen.findByTestId('signup-error')).toHaveTextContent(/date of birth/);         // 31 February does not exist
+  await fireEvent.changeText(screen.getByTestId('birth-input'), '12041995');
+  expect(screen.getByTestId('birth-input').props.value).toBe('12/04/1995');                     // written as a date while typing
   await fireEvent.press(screen.getByTestId('submit-driver'));
   expect(await screen.findByTestId('signup-error')).toHaveTextContent(/Choose your vehicle\./);
   await fireEvent.press(screen.getByTestId('vehicle-motorbike'));
   await fireEvent.press(screen.getByTestId('submit-driver'));
-  expect(await screen.findByTestId('signup-error')).toHaveTextContent(/Add the three photos first\./);
+  expect(await screen.findByTestId('signup-error')).toHaveTextContent(/colour/);
+  await fireEvent.changeText(screen.getByTestId('colour-input'), 'Red');
+  await fireEvent.changeText(screen.getByTestId('plate-input'), '0123-4116-16');
+  await fireEvent.press(screen.getByTestId('submit-driver'));
+  expect(await screen.findByTestId('signup-error')).toHaveTextContent(/four required photos/);
 
   mockPick = 'denied'; await addPhoto('id_photo');
   expect(await screen.findByTestId('status-id_photo')).toHaveTextContent(/Allow camera or photo access/);
@@ -42,8 +52,11 @@ test('new driver: name, vehicle, three photos, send for approval -> waiting for 
   await addPhoto('id_photo');
   expect(await screen.findByText(/✓ Photo received/)).toBeTruthy();
   await addPhoto('licence_photo', 'library');
+  await addPhoto('ownership_photo');
   await addPhoto('vehicle_photo');
-  expect(await screen.findAllByText(/✓ Photo received/)).toHaveLength(3);
+  await fireEvent.press(screen.getByTestId('add-vehicle-photo'));                               // a second vehicle photo (the plate side)
+  await addPhoto('extra-0');
+  expect(await screen.findAllByText(/✓ Photo received/)).toHaveLength(5);
   await fireEvent.press(screen.getByTestId('submit-driver'));
   expect(await screen.findByTestId('signup-error')).toHaveTextContent(/number written on your national ID card/);
   await fireEvent.changeText(screen.getByTestId('nid-input'), '1099 8877 6655 4433');      // only digits are kept
@@ -54,9 +67,9 @@ test('new driver: name, vehicle, three photos, send for approval -> waiting for 
   await act(async () => { await fireEvent.press(screen.getByTestId('submit-driver')); });
   expect(await screen.findByText('Hello, Yacine Rider')).toBeTruthy();
   expect(screen.getByTestId('driver-status')).toHaveTextContent(/waiting for approval/);
-  const row = await db.query(`SELECT p.status, d.vehicle, (SELECT count(*)::int FROM documents x WHERE x.profile_id=p.id) docs
+  const row = await db.query(`SELECT p.status, p.display_name, d.vehicle, d.first_name, d.last_name, to_char(d.birth_date,'YYYY-MM-DD') birth, d.vehicle_color, d.plate_number, (SELECT count(*)::int FROM documents x WHERE x.profile_id=p.id) docs
     FROM profiles p JOIN driver_details d ON d.profile_id=p.id JOIN accounts a ON a.id=p.account_id WHERE a.phone='+213554000001'`);
-  expect(row.rows).toEqual([{ status: 'pending_approval', vehicle: 'motorbike', docs: 3 }]);
+  expect(row.rows).toEqual([{ status: 'pending_approval', display_name: 'Yacine Rider', vehicle: 'motorbike', first_name: 'Yacine', last_name: 'Rider', birth: '1995-04-12', vehicle_color: 'Red', plate_number: '0123 4116 16', docs: 5 }]);
   expect((await db.query(`SELECT d.national_id_last3, p.rules_version FROM driver_details d JOIN profiles p ON p.id=d.profile_id JOIN accounts a ON a.id=p.account_id WHERE a.phone='+213554000001'`)).rows).toEqual([{ national_id_last3: '433', rules_version: 1 }]);
 });
 
@@ -71,10 +84,14 @@ test('a sender adds a driver profile from Settings (same photos flow), and keeps
   await menu('menu-settings');
   await fireEvent.press(await screen.findByTestId('add-driver'));
   await screen.findByTestId('screen-driver-signup');
-  expect(screen.getByTestId('name-input').props.value).toBe('Sara Seller');                   // pre-filled, can be changed
+  expect(screen.getByTestId('first-input').props.value).toBe('Sara');                           // pre-filled from the name, can be changed
+  expect(screen.getByTestId('last-input').props.value).toBe('Seller');
+  await fireEvent.changeText(screen.getByTestId('birth-input'), '01011990');
   await fireEvent.press(screen.getByTestId('vehicle-car'));
-  for (const k of ['id_photo', 'licence_photo', 'vehicle_photo']) await addPhoto(k);
-  expect(await screen.findAllByText(/✓ Photo received/)).toHaveLength(3);
+  await fireEvent.changeText(screen.getByTestId('colour-input'), 'White');
+  await fireEvent.changeText(screen.getByTestId('plate-input'), '12345 113 16');
+  for (const k of ['id_photo', 'licence_photo', 'ownership_photo', 'vehicle_photo']) await addPhoto(k);
+  expect(await screen.findAllByText(/✓ Photo received/)).toHaveLength(4);
   await fireEvent.changeText(screen.getByTestId('nid-input'), '109988776655');
   await fireEvent.press(screen.getByTestId('accept-rules'));
   await act(async () => { await fireEvent.press(screen.getByTestId('submit-driver')); });

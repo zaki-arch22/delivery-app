@@ -21,8 +21,8 @@ Rules
 | verify_code | PUBLIC | phone, code, path (`user`\|`driver`) | needs_phone (false), token, refresh_token, profiles[], active_profile (null if the chosen path has no profile yet), needs_profile (the path, or null) |
 | refresh_token | PUBLIC | refresh_token | token, refresh_token |
 | switch_profile | ACCOUNT | type | token, active_profile (needs the profile to exist) |
-| upload_document | ACCOUNT | query `kind` (`id_photo`\|`licence_photo`\|`vehicle_photo`); the BODY is the photo itself (Content-Type image/jpeg, image/png or image/webp, max 6 MB) | document_id, kind. The photo is checked by decoding it, redrawn as a clean JPEG (hidden data removed, max 2000 px) and kept privately. Errors: IMAGE_ONLY 415, TOO_LARGE 413, BAD_IMAGE, IMAGE_TOO_SMALL (under 300 px), TOO_MANY_UPLOADS 429 (10 unused photos per account; unused photos are deleted after a day) |
-| add_profile | ACCOUNT (first profile) or the active profile (second profile, from Settings only) | type, display_name, accept_rules (must be true: RULES_REQUIRED) (+ for a driver: national_id (9-18 digits; one ID card = one driver profile: ID_ALREADY_USED; banned: ID_BANNED), documents {vehicle `motorbike`\|`car`, id_photo, licence_photo, vehicle_photo} = the three document_ids) | profile (driver starts `pending_approval`). BAD_DOCUMENT if a photo is someone else's, in the wrong place, or already used |
+| upload_document | ACCOUNT | query `kind` (`id_photo`\|`licence_photo`\|`ownership_photo`\|`vehicle_photo`); the BODY is the photo itself (Content-Type image/jpeg, image/png or image/webp, max 6 MB) | document_id, kind. The photo is checked by decoding it, redrawn as a clean JPEG (hidden data removed, max 2000 px) and kept privately. Photos are never refused for quality or size in pixels: staff check every photo by eye. Errors: IMAGE_ONLY 415, TOO_LARGE 413, BAD_IMAGE (not a picture), TOO_MANY_UPLOADS 429 (10 unused photos per account; unused photos are deleted after a day) |
+| add_profile | ACCOUNT (first profile) or the active profile (second profile, from Settings only) | type, display_name, accept_rules (must be true: RULES_REQUIRED) (+ for a driver: national_id (9-18 digits; one ID card = one driver profile: ID_ALREADY_USED; banned: ID_BANNED), documents {vehicle `motorbike`\|`car`, first_name, last_name (BAD_DRIVER_NAME), birth_date `YYYY-MM-DD`, age 18-80 (BAD_BIRTH_DATE), vehicle_color 2-30 chars (BAD_VEHICLE_COLOR), plate_number (stored upper-case, at least 5 letters/digits: BAD_PLATE), id_photo, licence_photo, ownership_photo (proof the vehicle is his), vehicle_photo (plate visible), vehicle_photos? (up to 3 more vehicle photos)} = document_ids) | profile (driver starts `pending_approval`; nothing is approved automatically). BAD_DOCUMENT if a photo is someone else's, in the wrong place, of the wrong kind or used twice |
 | get_me | ACCOUNT | - | account {id, phone, phone_verified, google}, profiles[], active_profile |
 | logout | ACCOUNT | - | ok |
 | logout_everywhere | ACCOUNT | - | sessions_ended (ends every device and live connection; for a lost phone) |
@@ -42,15 +42,15 @@ add_profile rule: the FIRST profile is created right after login (path choice). 
 | Home, destination | search_places | q (2-80 characters), lang?, lat?, lng? (to rank nearby places first) | places[] {name, detail, lat, lng} inside the Algiers area; unavailable true (empty list) if the search service fails; SEARCH_OFF 503 when switched off (GEOCODER_URL empty); 30 per minute |
 | Home, destination | reverse_place | lat, lng, lang? | place {name, detail, lat, lng} or null: the name under the map pin (positions rounded to about 10 m for the cache); 60 per minute |
 | New order | get_quote | pickup {lat,lng}, dropoff {lat,lng}, size | recommended_da, min_da, max_da, vehicle, distance_m, duration_s, distance_estimated (true = road distance unavailable, straight-line estimate used; the app shows "about"), route ([lng,lat] points of the road for the map, or null: then the app draws a dashed straight line), quote_id (valid 5 min); error ZONE_CLOSED if either point is outside an open zone |
-| Price | create_order | quote_id, offered_da, pickup_address{...}, dropoff_address{...}, recipient_name, recipient_phone, payer, cod_amount_da, inspection (`outside` default \| `open` = the receiver may open the parcel before paying), auto_accept (bool, default false: the first courier who accepts the customer's price gets the job) | order, status `awaiting_recipient`: couriers are searched only after the receiver says yes on the tracking link (section B2) |
-| Waiting, searching | set_auto_accept | order id, on (bool) | order (only while `awaiting_recipient` or `searching`: WRONG_STATE) |
+| Price | create_order | quote_id, offered_da, pickup_address{...}, dropoff_address{...}, recipient_name, recipient_phone, payer, cod_amount_da, inspection (`outside` default \| `open` = the receiver may open the parcel before paying), auto_accept (bool, default false: the first courier who accepts the customer's price gets the job) | order, status `searching`: couriers are searched at once |
+| Searching | set_auto_accept | order id, on (bool) | order (only while `searching`: WRONG_STATE) |
 | Searching | accept_bid | order id, offer_id | order `assigned`, locked at the courier's price. OFFER_GONE (expired, withdrawn or of another order), ORDER_TAKEN, DRIVER_BUSY |
 | Searching | decline_bid | order id, offer_id | order (the courier is told and is not shown this request again) |
-| Tracking | get_order | order id | order + driver summary (name, photo, rating, vehicle, deliveries, position while active) + bids[] (while searching: offer_id, price_da, eta_s, expires_at, driver {name, rating, rating_count, vehicle, deliveries}; cheapest first) + couriers_notified + recipient_deadline_at / search_ends_at + auto_accept + recipient_answer + eta_s (time until the parcel arrives, while assigned or picked up) + route + delivery_code + pickup_code (the sender shows it, or its QR `PCK1:<ref>:<code>`, to the driver at pickup) + tracking_token (receiver link `<server>/t/<token>`) + inspection, recipient_expecting_at, pickup_photo_doc, pickup/delivery_distance_m, evidence_photos[], history[] {type, at, data} |
+| Tracking | get_order | order id | order + driver summary (name, photo, rating, vehicle, vehicle_color and plate_number while assigned/picked up, deliveries, position while active) + bids[] (while searching: offer_id, price_da, eta_s, expires_at, driver {name, rating, rating_count, vehicle, deliveries}; cheapest first) + couriers_notified + search_ends_at + auto_accept + eta_s (time until the parcel arrives, while assigned or picked up) + route + delivery_code + pickup_code (the sender shows it, or its QR `PCK1:<ref>:<code>`, to the driver at pickup) + tracking_token (receiver link `<server>/t/<token>`) + inspection, recipient_expecting_at, pickup_photo_doc, pickup/delivery_distance_m, evidence_photos[], history[] {type, at, data} |
 | Tracking | get_order_photo | order_id, id (a photo of THIS order: parcel at pickup or evidence) | JPEG |
 | Tracking | recall_order | order id, reason (`buyer_cancelled`\|`wrong_parcel`\|`wrong_address`\|`other`) | order (only after pickup: it fails and a return leg goes to the driver; before pickup use cancel_order, CANNOT_RECALL) |
 | Details | recipient_history | phone | delivered, refused, no_answer (counts of parcels to that number, all senders, 180 days; 30 checks per hour) |
-| Tracking | cancel_order | order id, reason | order (only while `awaiting_recipient`, `searching` or `assigned`; after a driver accepted, a cancel later than 3 min is recorded as late) |
+| Tracking | cancel_order | order id, reason | order (only while `searching` or `assigned`; after a driver accepted, a cancel later than 3 min is recorded as late) |
 | Searching | raise_price (negotiation, upward only) | order id, new_offered_da | order (only while `searching`, only upward, inside max_da) |
 | My orders | list_orders | page | orders[] (own only) |
 | Rate | submit_rating | order id, stars 1-5, comment? | ok (delivered orders only, once) |
@@ -61,11 +61,9 @@ Live updates: see section G (one WebSocket per logged-in profile). Driver locati
 | Page | Function | Request | Answer |
 |---|---|---|---|
 | `/t/<token>` | (the page) | - | one static page (ar/fr/en); strict content policy; map tiles from OpenFreeMap |
-| Tracking | track_data | t (token) | ref, status (incl. `awaiting_recipient`), recipient_answer, size and pickup_area (while waiting), sender first name, inspection, amount_to_pay_da (goods + fee if the receiver pays), dropoff, driver {first name, vehicle, rating, phone once picked up, position} while active, eta_s, delivery_code until delivered, has_parcel_photo, expecting, history. BAD_LINK 400; LINK_ENDED 404 (unknown, or 24 h after the order ended: same answer) |
+| Tracking | track_data | t (token) | ref, status, sender first name, inspection, amount_to_pay_da (goods + fee if the receiver pays), dropoff, driver {first name, vehicle, vehicle_color, plate_number, rating, phone once picked up, position} while active, eta_s, delivery_code until delivered, has_parcel_photo, expecting, history. BAD_LINK 400; LINK_ENDED 404 (unknown, or 24 h after the order ended: same answer) |
 | Tracking | track_qr / track_photo | t | SVG QR of `DLV1:<ref>:<code>` / JPEG of the parcel at pickup |
-| Tracking | track_confirm | t | status `searching`: the receiver says YES, couriers are searched at once (the sender is told, high priority). Once; ORDER_ENDED if it no longer waits. A yes from the sender's own internet address is recorded for staff (flag_same_network) |
-| Tracking | track_decline | t, reason? (`not_ordered`\|`not_available`\|`wrong_person`\|`other`) | status `cancelled` (cancel_reason recipient_declined; the sender is told; no rule points) |
-| Tracking | track_expecting | t | expecting true (once; the sender and driver are told; already true after track_confirm) |
+| Tracking | track_expecting | t | expecting true (optional, once: the receiver says he expects the parcel; the sender and driver are told). There is no yes/no step: couriers are searched as soon as the order is created (owner's decision, Oct 2026) |
 | Tracking | track_report | t, reason (`not_arrived`\|`damaged`\|`wrong_item`\|`driver_behaviour`\|`other`), note? | report (max 3 per order, 10 per hour per address) |
 
 ## C. Driver path (active profile = driver, status active)
@@ -95,7 +93,7 @@ Staff use a separate login (email and password, created with `npm run create-adm
 |---|---|---|
 | staff_login (public) | email, password, code (6-digit authenticator code, required) | token (2 hours), staff. A code works once. Same error for any wrong factor. |
 | staff_logout | - | ends all of this staff member's logins on every device |
-| list_pending_drivers | - | drivers waiting, with phone, vehicle, and documents {id_photo, licence_photo, vehicle_photo} (ids) |
+| list_pending_drivers | - | drivers waiting, with phone, vehicle, first_name, last_name, birth_date, vehicle_color, plate_number, national_id_last3, and documents {id_photo, licence_photo, ownership_photo, vehicle_photo, vehicle_photos[], selfie} (ids) |
 | get_document | id | the photo itself (image/jpeg). Staff only; every view is saved in the audit trail. Photos are never shown to app logins |
 | approve_driver | profile_id, cash_limit_da (required; 0 = no cash-on-delivery orders) | driver becomes active; driver gets a push |
 | reject_driver | profile_id, reason | driver rejected; push (the reason is shown in the app) |
@@ -122,7 +120,7 @@ Staff use a separate login (email and password, created with `npm run create-adm
 Not built (decided): two-person approval for large cash adjustments (needs a team to exist), a staff audit viewer (the audit trail is stored; reading it is done by the owner with the database for now).
 
 ## E. Order status rules (the only allowed moves)
-awaiting_recipient -> searching (the receiver says yes) | cancelled (the receiver says no, or the sender cancels) | expired (no answer in RECIPIENT_WINDOW_MIN)
+(created) -> searching (couriers are searched at once)
 searching -> assigned (the customer chooses a courier's offer, or auto-accept; price locks at that offer) | cancelled | expired (no courier in the search window)
 assigned -> picked_up | cancelled | searching (staff reassign)
 picked_up -> delivered (correct delivery_code) | failed (driver reports failure)
@@ -134,7 +132,6 @@ Cash: delivered with a cash amount writes one `cod_collected` ledger entry for t
 - Parcel size decides the vehicle: small and medium -> motorbike, large -> car.
 - Recommended price = base + per-km x km (rounded up) + size and car extras, rounded UP to 10 DA. The allowed range is min% to max% of it (staff set the numbers in the price table).
 - A quote is valid 5 minutes, usable once, only by its owner. The zone check runs at quote AND at order creation.
-- The receiver confirms first: a new order waits (`awaiting_recipient`) until the receiver says yes on the tracking link; no courier sees it before. No answer in RECIPIENT_WINDOW_MIN (60 min) = expired.
 - Matching (inDrive style, owner's wish Oct 2026): a searching order is shown to up to BROADCAST_MAX (10) eligible couriers at once, nearest first. Eligible = online, active, right vehicle, location fresher than the limit, inside the search radius, no active job, not blocked, cash limit not exceeded, and NOT the same account as the sender. The radius widens after a delay. Each courier accepts the customer's price or proposes a higher one (never above max_da); his offer waits BID_TTL_S (40 s) for the customer's choice; one pending offer per courier (database rule). The customer chooses (or auto-accept gives the job to the first courier who accepts his price). The price locks at the chosen offer, inside the allowed range (database rule). The order expires if nobody is chosen in the search window.
 - A driver can hold ONE active job; the database enforces it.
 - Delivery code: 4 digits, shown to the sender (and pushed to the recipient if registered). After 5 wrong tries the order locks and only staff can continue it.
@@ -164,9 +161,8 @@ Cash: delivered with a cash amount writes one `cod_collected` ledger entry for t
 | bid.accepted | driver | the customer chose his offer (high priority): the job is his | offer_id, ref, price_da | yes |
 | bid.declined / bid.expired | driver | the customer said no / did not answer in time (he may answer again after expiry) | offer_id | no |
 | order.bid / order.bid_withdrawn | user | a courier made an offer (high priority) / an offer ended | offer_id, ref, price_da | yes / no |
-| order.recipient_confirmed / order.recipient_declined | user | the receiver said yes (search starts) / no | ref, name, reason | yes |
 | job.cancelled | driver | the user cancelled after the driver accepted (high priority) | ref | yes |
-| order.incoming | recipient (only if registered with that VERIFIED number) | an order for their phone number was created: he can answer yes/no in the app | ref, delivery_code, t (the link key), sender (first name) | yes |
+| order.incoming | recipient (only if registered with that VERIFIED number) | an order for their phone number was created: the app shows it with the code | ref, delivery_code, sender (first name) | yes |
 | profile.approved / profile.rejected / profile.suspended / profile.unsuspended | the profile concerned | a staff decision | reason (rejected only) | yes |
 | order.cancelled / order.reassigned | user | staff cancelled / are finding another driver | ref | yes |
 | job.updated | driver | staff corrected the address | ref | yes |
@@ -178,7 +174,7 @@ Cash: delivered with a cash amount writes one `cod_collected` ledger entry for t
 | order.delivered | user | delivered (the app then asks for a rating) | ref | yes |
 | return.delivered | user | the returned parcel reached the sender | ref | yes |
 | order.failed | user | delivery failed; a return leg started | ref, reason | yes |
-| order.expired | user | no courier found in time (the app suggests raising the price), or reason recipient_no_answer | ref, reason? | yes |
+| order.expired | user | no courier found in time (the app suggests raising the price) | ref | yes |
 
 ### G3. Phone push (app closed): `register_device`
 `register_device {token, platform: android|ios, language: ar|fr|en}` (needs an active profile). The app calls it after login, after every profile switch, and whenever the push token changes. The token always belongs to the ACTIVE profile of that session: switching profile moves it, logging out deletes it. Push text is built on the server in the device's language (Arabic, French or English; wording to be reviewed by native speakers). When the person changes the app language in Settings, the app calls register_device again with the same token and the new language. A push carries data {id, kind, order_id, ...}; the app uses `id` to avoid showing again what the live connection already showed. Failed pushes retry with growing delays (up to 5 attempts); invalid tokens are deleted.

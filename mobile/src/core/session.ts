@@ -61,7 +61,7 @@ export class Session {
   }
 
   // Driver sign-up photos: each one is uploaded first; add_profile then receives the three ids.
-  async uploadDocument(kind: 'id_photo' | 'licence_photo' | 'vehicle_photo', photo: Blob): Promise<string> {
+  async uploadDocument(kind: 'id_photo' | 'licence_photo' | 'ownership_photo' | 'vehicle_photo', photo: Blob): Promise<string> {
     const r = await this.client.call('/upload_document?kind=' + kind, photo);
     return r.document_id;
   }

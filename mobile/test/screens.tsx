@@ -37,6 +37,7 @@ import Safety from '../src/app/safety';
 import Help from '../src/app/help';
 import AddCustomer from '../src/app/add-customer';
 
+import { AppFrame } from '../src/ui/Frame';
 export const API = process.env.API_URL!;
 if (!/_test$/.test(process.env.TEST_DATABASE_URL ?? '')) throw new Error('test database only');
 // Test database access through the psql program, synchronously. (The pg library stalled while the navigation test
@@ -55,12 +56,12 @@ export const db = {
 export const devCode = async (phone: string) => ((await (await nodeFetch(API + '/dev/last_code?phone=' + encodeURIComponent(phone))).json()) as any).code as string;
 configure({ asyncUtilTimeout: 10000 });   // real network calls to the test server
 jest.setTimeout(60000);
-export const metrics = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } };
+export const metrics = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 24, left: 0, right: 0, bottom: 0 } };
 
 export function routes(services: Services) {
   const Layout = () => (
     <SafeAreaProvider initialMetrics={metrics}>
-      <AppProvider services={services}><PushBridge /><Stack screenOptions={{ headerShown: false }} /></AppProvider>
+      <AppProvider services={services}><PushBridge /><AppFrame><Stack screenOptions={{ headerShown: false }} /></AppFrame></AppProvider>
     </SafeAreaProvider>
   );
   return { _layout: Layout, index: Start, welcome: Welcome, login: Login, 'contact-phone': ContactPhone, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup, 'new-order': NewOrder, 'order-details': OrderDetails, 'order/[id]': OrderScreen, orders: Orders, 'rate/[id]': Rate, 'problem/[id]': Problem, job: JobScreen, jobs: Jobs, cash: Cash, rules: Rules, record: RecordScreen, profile: Profile, notifications: Notifications, safety: Safety, help: Help, 'add-customer': AddCustomer };
@@ -73,8 +74,8 @@ export async function open(services: Services) {
 }
 export const PHOTO = require('fs').readFileSync(require('path').join(__dirname, '../../backend/test/fixtures/photo.jpg'));
 export async function uploadDocs(token: string) {
-  const out: Record<string, string> = { vehicle: 'motorbike' };
-  for (const k of ['id_photo', 'licence_photo', 'vehicle_photo']) out[k] = ((await (await nodeFetch(API + '/upload_document?kind=' + k, { method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'image/jpeg' }, body: PHOTO })).json()) as any).document_id;
+  const out: Record<string, string> = { vehicle: 'motorbike', first_name: 'Karim', last_name: 'Test', birth_date: '1995-04-12', vehicle_color: 'Blue', plate_number: '12345 113 16' };
+  for (const k of ['id_photo', 'licence_photo', 'ownership_photo', 'vehicle_photo']) out[k] = ((await (await nodeFetch(API + '/upload_document?kind=' + k, { method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'image/jpeg' }, body: PHOTO })).json()) as any).document_id;
   return out;
 }
 // The live connection uses the `ws` package (Node), exactly like the core tests.
