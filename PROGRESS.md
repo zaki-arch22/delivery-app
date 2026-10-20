@@ -36,6 +36,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Firebase project `delivery-c945c` created by the owner (2026-10-19): mobile/google-services.json saved, web client id 790230988811-20h827uvsigdi8dfcsdvq6oavmks6735.apps.googleusercontent.com in eas.json (= Render GOOGLE_CLIENT_IDS). The file has NO Android OAuth client (client_type 1): the SHA-1 fingerprint must still be added in Firebase (Project settings → Your apps → Android → Add fingerprint), otherwise Google sign-in on the phone fails (DEVELOPER_ERROR).
 
+- Render server LIVE (2026-10-20): https://delivery-api-eu9h.onrender.com (staff console at /staff/). This cloud machine cannot reach onrender.com (proxy 403): checks must be done by the owner. eas.json preview/production point to it; EAS Update configured (channels development/preview/production, runtimeVersion appVersion). To ship a JS change WITHOUT a new APK: in mobile/, `EXPO_PUBLIC_API_URL=https://delivery-api-eu9h.onrender.com EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=790230988811-20h827uvsigdi8dfcsdvq6oavmks6735.apps.googleusercontent.com npx eas-cli@latest update --channel preview --message "..." --non-interactive` (updates do NOT read the build profile env).
+
 ## In progress
 - (none)
 

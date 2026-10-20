@@ -12,7 +12,8 @@
       },
       "env": {
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "790230988811-20h827uvsigdi8dfcsdvq6oavmks6735.apps.googleusercontent.com"
-      }
+      },
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
@@ -20,9 +21,10 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.example.invalid",
+        "EXPO_PUBLIC_API_URL": "https://delivery-api-eu9h.onrender.com",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "790230988811-20h827uvsigdi8dfcsdvq6oavmks6735.apps.googleusercontent.com"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "autoIncrement": true,
@@ -30,9 +32,10 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.example.invalid",
+        "EXPO_PUBLIC_API_URL": "https://delivery-api-eu9h.onrender.com",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "790230988811-20h827uvsigdi8dfcsdvq6oavmks6735.apps.googleusercontent.com"
-      }
+      },
+      "channel": "production"
     }
   }
 }
