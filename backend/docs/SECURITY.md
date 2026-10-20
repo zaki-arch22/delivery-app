@@ -47,7 +47,7 @@ No system is unhackable. The goal is layers: an attacker has to defeat many inde
 
 ## Known, accepted risks (re-check before every release with `npm audit --omit=dev` in mobile/)
 - `braces` (mobile bundler, on the BUILD machine only): denial-of-service with crafted file patterns, which only the people building the app control. No fixed version exists yet.
-- `node-forge` (only signs over-the-air app updates): a signature-check weakness. That feature is deliberately NOT used; fix this first if it is ever turned on. No fixed version exists yet.
+- `node-forge` (build tools and the update tool's optional signing): checked that it is NOT inside the app shipped to phones (app bundle source map). Over-the-air updates are on WITHOUT code signing for now (updates come only from our Expo account over HTTPS); turn on update signing before launch, and fix this first if signing is used. No fixed version exists yet.
 - `uuid` was vulnerable; it is forced to a patched version (mobile/package.json "overrides") and checked to work with the iPhone project tool.
 - `sprintf-js` (moderate, no fixed version): reached only through the TEST tools (jest), which `npm audit --omit=dev` counts because the navigation library lists the testing library as an optional peer. Test machines only.
 None of these run inside the app on customers' phones.

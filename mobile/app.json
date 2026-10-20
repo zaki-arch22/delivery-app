@@ -76,6 +76,14 @@
         "projectId": "85947c9a-3728-412f-939c-9cc15ab586c2"
       }
     },
-    "owner": "delivery_platform"
+    "owner": "delivery_platform",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/85947c9a-3728-412f-939c-9cc15ab586c2",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    }
   }
 }
