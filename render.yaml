@@ -19,6 +19,10 @@ services:
         value: production
       - key: TRUST_PROXY
         value: "1"
+      # Place search for the app (free, open-source Photon over OpenStreetMap data). komoot's public server is for fair,
+      # light use only: fine for testing; a real launch runs its own Photon server (backend/deploy/README.md).
+      - key: GEOCODER_URL
+        value: https://photon.komoot.io
       # Secrets made by Render itself (never written anywhere else).
       - key: JWT_SECRET
         generateValue: true
