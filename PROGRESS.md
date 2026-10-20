@@ -38,6 +38,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Render server LIVE (2026-10-20): https://delivery-api-eu9h.onrender.com (staff console at /staff/). This cloud machine cannot reach onrender.com (proxy 403): checks must be done by the owner. eas.json preview/production point to it; EAS Update configured (channels development/preview/production, runtimeVersion appVersion). To ship a JS change WITHOUT a new APK: in mobile/, `EXPO_PUBLIC_API_URL=https://delivery-api-eu9h.onrender.com EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=790230988811-20h827uvsigdi8dfcsdvq6oavmks6735.apps.googleusercontent.com npx eas-cli@latest update --channel preview --message "..." --non-interactive` (updates do NOT read the build profile env).
 
+- Preview APK with the live server, Google login and over-the-air updates (2026-10-20): https://expo.dev/artifacts/eas/J1flw1xWPS-GM5H-89fgDyKS77qS7_FdBkjHcGT4iIw.apk
+
 ## In progress
 - (none)
 
