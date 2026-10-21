@@ -174,6 +174,14 @@ test('a full order: route, fare, distance, couriers offer, choose one, delivered
   expect(screen.getByTestId('pulse')).toBeTruthy();                                         // the searching pulse around the pickup
   expect(screen.getAllByTestId('map').slice(-1)[0].props.accessibilityHint).toBe('locked');   // the map cannot be moved by hand while searching
   expect(screen.queryByTestId('timer')).toBeNull();                                         // no countdown (owner's wish)
+  // The camera: centred exactly on the pickup, a quick zoom-in, then a steady zoom-out (commands every 50 ms).
+  (globalThis as any).cameraCalls = [];
+  await act(async () => { await new Promise(r => setTimeout(r, 3500)); });
+  const cams = ((globalThis as any).cameraCalls as any[]).filter(c => c.fn === 'jumpTo');
+  expect(cams.length).toBeGreaterThan(20);
+  expect(cams.every(c => Math.abs(c.center[1] - P.lat) < 1e-3 && Math.abs(c.center[0] - P.lng) < 1e-3)).toBe(true);
+  const zooms = cams.map(c => c.zoom), last = zooms[zooms.length - 1], peak = Math.max(...zooms);
+  expect(last).toBeLessThan(peak);                                                           // zooming out after the zoom-in
   // Tapping a courier opens his full profile (rating, deliveries, member since, comments).
   await fireEvent.press(screen.getByTestId('courier-' + r2.offer_id));
   expect(await screen.findByTestId('pp-name')).toHaveTextContent('Yacine Fast');

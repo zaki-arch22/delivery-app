@@ -9,6 +9,7 @@ import { Icon } from './Icon';
 import { Pulse } from './Pulse';
 
 export const FOLLOW_IN_MS = 900;   // the quick zoom-in onto the point before the zoom-out
+const FOLLOW_IN_ZOOM = 1.5;        // how much closer that zoom-in goes
 export type Pin = { id: string; at: Point; label: string; kind: 'pickup' | 'dropoff' | 'driver'; vehicle?: 'motorbike' | 'car' };
 export type AppMapRef = { moveTo(p: Point, zoom?: number): void; fit(points: Point[]): void };
 type Pad = { top: number; bottom: number; left: number; right: number };
@@ -73,13 +74,24 @@ export const AppMap = forwardRef<AppMapRef, {
   const [ready, setReady] = useState(false);
   useEffect(() => { const h = setTimeout(() => setReady(true), 2000); return () => clearTimeout(h); }, []);
   const followKey = follow ? `${follow.center.lat},${follow.center.lng},${follow.from.toFixed(2)},${follow.to},${Math.round(follow.ms / 1000)}` : '';
+  // The camera is placed directly about 20 times a second (no queued native animation that a lost or overlapping command
+  // could stall): first a quick zoom-in onto the point, then the steady zoom-out, always centred on the point.
   useEffect(() => {
     if (!follow || !ready) return;
     const center: [number, number] = [follow.center.lng, follow.center.lat];
-    cam.current?.easeTo({ center, zoom: follow.from, padding, duration: FOLLOW_IN_MS, easing: 'ease' });   // onto the point
-    if (follow.ms <= 0) return;
-    const h = setTimeout(() => cam.current?.easeTo({ center, zoom: follow.to, padding, duration: follow.ms, easing: 'linear' }), FOLLOW_IN_MS + 100);
-    return () => clearTimeout(h);
+    const t0 = Date.now(), inStart = follow.from - FOLLOW_IN_ZOOM;
+    const zoomAt = (e: number) => e < FOLLOW_IN_MS
+      ? inStart + FOLLOW_IN_ZOOM * (1 - Math.pow(1 - e / FOLLOW_IN_MS, 2))                       // ease onto the point
+      : follow.ms > 0 ? follow.from + (follow.to - follow.from) * Math.min(1, (e - FOLLOW_IN_MS) / follow.ms) : follow.from;
+    let h: ReturnType<typeof setInterval> | undefined;
+    const step = () => {
+      const e = Date.now() - t0;
+      cam.current?.jumpTo({ center, zoom: zoomAt(e), padding });
+      if (e >= FOLLOW_IN_MS + Math.max(0, follow.ms) + 200 && h) clearInterval(h);
+    };
+    step();
+    h = setInterval(step, 50);
+    return () => clearInterval(h);
   }, [followKey, padding.bottom, ready]);   // eslint-disable-line react-hooks/exhaustive-deps   // eslint-disable-line react-hooks/exhaustive-deps
 
   const a = pins.find(p => p.kind === 'pickup'), b = pins.find(p => p.kind === 'dropoff');
@@ -97,7 +109,7 @@ export const AppMap = forwardRef<AppMapRef, {
         onRegionIsChanging={e => { if (e.nativeEvent.userInteraction && !moving.current) setMoving(true); }}
         onRegionDidChange={e => { finger.current = false; setMoving(false); const c = e.nativeEvent.center; onMoved?.({ lng: c[0], lat: c[1] }); }}
         onPress={() => setFinger(false)}>
-        <Camera ref={cam} initialViewState={follow ? { center: [follow.center.lng, follow.center.lat], zoom: follow.from - 2, padding } : { center: [start.lng, start.lat], zoom }} />
+        <Camera ref={cam} initialViewState={follow ? { center: [follow.center.lng, follow.center.lat], zoom: follow.from - FOLLOW_IN_ZOOM, padding } : { center: [start.lng, start.lat], zoom }} />
         {line ? (
           <GeoJSONSource id="route" data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: line.coords } }}>
             <Layer id="route-casing" type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }} paint={{ 'line-color': '#000000', 'line-width': 8, 'line-opacity': 0.35 }} />
