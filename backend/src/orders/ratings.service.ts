@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Db } from '../db/db.service';
 import { bad, fail, isId, isInt, uuid } from '../common/errors';
-import { cfg, searchSettings } from '../common/config';
+import { cfg } from '../common/config';
 import { NOT_BLOCKED_SQL } from '../trust/rules';
 
 @Injectable()
@@ -65,6 +65,6 @@ export class RatingsService {
          AND p.account_id <> (SELECT account_id FROM profiles WHERE id=$3) AND ${NOT_BLOCKED_SQL('p.id')}
          AND ST_DWithin(d.last_location, ST_SetSRID(ST_MakePoint($2,$1),4326)::geography, $5)
        ORDER BY d.last_location <-> ST_SetSRID(ST_MakePoint($2,$1),4326)::geography LIMIT 30`, [lat, lng, userId, cfg.locationFreshS(), cfg.searchMaxM()]);
-    return { couriers: rows, search: searchSettings(), server_time: new Date().toISOString() };
+    return { couriers: rows };
   }
 }

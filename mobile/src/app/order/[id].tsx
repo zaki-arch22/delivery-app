@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Dimensions, Image, Linking, Pressable, ScrollView, Share, StyleSheet, Switch, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useApp, useNotices } from '../../lib/app';
 import { errorMessage } from '../../lib/errors';
 import { ACTIVE, addressLine, Bid, km, minutes, money, Order, orders, RecallReason, when, whatsappUrl } from '../../lib/orders';
 import { deliveryQr, pickupQr } from '../../lib/proof';
-import { Nearby, people, radiusAt } from '../../lib/people';
+import { Nearby, people } from '../../lib/people';
 import { Qr } from '../../ui/Qr';
 import { Choice } from '../../ui/Choice';
 import { color, font, radius, space } from '../../lib/theme';
@@ -18,6 +18,7 @@ import type { Key } from '../../i18n';
 const POLL_MS = 4000;   // status and the courier's position while active; live notifications refresh at once in between
 
 const NEARBY_MS = 10_000;   // couriers around the pickup are refreshed this often while searching
+const PULSE_GROW_MS = 120_000;   // the searching pulse grows slowly to its full (still small) size over two minutes
 
 // One order, from "waiting for the receiver" to "delivered" (contract B). The map shows A, B, the route and the courier;
 // the panel follows the order's state; while couriers answer, their offers appear on top for the customer to choose.
@@ -34,17 +35,16 @@ export default function OrderScreen() {
   const [recalling, setRecalling] = useState(false), [recallReason, setRecallReason] = useState<RecallReason | null>(null);
   const fail = (e: unknown) => { const m = errorMessage(e); setMsg({ text: t(m.key, m.vars), warn: true }); };
   const [near, setNear] = useState<Nearby | null>(null);   // couriers around the pickup while searching (cars on the map)
-  const skew = useRef(0);   // server clock minus phone clock, so the circle grows exactly like the server's search
 
   const load = useCallback(() => api.get(id).then(x => { setO(x); setWant(w => (w > x.offered_da ? w : x.offered_da)); }).catch(() => {}), [id]);   // eslint-disable-line react-hooks/exhaustive-deps
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useNotices(n => { if (n.order_id === id) load(); });
   useEffect(() => { if (!o || !ACTIVE.includes(o.status)) return; const h = setInterval(load, POLL_MS); return () => clearInterval(h); }, [o?.status, load]);
-  useEffect(() => { if (!o || o.status !== 'searching') return; const h = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(h); }, [o?.status]);   // smooth circle
+  useEffect(() => { if (!o || o.status !== 'searching') return; const h = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(h); }, [o?.status]);
   useEffect(() => {
     if (!o || o.status !== 'searching') { setNear(null); return; }
     const at = { lat: o.pickup_lat, lng: o.pickup_lng };
-    const get = () => people(services.client).nearby(at).then(n => { skew.current = new Date(n.server_time).getTime() - Date.now(); setNear(n); }).catch(() => {});
+    const get = () => people(services.client).nearby(at).then(setNear).catch(() => {});
     get(); const h = setInterval(get, NEARBY_MS); return () => clearInterval(h);
   }, [o?.status, o?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -64,7 +64,8 @@ export default function OrderScreen() {
   const A = { lat: o.pickup_lat, lng: o.pickup_lng }, B = { lat: o.dropoff_lat, lng: o.dropoff_lng };
   const pins: Pin[] = [{ id: 'A', at: A, kind: 'pickup', label: t('pickup') }, { id: 'B', at: B, kind: 'dropoff', label: t('dropoff') }];
   if (o.driver?.location) pins.push({ id: 'driver', at: o.driver.location, kind: 'driver', label: t('driver'), vehicle: o.driver.vehicle });
-  const fit = o.driver?.location && ['assigned', 'picked_up'].includes(o.status) ? [o.driver.location, o.status === 'assigned' ? A : B] : [A, B];
+  // While searching the map centres on the pickup (the pulse around it, like inDrive); afterwards it shows the trip.
+  const fit = o.status === 'searching' ? [A] : o.driver?.location && ['assigned', 'picked_up'].includes(o.status) ? [o.driver.location, o.status === 'assigned' ? A : B] : [A, B];
   const H = Dimensions.get('window').height;
   const left = (iso: string | null) => (iso ? Math.max(0, Math.round((new Date(iso).getTime() - now) / 1000)) : 0);
   const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
@@ -74,7 +75,7 @@ export default function OrderScreen() {
   return (
     <View style={s.root} testID="screen-order">
       <AppMap onTouching={setMapTouch} start={A} zoom={13} pins={pins} route={o.route} fit={fit} nearby={near?.couriers ?? []}
-        area={o.status === 'searching' && near ? { center: A, radius_m: radiusAt(near.search, (now + skew.current - new Date(o.search_started_at).getTime()) / 1000) } : null} pad={{ top: showBids ? H * 0.5 : 110, bottom: H * 0.5 }} />
+        pulse={o.status === 'searching' ? { at: A, grow: Math.min(1, (now - new Date(o.search_started_at).getTime()) / PULSE_GROW_MS) } : null} pad={{ top: showBids ? H * 0.5 : 110, bottom: H * 0.5 }} />
       <MapOverlay hidden={mapTouch} style={s.top}>
         <View style={[s.topRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
           <RoundButton testID="back" icon="arrow-left" label={t('back')} onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))} />

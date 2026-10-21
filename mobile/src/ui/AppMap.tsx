@@ -1,12 +1,12 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Camera, CameraRef, GeoJSONSource, Layer, Map, Marker } from '@maplibre/maplibre-react-native';
 import { mapStyleUrl } from '../lib/config';
 import type { Point } from '../lib/location';
 import { useApp } from '../lib/app';
 import { color, font } from '../lib/theme';
 import { Icon } from './Icon';
-import { circle } from '../lib/people';
+import { Pulse } from './Pulse';
 
 export type Pin = { id: string; at: Point; label: string; kind: 'pickup' | 'dropoff' | 'driver'; vehicle?: 'motorbike' | 'car' };
 export type AppMapRef = { moveTo(p: Point, zoom?: number): void; fit(points: Point[]): void };
@@ -19,10 +19,23 @@ type Pad = { top: number; bottom: number; left: number; right: number };
 export const AppMap = forwardRef<AppMapRef, {
   start: Point; zoom?: number; pins?: Pin[]; centerPin?: { label: string; kind: 'pickup' | 'dropoff'; title?: string | null }; onMoved?: (p: Point) => void;
   route?: [number, number][] | null; fit?: Point[]; pad?: Partial<Pad>; testID?: string; onTouching?: (touching: boolean) => void;
-  nearby?: { vehicle: 'motorbike' | 'car'; lat: number; lng: number }[]; area?: { center: Point; radius_m: number } | null;
-}>(function AppMap({ start, zoom = 15, pins = [], centerPin, onMoved, route, fit, pad, testID = 'map', onTouching, nearby = [], area }, ref) {
+  nearby?: { vehicle: 'motorbike' | 'car'; lat: number; lng: number }[]; pulse?: { at: Point; grow?: number } | null;
+}>(function AppMap({ start, zoom = 15, pins = [], centerPin, onMoved, route, fit, pad, testID = 'map', onTouching, nearby = [], pulse }, ref) {
   const { t } = useApp();
   const cam = useRef<CameraRef>(null);
+  const mapRef = useRef<any>(null);
+  // Where the "searching" pulse sits on screen: the point is projected to the screen and followed when the map moves.
+  const { width: screenW } = useWindowDimensions();
+  const [pulseXY, setPulseXY] = useState<{ x: number; y: number } | null>(null);
+  const pulseKey = pulse ? `${pulse.at.lat},${pulse.at.lng}` : '';
+  useEffect(() => {
+    if (!pulse) { setPulseXY(null); return; }
+    const place = async () => {
+      try { const p = await mapRef.current?.project?.([pulse.at.lng, pulse.at.lat]); if (Array.isArray(p)) setPulseXY({ x: p[0], y: p[1] }); else if (!mapRef.current?.project) setPulseXY({ x: -1, y: -1 }); } catch { /* map not ready yet */ }
+    };
+    place(); const h = setInterval(place, 500); return () => clearInterval(h);
+  }, [pulseKey]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const pulseR = Math.round(Math.min(screenW * 0.36, 150));
   // While a finger is on the map or the map is moving under it, every icon on it disappears (only the centre pin, which
   // marks the chosen point, stays); they come back when the map stops. The screen hides its own buttons and cards too
   // (onTouching). Two signals, because on phones the native map keeps the finger's moves to itself: a touch on the map
@@ -43,7 +56,7 @@ export const AppMap = forwardRef<AppMapRef, {
   const padding: Pad = { top: 80, bottom: 80, left: 50, right: 50, ...pad };
   const fitNow = (pts: Point[]) => {
     if (pts.length === 0) return;
-    if (pts.length === 1) { cam.current?.easeTo({ center: [pts[0].lng, pts[0].lat], zoom: 15, duration: 500 }); return; }
+    if (pts.length === 1) { cam.current?.easeTo({ center: [pts[0].lng, pts[0].lat], zoom: 15, padding, duration: 500 }); return; }
     const lngs = pts.map(p => p.lng), lats = pts.map(p => p.lat);
     cam.current?.fitBounds([Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)], { padding, duration: 600 });
   };
@@ -61,7 +74,7 @@ export const AppMap = forwardRef<AppMapRef, {
   return (
     <View style={s.wrap}>
       <View style={StyleSheet.absoluteFill} onTouchStart={() => setFinger(true)} onTouchEnd={e => { if (!e.nativeEvent.touches?.length) setFinger(false); }} onTouchCancel={() => setFinger(false)}>
-      <Map testID={testID} style={StyleSheet.absoluteFill} mapStyle={mapStyleUrl()} logo={false} attribution compass={false}
+      <Map ref={mapRef} testID={testID} style={StyleSheet.absoluteFill} mapStyle={mapStyleUrl()} logo={false} attribution compass={false}
         onRegionWillChange={e => { if (e.nativeEvent.userInteraction) setMoving(true); }}
         onRegionIsChanging={e => { if (e.nativeEvent.userInteraction && !moving.current) setMoving(true); }}
         onRegionDidChange={e => { finger.current = false; setMoving(false); const c = e.nativeEvent.center; onMoved?.({ lng: c[0], lat: c[1] }); }}
@@ -72,13 +85,6 @@ export const AppMap = forwardRef<AppMapRef, {
             <Layer id="route-casing" type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }} paint={{ 'line-color': '#000000', 'line-width': 8, 'line-opacity': 0.35 }} />
             <Layer id="route-line" type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }}
               paint={line.dashed ? { 'line-color': color.lime, 'line-width': 4, 'line-dasharray': [1.5, 1.5] } : { 'line-color': color.lime, 'line-width': 5 }} />
-          </GeoJSONSource>
-        ) : null}
-        {area ? (
-          // The search area: couriers inside this faint blue circle are asked; it grows smoothly, like the server's search.
-          <GeoJSONSource id="search-area" data={{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [circle(area.center, area.radius_m)] } }}>
-            <Layer id="search-area-fill" type="fill" paint={{ 'fill-color': color.search, 'fill-opacity': 0.12 }} />
-            <Layer id="search-area-line" type="line" paint={{ 'line-color': color.search, 'line-width': 2, 'line-opacity': 0.55 }} />
           </GeoJSONSource>
         ) : null}
         {touching ? null : nearby.map((c, i) => (
@@ -99,6 +105,11 @@ export const AppMap = forwardRef<AppMapRef, {
             <View style={s.bubble} testID="center-pin-title"><Text style={s.bubbleText} numberOfLines={1}>{centerPin.title}</Text></View>
           ) : null}
           <PinView kind={centerPin.kind} label={centerPin.label} />
+        </View>
+      ) : null}
+      {pulse && pulseXY && !touching ? (
+        <View pointerEvents="none" style={pulseXY.x < 0 ? s.pulseCentre : { position: 'absolute', left: pulseXY.x - pulseR, top: pulseXY.y - pulseR }}>
+          <Pulse radius={pulseR} grow={pulse.grow} />
         </View>
       ) : null}
       {touching ? null : <Text style={s.credit}>{t('map_credit')}</Text>}
@@ -132,5 +143,6 @@ const s = StyleSheet.create({
   bubble: { maxWidth: '70%', backgroundColor: color.pureWhite, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 6,
     elevation: 6, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
   bubbleText: { color: color.ink, fontFamily: font.semibold, fontSize: 15 },
+  pulseCentre: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   credit: { position: 'absolute', bottom: 2, right: 6, fontSize: 10, color: color.muted, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 4, fontFamily: font.regular },
 });

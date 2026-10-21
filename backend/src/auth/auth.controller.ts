@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, Post, Req } from '@nestjs/common';
 import { AuthService, deviceOf } from './auth.service';
 import { TrustService } from '../trust/trust.service';
 import { Access, Public, Who } from './guard';
-import { cfg, searchSettings } from '../common/config';
+import { cfg } from '../common/config';
 
 const who = (req: any): Who => req.who;
 
@@ -13,9 +13,9 @@ export class AuthController {
   @Public() @Get('login_methods')
   methods() { return this.auth.loginMethods(); }
 
-  // What the app may show (the server decides): whether place search is on, and how the search circle grows.
+  // What the app may show (the server decides): today only whether place search is switched on.
   @Public() @Get('app_config')
-  config() { return { place_search: !!cfg.geocoderUrl(), search: searchSettings() }; }
+  config() { return { place_search: !!cfg.geocoderUrl() }; }
 
   @Access('account') @Post('rename_profile') @HttpCode(200)
   rename(@Req() r: any, @Body() b: any) { return this.auth.renameProfile(who(r).profileId, b?.display_name); }
