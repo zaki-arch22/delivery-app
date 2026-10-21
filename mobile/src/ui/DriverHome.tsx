@@ -129,6 +129,7 @@ export function DriverHome() {
 
       <Sheet hidden={mapTouch} testID="driver-sheet" maxFraction={0.62} peek={150}>
         {!sel ? <T kind="title" testID="home-hello" style={{ fontSize: 22 }}>{t('home_hello', { name: p.display_name })}</T> : null}
+        {home?.online && !me ? <Notice testID="no-location" warn text={t('waiting_location')} /> : null}
         {state.notice?.code === 'NO_PROFILE_FOR_PATH' ? <Notice testID="notice-no-profile" text={t(state.notice.missing === 'driver' ? 'notice_no_profile_driver' : 'notice_no_profile_user')} /> : null}
         {!active ? <Notice testID="driver-status" warn={p.status === 'suspended' || p.status === 'rejected'} text={t(statusKey)} /> : null}
         {msg ? <Notice testID="driver-msg" warn={msg.warn} text={msg.text} /> : null}

@@ -363,6 +363,24 @@ require('http').createServer((req: any, res: any) => {
   const ev = await pool.query(`SELECT type FROM order_events WHERE order_id=$1 ORDER BY id`, [o1.id]);
   ok('T16 every step was recorded in the order history', ['created', 'offer_sent', 'offer_declined', 'assigned', 'picked_up', 'delivered'].every(t => ev.rows.some(x => x.type === t)), ev.rows.map(x => x.type));
   {
+    // A car takes any parcel; a motorbike only small and medium ones (owner's first real test: a car courier saw nothing).
+    await pool.query(`UPDATE driver_details SET is_online=false`);
+    const C = await makeDriver('+213550250001', 'Car Courier', 36.7545, 3.0590, 'car', null);
+    const M = await makeDriver('+213550250002', 'Moto Courier', 36.7546, 3.0591, 'motorbike', null);
+    const custV = await makeUser('+213550250009', 'Vehicle Sender');
+    const small = (await order(custV, 'veh-small-1', { auto_accept: false })).b;
+    const offC = await until(async () => (await pool.query(`SELECT 1 FROM offers WHERE order_id=$1 AND driver_profile_id=$2`, [small.id, C.id])).rows[0]);
+    ok('VEH a car courier is shown a SMALL parcel too', !!offC);
+    ok('VEH ...and so is the motorbike courier', !!(await until(async () => (await pool.query(`SELECT 1 FROM offers WHERE order_id=$1 AND driver_profile_id=$2`, [small.id, M.id])).rows[0])));
+    await api('/cancel_order', { order_id: small.id, reason: 'test' }, custV);
+    const large = (await order(custV, 'veh-large-1', { auto_accept: false }, 'large')).b;
+    await until(async () => (await pool.query(`SELECT 1 FROM offers WHERE order_id=$1 AND driver_profile_id=$2`, [large.id, C.id])).rows[0]);
+    await sleep(1500);
+    ok('VEH a LARGE parcel goes to the car courier only, never to a motorbike', (await pool.query(`SELECT driver_profile_id FROM offers WHERE order_id=$1`, [large.id])).rows.every((r: any) => r.driver_profile_id === C.id));
+    await api('/cancel_order', { order_id: large.id, reason: 'test' }, custV);
+    await pool.query(`UPDATE driver_details SET is_online=false`);
+  }
+  {
     // A customer cannot delete the account while an order is still on its way (the courier and receiver depend on it).
     const tokDel = await makeUser('+213551240001', 'Del Sender');
     const od = (await order(tokDel, 'del-active-order-1')).b;

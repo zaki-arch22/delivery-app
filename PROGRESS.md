@@ -54,6 +54,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - All of Algeria open by default (2026-10-21, owner: "the whole of Algeria as a country"): migration 021 creates/opens the zone "Algérie" (Natural Earth border + 5 km; Koléa, Oran, Annaba, Tamanrasset in; Tunis, Oujda, Bamako out). Applied on Render automatically at the next deploy. Trips stay ≤ 50 km.
 
+- First real test with two phones (2026-10-21): the courier never saw the request. Causes fixed: (1) the phone sent its position only after moving 25 m, so a waiting courier went stale after 2 minutes (now every 15 s + a 30 s resend; first reading ≤ 10 s; "finding your location" warning); (2) a car courier never saw small/medium parcels (now a car takes any parcel); (3) the first precise reading could hang indoors. Not verifiable from here: whether the friend's profile was approved and online with location allowed.
+
 ## In progress
 - (none)
 

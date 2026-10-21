@@ -5,10 +5,11 @@ import { notify, Q } from '../notify/notify';
 import { NOT_BLOCKED_SQL } from '../trust/rules';
 import { fail } from '../common/errors';
 
-// Who may see a request (all must be true): online with a fresh position, the right vehicle, near the pickup, not the
+// Who may see a request (all must be true): online with a fresh position, a vehicle that fits (a car takes any parcel, a
+// motorbike only small and medium ones), near the pickup, not the
 // sender's own account, no job in hand, not blocked, and (for cash-on-delivery) inside his cash limit.
 export const ELIGIBLE_SQL = (p: string, o: string) => `
-  d.is_online AND d.vehicle = ${o}.vehicle AND ${p}.type='driver' AND ${p}.status='active'
+  d.is_online AND (d.vehicle = ${o}.vehicle OR d.vehicle = 'car') AND ${p}.type='driver' AND ${p}.status='active'
   AND d.last_location_at > now() - make_interval(secs => ${cfg.locationFreshS()})
   AND ${p}.account_id <> (SELECT account_id FROM profiles WHERE id = ${o}.user_profile_id)
   AND NOT EXISTS (SELECT 1 FROM orders j WHERE j.driver_profile_id = ${p}.id AND j.status IN ('assigned','picked_up'))

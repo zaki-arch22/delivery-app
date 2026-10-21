@@ -225,6 +225,7 @@ export const fr: Record<Key, string> = {
   err_delete_active_job: "Terminez d’abord votre livraison en cours.",
   err_delete_cash: "Remettez d’abord l’argent que vous détenez à notre équipe, puis supprimez votre compte.",
   privacy_policy: "Politique de confidentialité",
+  waiting_location: "Recherche de votre position… Activez la localisation (GPS) du téléphone : les expéditeurs proches ne vous voient que lorsque nous savons où vous êtes.",
   logout_all_confirm: 'Se déconnecter de tous les appareils ?',
   cancel: 'Annuler',
   confirm: 'Confirmer',

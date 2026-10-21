@@ -225,6 +225,7 @@ export const en = {
   err_delete_active_job: "Finish your current delivery first.",
   err_delete_cash: "Hand over the cash you hold to our team first, then delete your account.",
   privacy_policy: "Privacy policy",
+  waiting_location: "Finding your location… Turn on your phone's location (GPS): senders near you see you only once we know where you are.",
   logout_all_confirm: 'Log out of all devices?',
   cancel: 'Cancel',
   confirm: 'Confirm',

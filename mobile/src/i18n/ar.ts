@@ -225,6 +225,7 @@ export const ar: Record<Key, string> = {
   err_delete_active_job: "أنهِ التوصيل الحالي أولاً.",
   err_delete_cash: "سلّم المال الذي بحوزتك لفريقنا أولاً، ثم احذف حسابك.",
   privacy_policy: "سياسة الخصوصية",
+  waiting_location: "جارٍ تحديد موقعك… شغّل خدمة الموقع (GPS) في الهاتف: لا يراك المرسلون القريبون إلا عندما نعرف مكانك.",
   logout_all_confirm: 'تسجيل الخروج من كل الأجهزة؟',
   cancel: 'إلغاء',
   confirm: 'تأكيد',
