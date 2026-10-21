@@ -146,6 +146,23 @@ test('settings: add a driver profile opens sign-up, log out, log out of all devi
   await screen.findByTestId('screen-welcome');
   alert.mockRestore();
   await expect(other.client.call('/get_me')).rejects.toMatchObject({ status: 401 });   // the other phone is logged out too
+
+  // "Delete my account" (Google Play rule): asked once more, then the account is erased and the phone is logged out.
+  await loginThroughScreens('0553000009', 'user');                                      // its own number: later tests still use Lina's account
+  await fireEvent.changeText(await screen.findByTestId('name-input'), 'Del Test');
+  await fireEvent.press(screen.getByTestId('accept-rules'));
+  await fireEvent.press(screen.getByTestId('create-profile'));
+  await screen.findByText('Hello, Del Test');
+  await menu('menu-settings');
+  const ask = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => { buttons?.find(b => b.style === 'destructive')?.onPress?.(); });
+  await fireEvent.press(await screen.findByTestId('delete-account'));
+  await screen.findByTestId('screen-welcome');
+  expect(ask.mock.calls[0][0]).toBe('Delete your account for good?');
+  ask.mockRestore();
+  expect(await store.get('refresh_token')).toBeNull();
+  const gone = await db.query(`SELECT p.status, p.display_name, a.phone FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE a.deleted_at IS NOT NULL AND p.type='user'`);
+  expect(gone.rows).toEqual([{ status: 'deleted', display_name: 'Deleted', phone: null }]);
+  expect((await db.query(`SELECT count(*)::int n FROM accounts WHERE phone='+213553000001'`)).rows[0].n).toBe(1);   // Lina is untouched
 });
 
 test('Google login, sender: picker closed -> nothing happens; then Google -> phone number -> name prefilled -> home; reopening stays logged in', async () => {

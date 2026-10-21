@@ -19,11 +19,11 @@ Built so far by Claude in a claude.ai chat (October 2026), then moved to Claude 
 ## 3. What exists (all tested)
 | Part | Folder | Technology | Status |
 |---|---|---|---|
-| Backend | `backend/` | NestJS (TypeScript), PostgreSQL 16 + PostGIS, Node 22 | complete for the current scope incl. courier offers (inDrive style), place search; 572 tests incl. 152 attacks, 66 rules-and-safety tests and 15 road-distance tests + 14 database-rule checks; free test server live on Render (`render.yaml`, `backend/deploy/render.md`) |
+| Backend | `backend/` | NestJS (TypeScript), PostgreSQL 16 + PostGIS, Node 22 | complete for the current scope incl. courier offers (inDrive style), place search; 592 tests incl. 159 attacks, 66 rules-and-safety tests and 15 road-distance tests + 14 database-rule checks; free test server live on Render (`render.yaml`, `backend/deploy/render.md`) |
 | Staff console | `staff-console/` | React 18 + Vite | complete; 13 tests against the real backend; matches the 31 staff functions one-to-one (incl. viewing driver photos, rules and sanctions, the new driver identity, vehicle and ownership-proof photos and couriers' offer prices) |
 | Mobile app | `mobile/` | React Native + Expo SDK 58 (React Native 0.88), Expo Router | inDrive-style dark, map-first app (Oct 2026): side menu with Customer/Courier mode switch, profile, notifications, safety, help; CUSTOMER: home map with pickup pin and "Where to?", place search, route + fare −/+ + auto-accept, the distance in km, searching (WhatsApp link), couriers' offer cards, live tracking with time left, codes/QR, rating, problems, recall; COURIER: online pill, requests list, accept or offer more, job on the map with the proof chain (QR scan, parcel photo, refusals, give back, SOS, weekly selfie), cash, deliveries, offline steps; Google login (SMS login off); 39 screen tests against the real backend. Preview APK with over-the-air updates (Oct 2026) |
 
-- `bash scripts/dev-setup.sh` once (local test database), then `bash scripts/test-all.sh` runs everything (624 tests + 14 database rules). Run it after every change.
+- `bash scripts/dev-setup.sh` once (local test database), then `bash scripts/test-all.sh` runs everything (644 tests + 14 database rules). Run it after every change.
 - The real database ships EMPTY: schema files only, no data.
 
 ## 4. Product decisions (current)
@@ -48,6 +48,7 @@ Built so far by Claude in a claude.ai chat (October 2026), then moved to Claude 
 - **Languages:** Arabic (right-to-left), French, English everywhere, including push texts (wording must be reviewed by native speakers).
 - **No mock data**, anywhere. Every list has an empty state.
 - **Excluded:** food, groceries, warehousing, inter-wilaya network, international, dangerous or high-value goods.
+- **Account deletion (Google Play / Apple rule):** Menu → Settings → Delete my account (refused while an order, a job or senders' cash is still open); identity and document photos are erased, records that protect others stay anonymised. Public pages `/privacy` and `/delete-account` on the server (3 languages; wording is a draft until a lawyer reviews it, section 8).
 - **Removed to keep it simple** (the owner may bring any back): scheduled delivery, seller website / CSV import / labels / seller API, saved addresses on the server (the last 6 destinations are kept on the phone only, for one-tap "recent"), in-app chat, choosing a vehicle, email.
 
 ## 5. Technical decisions

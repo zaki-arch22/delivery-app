@@ -74,5 +74,7 @@ export class Session {
   }
 
   async logout() { await this.client.call('/logout', {}).catch(() => {}); await this.client.clearSession(); }
+  // "Delete my account": the server erases the account; this phone then forgets the login.
+  async deleteAccount() { await this.client.call('/delete_account', { confirm: 'DELETE' }); await this.client.clearSession(); }
   async logoutEverywhere() { const r = await this.client.call('/logout_everywhere', {}); await this.client.clearSession(); return r.sessions_ended as number; }
 }

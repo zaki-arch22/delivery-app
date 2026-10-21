@@ -158,5 +158,32 @@ const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL! });
     let refused = false; try { await pool.query(`INSERT INTO accounts(phone, phone_verified) VALUES ('+213551000777', false)`); } catch { refused = true; }
     ok('G11 the database refuses an account that is neither Google nor a verified number', refused);
   }
+  {
+    // ===== DEL "delete my account" (Google Play / Apple rule) =====
+    const g = (await api('/login_google', { id_token: googleToken('g-del-1'), path: 'driver' })).b;
+    await api('/set_phone', { phone: '+213551000444' }, g.token);
+    const nid = String(1e11 + Math.floor(Math.random() * 9e11));
+    const d = (await api('/add_profile', { accept_rules: true, national_id: nid, type: 'driver', display_name: 'Del Driver', documents: await driverDocs(B, g.token) }, g.token)).b;
+    const tok = d.token as string, pid = d.active_profile.id as string, refresh = d.refresh_token as string;
+    ok('DEL1 nothing is deleted without the explicit confirmation word', (await api('/delete_account', {}, tok)).b.error === 'CONFIRM_REQUIRED' && (await api('/delete_account', { confirm: 'delete' }, tok)).b.error === 'CONFIRM_REQUIRED');
+    const [st] = (await pool.query(`INSERT INTO staff_users(email, name, password_hash) VALUES ('del-test@example.test', 'T', 'x') ON CONFLICT (email) DO UPDATE SET name='T' RETURNING id`)).rows;
+    await pool.query(`INSERT INTO cash_ledger(driver_profile_id, type, amount_da, note, staff_id) VALUES ($1, 'adjustment', 500, 'test: cash held', $2)`, [pid, st.id]);
+    ok('DEL2 a driver who still holds senders\' cash cannot delete the account', (await api('/delete_account', { confirm: 'DELETE' }, tok)).b.error === 'CASH_HELD');
+    await pool.query(`INSERT INTO cash_ledger(driver_profile_id, type, amount_da, note, staff_id) VALUES ($1, 'adjustment', -500, 'test: handed over', $2)`, [pid, st.id]);
+    const del = await api('/delete_account', { confirm: 'DELETE' }, tok);
+    ok('DEL3 with nothing owed, the account is deleted', del.s === 200 && del.b.ok === true, JSON.stringify(del.b));
+    ok('DEL4 the login token stops working at once', (await api('/get_me', undefined, tok)).b.error === 'SESSION_ENDED');
+    ok('DEL5 the refresh key is dead too', (await api('/refresh_token', { refresh_token: refresh })).s === 401);
+    const acc = (await pool.query(`SELECT a.google_sub, a.phone, a.deleted_at, p.display_name, p.status, dd.first_name, dd.plate_number, dd.national_id_hash, dd.is_online
+                                   FROM accounts a JOIN profiles p ON p.account_id=a.id JOIN driver_details dd ON dd.profile_id=p.id WHERE p.id=$1`, [pid])).rows[0];
+    ok('DEL6 the Google link, phone, names, plate and ID number are erased; the profile is "deleted"', acc.google_sub === null && acc.phone === null && acc.deleted_at !== null && acc.display_name === 'Deleted' && acc.status === 'deleted'
+      && acc.first_name === null && acc.plate_number === null && acc.national_id_hash === null && acc.is_online === false, JSON.stringify(acc));
+    ok('DEL7 the document photos are erased', (await pool.query(`SELECT count(*)::int n FROM document_files f JOIN documents d ON d.id=f.document_id WHERE d.profile_id=$1`, [pid])).rows[0].n === 0);
+    ok('DEL8 the cash ledger history stays (it protects the senders)', (await pool.query(`SELECT count(*)::int n FROM cash_ledger WHERE driver_profile_id=$1`, [pid])).rows[0].n === 2);
+    const again = (await api('/login_google', { id_token: googleToken('g-del-1'), path: 'user' })).b;
+    ok('DEL9 signing in again with the same Google account starts a NEW empty account', again.account?.id !== undefined ? again.account.id !== d.account?.id : (await pool.query(`SELECT count(*)::int n FROM accounts WHERE google_sub='g-del-1'`)).rows[0].n === 1);
+    ok('DEL9 ...with no profile from before', again.needs_phone === true || (again.profiles ?? []).length === 0, JSON.stringify(again));
+    ok('DEL10 the same ID card number can register again later (it was erased)', (await pool.query(`SELECT count(*)::int n FROM driver_details WHERE national_id_hash IS NOT NULL AND profile_id=$1`, [pid])).rows[0].n === 0);
+  }
   console.log(`\n${pass} passed, ${fail} failed`); await pool.end(); process.exit(fail ? 1 : 0);
 })();

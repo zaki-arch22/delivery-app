@@ -362,5 +362,14 @@ require('http').createServer((req: any, res: any) => {
   ok('T15 with no driver available the order expires', !!ex);
   const ev = await pool.query(`SELECT type FROM order_events WHERE order_id=$1 ORDER BY id`, [o1.id]);
   ok('T16 every step was recorded in the order history', ['created', 'offer_sent', 'offer_declined', 'assigned', 'picked_up', 'delivered'].every(t => ev.rows.some(x => x.type === t)), ev.rows.map(x => x.type));
+  {
+    // A customer cannot delete the account while an order is still on its way (the courier and receiver depend on it).
+    const tokDel = await makeUser('+213551240001', 'Del Sender');
+    const od = (await order(tokDel, 'del-active-order-1')).b;
+    ok('DEL an order still searching blocks "delete my account"', (await api('/delete_account', { confirm: 'DELETE' }, tokDel)).b.error === 'ACTIVE_ORDER');
+    await api('/cancel_order', { order_id: od.id, reason: 'changed_mind' }, tokDel);
+    ok('DEL after the order ended, the account can be deleted; the order history stays', (await api('/delete_account', { confirm: 'DELETE' }, tokDel)).b.ok === true
+      && (await pool.query(`SELECT status FROM orders WHERE id=$1`, [od.id])).rows[0].status === 'cancelled');
+  }
   console.log(`\n${pass} passed, ${fail} failed`); await pool.end(); process.exit(fail ? 1 : 0);
 })();

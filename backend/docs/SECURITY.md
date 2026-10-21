@@ -62,3 +62,5 @@ None of these run inside the app on customers' phones.
 - Monthly: test a backup restore; review who has staff access; remove people who left.
 - If a secret leaks: change JWT_SECRET (everyone is logged out), HASH_PEPPER (everyone must request new codes), run `reset-2fa` for staff.
 - If a phone is lost: the owner uses "log out everywhere"; staff use `reset-2fa`.
+- Account deletion (Google Play / Apple rule): `delete_account` acts only on the caller's own account (ids in the body are ignored), needs the word DELETE, ends every session at once, erases identity and document photos; records that protect others stay anonymised. Attack tests SEC23.
+- Receiver tracking page uses MapLibre GL JS 6.13.0 (pinned; 5.x had a critical sanitizer flaw, GHSA-jrc7-96c5-q579). It loads as a module from our own server; its helper worker runs from our server too (`worker-src 'self'`, no blob). `/privacy` and `/delete-account` run no script at all (`default-src 'none'`).

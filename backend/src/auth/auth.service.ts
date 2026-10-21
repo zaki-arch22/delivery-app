@@ -244,6 +244,44 @@ export class AuthService {
     return { ok: true, sessions_ended: ended.length };
   }
 
+  // "Delete my account" (Google Play / Apple rule). Refused while something is still owed to other people: an order on its
+  // way, a job in hand, or cash collected for senders that has not been handed over. Then, in one transaction: every
+  // session ends, the Google link, phone, names, ID number, driver details and document photos are erased, and the profiles
+  // become "deleted" (they can never log in again). Orders, ratings, the cash ledger and the trust history stay, without
+  // the person's identity, because they protect the other people involved. Signing in later with the same Google account
+  // starts a brand-new, empty account (a ban is kept separately and still applies).
+  async deleteAccount(accountId: string, ip: string, b: any) {
+    if (b?.confirm !== 'DELETE') throw bad('CONFIRM_REQUIRED', 'Send confirm: "DELETE" to delete the account');
+    const ended = await this.db.tx(async q => {
+      const [a] = await q(`SELECT id FROM accounts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, [accountId]);
+      if (!a) throw new NotFoundException({ error: 'NOT_FOUND', message: 'Account not found' });
+      const pids = (await q(`SELECT id FROM profiles WHERE account_id=$1`, [accountId])).map((r: any) => r.id);
+      if (pids.length) {
+        if ((await q(`SELECT 1 FROM orders WHERE user_profile_id = ANY($1::uuid[]) AND status IN ('searching','assigned','picked_up') LIMIT 1`, [pids])).length)
+          throw new ConflictException({ error: 'ACTIVE_ORDER', message: 'An order of yours is still on its way. Delete the account when it has ended.' });
+        if ((await q(`SELECT 1 FROM orders WHERE driver_profile_id = ANY($1::uuid[]) AND status IN ('assigned','picked_up') LIMIT 1`, [pids])).length)
+          throw new ConflictException({ error: 'ACTIVE_JOB', message: 'Finish your current delivery first.' });
+        const [c] = await q(`SELECT COALESCE(sum(amount_da),0)::int held FROM cash_ledger WHERE driver_profile_id = ANY($1::uuid[])`, [pids]);
+        if (c.held !== 0) throw new ConflictException({ error: 'CASH_HELD', message: 'Hand over the cash you hold to our team first.' });
+      }
+      const s = await q(`UPDATE sessions SET revoked=true WHERE account_id=$1 AND NOT revoked RETURNING id`, [accountId]);
+      await q(`DELETE FROM device_tokens WHERE profile_id = ANY($1::uuid[])`, [pids]);
+      await q(`DELETE FROM notifications WHERE profile_id = ANY($1::uuid[])`, [pids]);
+      await q(`UPDATE offers SET status='expired' WHERE driver_profile_id = ANY($1::uuid[]) AND status IN ('offered','bid')`, [pids]);
+      await q(`UPDATE driver_details SET is_online=false, last_location=NULL, last_location_at=NULL, first_name=NULL, last_name=NULL, birth_date=NULL,
+                 vehicle_color=NULL, plate_number=NULL, national_id_hash=NULL, national_id_last3=NULL WHERE profile_id = ANY($1::uuid[])`, [pids]);
+      await q(`DELETE FROM document_files WHERE document_id IN (SELECT id FROM documents WHERE account_id=$1)`, [accountId]);
+      await q(`DELETE FROM documents WHERE account_id=$1 AND profile_id IS NULL`, [accountId]);
+      await q(`UPDATE profiles SET display_name='Deleted', photo_url=NULL, status='deleted' WHERE account_id=$1`, [accountId]);
+      await q(`DELETE FROM account_devices WHERE account_id=$1`, [accountId]);
+      await q(`UPDATE accounts SET google_sub=NULL, phone=NULL, phone_verified=false, deleted_at=now() WHERE id=$1`, [accountId]);
+      return s.map((r: any) => r.id as string);
+    });
+    for (const sid of ended) this.rt.closeSession(sid);
+    this.sec.event('account_deleted', ip, {}, { account: accountId });
+    return { ok: true };
+  }
+
   private profiles(accountId: string) { return this.db.query(`SELECT ${PUBLIC_PROFILE} FROM profiles WHERE account_id=$1 ORDER BY type`, [accountId]); }
 
   private async newSession(accountId: string, profileId: string | null, ip: string, profiles: any[] = []) {

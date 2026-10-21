@@ -52,6 +52,9 @@ export class AuthController {
   @Access('account') @Post('logout_everywhere') @HttpCode(200)
   everywhere(@Req() r: any) { return this.auth.logoutEverywhere(who(r).accountId, r.ip); }
 
+  @Access('account') @Post('delete_account') @HttpCode(200)
+  del(@Req() r: any, @Body() b: any) { return this.auth.deleteAccount(who(r).accountId, r.ip, b); }
+
   @Access('account') @Post('logout') @HttpCode(200)
   out(@Req() r: any) { return this.auth.logout(who(r).sid); }
 }

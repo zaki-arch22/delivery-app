@@ -26,6 +26,7 @@ Rules
 | get_me | ACCOUNT | - | account {id, phone, phone_verified, google}, profiles[], active_profile |
 | logout | ACCOUNT | - | ok |
 | logout_everywhere | ACCOUNT | - | sessions_ended (ends every device and live connection; for a lost phone) |
+| delete_account | ACCOUNT | confirm: "DELETE" (else CONFIRM_REQUIRED) | ok. Refused while an order is on its way (ACTIVE_ORDER), a job is held (ACTIVE_JOB) or senders' cash is held (CASH_HELD). Erases the Google link, phone, names, ID number, driver details and document photos; profiles become `deleted`; every session ends. Orders, ratings, cash ledger and trust history stay without identity. Any account or profile id in the body is ignored (only the caller's own account). Public pages for app stores: `/privacy` (privacy policy) and `/delete-account` (how to delete), 3 languages, no script |
 | emergency | ACCOUNT (active profile) | order_id?, location? | ok (a staff case at the top, with the position; 5 per hour) |
 | my_record | ACCOUNT (active profile; works while blocked) | - | points_90d, levels, rule_points, active_block {kind, until, reason}, violations[] {id, rule, points, order_ref, note, status, appeal_text, decision_note, can_appeal, counts}, sanctions[] |
 | appeal_violation | ACCOUNT (works while blocked) | id, text (10-1000) | status appealed (once per rule break, within 30 days; CANNOT_APPEAL) |

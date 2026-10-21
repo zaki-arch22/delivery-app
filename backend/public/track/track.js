@@ -56,6 +56,8 @@
     render();
   }
   document.querySelectorAll('.langs button').forEach(function (b) { b.addEventListener('click', function () { setLang(b.getAttribute('data-lang')); }); });
+  // The map library arrives as a module, after this script: draw the map as soon as it is there.
+  window.addEventListener('maplibre-ready', function () { if (data) render(); });
 
   function render() {
     var app = document.getElementById('app');
@@ -128,7 +130,6 @@
     if (!window.maplibregl || !data) { box.remove(); return; }
     var dest = [data.dropoff.lng, data.dropoff.lat], drv = data.driver && data.driver.location ? [data.driver.location.lng, data.driver.location.lat] : null;
     if (map) { box.replaceWith(map.getContainer()); } else {
-      maplibregl.setWorkerUrl('/t/maplibre-gl-csp-worker.js');
       map = new maplibregl.Map({ container: box, style: 'https://tiles.openfreemap.org/styles/dark', center: drv || dest, zoom: 14, attributionControl: { compact: true, customAttribution: t('map_credit') } });
       homeMarker = new maplibregl.Marker({ color: '#B4EF2A' }).setLngLat(dest).addTo(map);
     }

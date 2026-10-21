@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Linking } from 'react-native';
+import { apiUrl } from '../lib/config';
 import { router } from 'expo-router';
 import { useApp } from '../lib/app';
 import { errorMessage } from '../lib/errors';
@@ -32,6 +33,11 @@ export default function Settings() {
     { text: t('confirm'), style: 'destructive', onPress: () => run('all', async () => { await services.session.logoutEverywhere(); router.replace('/welcome'); }) },
   ]);
 
+  const deleteAccount = () => Alert.alert(t('delete_account_confirm'), t('delete_account_sub'), [
+    { text: t('cancel'), style: 'cancel' },
+    { text: t('delete_account'), style: 'destructive', onPress: () => run('delete', async () => { await services.session.deleteAccount(); router.replace('/welcome'); }) },
+  ]);
+
   return (
     <Screen testID="screen-settings" title={t('settings')}>
       <Gap />
@@ -52,8 +58,11 @@ export default function Settings() {
       <Gap n={6} />
       {active ? <Button testID="open-record" kind="secondary" label={t('record_title')} onPress={() => router.push('/record')} /> : null}
       <Button testID="open-rules" kind="plain" label={t('rules_title')} onPress={() => router.push('/rules')} />
+      <Button testID="open-privacy" kind="plain" label={t('privacy_policy')} onPress={() => Linking.openURL(apiUrl() + '/privacy')} />
       <Button testID="logout" kind="secondary" busy={busy === 'logout'} label={t('logout')} onPress={logout} />
       <Button testID="logout-all" kind="danger" busy={busy === 'all'} label={t('logout_all')} sub={t('logout_all_sub')} onPress={logoutAll} />
+      <Gap n={4} />
+      <Button testID="delete-account" kind="plain" busy={busy === 'delete'} label={t('delete_account')} onPress={deleteAccount} />
     </Screen>
   );
 }

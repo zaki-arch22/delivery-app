@@ -25,6 +25,9 @@ export function errorMessage(e: unknown): { key: Key; vars?: Record<string, numb
     case 'PRICE_OUT_OF_RANGE': case 'PRICE_NOT_ALLOWED': return { key: 'err_price_range' };
     case 'ZONE_CLOSED': return { key: 'zone_closed' };
     case 'TOO_FAR': return { key: 'too_far' };
+    case 'ACTIVE_ORDER': return { key: 'err_delete_active_order' };
+    case 'ACTIVE_JOB': return { key: 'err_delete_active_job' };
+    case 'CASH_HELD': return { key: 'err_delete_cash' };
     case 'PRICING_NOT_SET': return { key: 'err_not_ready' };
     case 'CANNOT_CANCEL': return { key: 'err_cannot_cancel' };
     case 'PRICE_LOCKED': return { key: 'err_price_locked' };

@@ -48,6 +48,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Second phone round (2026-10-21): the owner tested 2 minutes after the previous update was published (not yet downloaded). Now: bottom panels float over a full-screen map on every screen, slide away while the map is touched, reach the top of the screen; "my location" rides above the panel; grey band = half the status bar. Checked in a browser with simulated finger drags (scratchpad vis2 scripts): drag up = full, drag down = normal, finger on map = only the map.
 
+- Launch pieces (2026-10-21, owner's wish "all of Algeria + a distance limit", "notifications now", "everything missing for launch"): max_km per price table (default 50 km, TOO_FAR; console field; all-Algeria zone button), "Pick up here" button on the home map, address bubble over the centre pin, push sent on the app's high-importance channel with sound, "Delete my account" (server delete_account + attack tests SEC23 + Settings button + public /delete-account page), privacy policy page /privacy (3 languages, draft for legal review) linked from Settings, receiver page moved to MapLibre GL JS 6.13.0 (critical flaw in 5.x). 644 tests + 14 database rules pass. Owner's zone and prices were set by him on Render (2026-10-21).
+
 ## In progress
 - (none)
 
@@ -61,6 +63,27 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 2. If place search does not work on the phone: check Render's GEOCODER_URL (render.yaml sets https://photon.komoot.io; a Blueprint that does not sync needs it added by hand in Environment).
 3. Owner actions still open: SHA-1 fingerprint in Firebase (Google login), delete FIRST_ADMIN_RESET/PASSWORD on Render.
 4. Then: phone push (Firebase service key into Render FIREBASE_SERVICE_ACCOUNT_JSON), TRUST_PROXY check, before-launch list (CLAUDE.md section 9: own Photon + OSRM server for Algiers).
+
+## Dev notes
+- Screen tests: `test/screens.tsx` (helpers, all routes), `test/http.ts` (test HTTP client; jest-expo replaces fetch). `renderRouter` turns on fake clocks: `open()` switches back to real ones. Test DB access goes through `psql` (pg stalls in that environment). Use `await fireEvent...` (testing library v14 is async); `toHaveTextContent('x')` is an EXACT match, use a regex; NEVER put `findBy...` inside `act(...)` (act holds updates back: deadlock); prices use non-breaking spaces (match with \s).
+- Visual check (screenshots): a TEMPORARY mobile/metro.config.js that, when VISUAL_WEB=1, resolves `@maplibre/maplibre-react-native` to test/mocks/maplibre.tsx and `expo-secure-store` to test/mocks/securestore-web.js (getDefaultConfig + resolver.resolveRequest); run `VISUAL_WEB=1 EXPO_OFFLINE=1 CI=1 EXPO_PUBLIC_API_URL=http://localhost:3399 npx expo start --web --port 8083` (the static `expo export --dev` reloads in a loop; CI=1 means no file watching: restart after edits), a small proxy on :3399 adding CORS in front of the test server, then the global playwright (`$(npm root -g)/playwright`, executablePath /opt/pw-browsers/chromium). Delete metro.config.js afterwards. Never `pkill -f` a pattern that is in your own command line (it kills the shell): kill by pid.
+- Before an over-the-air update: `npx expo export --platform android` in mobile/ must build (checks fonts/icons resolve as on the phone).
+
+## Owner answers (asked at the "push and build prep" milestone)
+- Phone build: YES, the owner is creating the Expo account, EXPO_TOKEN and network allowance (expo.dev, api.expo.dev, exp.host, storage.googleapis.com). Settings reach NEW sessions.
+- Firebase push: AFTER the first build (then guide the owner step by step).
+- App name: not yet; keep the working name.
+- Real map data: YES, allowing download.geofabrik.de and tiles.openfreemap.org.
+
+## Pending questions / owner actions
+- Owner: Firebase server key into Render (FIREBASE_SERVICE_ACCOUNT_JSON) = phone push notifications when the app is closed (steps sent 2026-10-21).
+- Owner: a contact email for the privacy page and Google Play listing (the page says "Menu → Help" until then).
+- Owner (money, later): Google Play developer account ($25 once) to publish; a lawyer's review of /privacy before launch (section 8).
+- Owner: delete FIRST_ADMIN_RESET and FIRST_ADMIN_PASSWORD in Render Environment (if not done).
+## Exact next action
+1. Wait for the owner's phone test of: "Pick up here" button, address bubble over the pin, panels, too-far message, delete account. Fix what he reports first.
+2. When the Firebase key is on Render: check the Render log has no "No push provider configured" line; send a test order and confirm a push arrives with the app closed.
+3. Then the before-launch list (CLAUDE.md section 9): own Photon + OSRM for Algiers on a real server, traffic-flood filter, native-speaker text review, app name and logo, Play listing (privacy URL = <server>/privacy, deletion URL = <server>/delete-account).
 
 ## Dev notes
 - Screen tests: `test/screens.tsx` (helpers, all routes), `test/http.ts` (test HTTP client; jest-expo replaces fetch). `renderRouter` turns on fake clocks: `open()` switches back to real ones. Test DB access goes through `psql` (pg stalls in that environment). Use `await fireEvent...` (testing library v14 is async); `toHaveTextContent('x')` is an EXACT match, use a regex; NEVER put `findBy...` inside `act(...)` (act holds updates back: deadlock); prices use non-breaking spaces (match with \s).

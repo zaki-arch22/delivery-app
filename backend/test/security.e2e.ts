@@ -369,6 +369,23 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
     ok('SEC22 bad names are refused (too long, too short, hidden characters, not text)', names === 6 && (await api('/rename_profile', { display_name: 'Hacker' })).s === 401, names);
   }
 
+  {
+    // ===== SEC23 "delete my account" cannot be aimed at someone else, or used without a login =====
+    const X = await makeUser('+213551230001', 'Del X'), Y = await makeUser('+213551230002', 'Del Y');
+    ok('SEC23 delete_account needs a login', (await api('/delete_account', { confirm: 'DELETE' })).s === 401);
+    const r = await api('/delete_account', { confirm: 'DELETE', account_id: '00000000-0000-0000-0000-000000000000', profile_id: Y.id }, X.token);
+    const ys = (await pool.query(`SELECT p.status, a.deleted_at FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE p.id=$1`, [Y.id])).rows[0];
+    ok('SEC23 an account id or profile id in the request is ignored: only the caller\'s own account is deleted', r.s === 200 && ys.status === 'active' && ys.deleted_at === null
+      && (await pool.query(`SELECT status FROM profiles WHERE id=$1`, [X.id])).rows[0].status === 'deleted');
+    ok('SEC23 a deleted account cannot be deleted twice or used again (its tokens are dead)', (await api('/delete_account', { confirm: 'DELETE' }, X.token)).s === 401 && (await api('/refresh_token', { refresh_token: X.refresh })).s === 401);
+    ok('SEC23 the person who was deleted still logs in again only as a NEW account', (await login('+213551230001')).needs_profile !== undefined && (await pool.query(`SELECT count(*)::int n FROM accounts WHERE phone='+213551230001' AND deleted_at IS NULL`)).rows[0].n === 1);
+    ok('SEC23 Y is untouched and still works', (await api('/get_me', undefined, Y.token)).s === 200);
+    for (const path of ['/privacy', '/delete-account']) {
+      const r = await fetch(HTTP + path); const html = await r.text(); const csp = r.headers.get('content-security-policy') ?? '';
+      ok(`SEC23 ${path} is public, in 3 languages, and may run no script at all`, r.status === 200 && /العربية|Français/.test(html) && !/<script/i.test(html) && /default-src 'none'/.test(csp) && !/script-src/.test(csp), { status: r.status, csp });
+    }
+  }
+
   // ===== SEC15 evidence trail and code hygiene =====
   const need = ['upload_not_image', 'upload_bad_image', 'upload_cap', 'bad_token', 'app_token_on_staff_route', 'refresh_token_reuse', 'rate_limited', 'staff_login_failed', 'otp_wrong', 'sms_ip_cap', 'sms_daily_cap_reached', 'staff_login_ok', 'logout_everywhere', 'google_token_rejected'];
   const missing: string[] = []; for (const t of need) if (!(await ev(t))) missing.push(t);

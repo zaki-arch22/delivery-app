@@ -34,7 +34,13 @@ async function main() {
   }, serveStatic(join(pub, 'track'), { dotfiles: 'ignore', index: false, fallthrough: true, maxAge: '1h' }),
     serveStatic(join(__dirname, '..', 'node_modules', 'maplibre-gl', 'dist'), { dotfiles: 'ignore', index: false, maxAge: '1d' }),
     (_req: any, res: any) => res.status(404).json({ error: 'NOT_FOUND', message: 'Not found' }));
-  // Optional: the server also hands out the staff console's files at /staff/ (one address for a small or free host).
+  // Public pages Google Play and Apple ask for: the privacy policy and how to delete an account. Plain pages: no script at all.
+  const legalCsp = "default-src 'none'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+  const legal = (file: string) => (_req: any, res: any) => { res.setHeader('Content-Security-Policy', legalCsp); res.setHeader('Cache-Control', 'public, max-age=3600'); res.sendFile(join(pub, 'legal', file)); };
+  express.get('/privacy', legal('privacy.html'));
+  express.get('/delete-account', legal('delete-account.html'));
+  express.get('/legal/legal.css', legal('legal.css'));
+    // Optional: the server also hands out the staff console's files at /staff/ (one address for a small or free host).
   // Same address = no cross-site access to open. The page may only run its own files and talk to this server.
   const consoleDir = process.env.STAFF_CONSOLE_DIR ? resolve(process.env.STAFF_CONSOLE_DIR) : '';
   if (consoleDir) {
