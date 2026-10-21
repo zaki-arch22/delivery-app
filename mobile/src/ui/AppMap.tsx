@@ -20,7 +20,8 @@ export const AppMap = forwardRef<AppMapRef, {
   start: Point; zoom?: number; pins?: Pin[]; centerPin?: { label: string; kind: 'pickup' | 'dropoff'; title?: string | null }; onMoved?: (p: Point) => void;
   route?: [number, number][] | null; fit?: Point[]; pad?: Partial<Pad>; testID?: string; onTouching?: (touching: boolean) => void;
   nearby?: { vehicle: 'motorbike' | 'car'; lat: number; lng: number }[]; pulse?: { at: Point; grow?: number } | null;
-}>(function AppMap({ start, zoom = 15, pins = [], centerPin, onMoved, route, fit, pad, testID = 'map', onTouching, nearby = [], pulse }, ref) {
+  follow?: { center: Point; zoom: number } | null;
+}>(function AppMap({ start, zoom = 15, pins = [], centerPin, onMoved, route, fit, pad, testID = 'map', onTouching, nearby = [], pulse, follow }, ref) {
   const { t } = useApp();
   const cam = useRef<CameraRef>(null);
   const mapRef = useRef<any>(null);
@@ -62,7 +63,13 @@ export const AppMap = forwardRef<AppMapRef, {
   };
   useImperativeHandle(ref, () => ({ moveTo: (p, z = 16) => cam.current?.easeTo({ center: [p.lng, p.lat], zoom: z, duration: 600 }), fit: fitNow }));
   const fitKey = (fit ?? []).map(p => `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`).join('|');
-  useEffect(() => { if (fit?.length) { const h = setTimeout(() => fitNow(fit), 250); return () => clearTimeout(h); } }, [fitKey, padding.bottom]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (fit?.length && !follow) { const h = setTimeout(() => fitNow(fit), 250); return () => clearTimeout(h); } }, [fitKey, padding.bottom, !follow]);
+  // `follow`: the camera is driven by the screen (searching: centred on the pickup, slowly zooming out) and the person
+  // cannot move the map by hand. Each step glides linearly into the next, so the zoom-out looks continuous.
+  useEffect(() => {
+    if (!follow) return;
+    cam.current?.easeTo({ center: [follow.center.lng, follow.center.lat], zoom: follow.zoom, padding, duration: 1200, easing: 'linear' });
+  }, [follow?.center.lat, follow?.center.lng, follow?.zoom, padding.bottom]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const a = pins.find(p => p.kind === 'pickup'), b = pins.find(p => p.kind === 'dropoff');
   const line = useMemo(() => {
@@ -73,8 +80,8 @@ export const AppMap = forwardRef<AppMapRef, {
 
   return (
     <View style={s.wrap}>
-      <View style={StyleSheet.absoluteFill} onTouchStart={() => setFinger(true)} onTouchEnd={e => { if (!e.nativeEvent.touches?.length) setFinger(false); }} onTouchCancel={() => setFinger(false)}>
-      <Map ref={mapRef} testID={testID} style={StyleSheet.absoluteFill} mapStyle={mapStyleUrl()} logo={false} attribution compass={false}
+      <View style={StyleSheet.absoluteFill} onTouchStart={() => { if (!follow) setFinger(true); }} onTouchEnd={e => { if (!e.nativeEvent.touches?.length) setFinger(false); }} onTouchCancel={() => setFinger(false)}>
+      <Map ref={mapRef} testID={testID} style={StyleSheet.absoluteFill} dragPan={!follow} touchZoom={!follow} doubleTapHoldZoom={!follow} touchRotate={!follow} touchPitch={!follow} mapStyle={mapStyleUrl()} logo={false} attribution compass={false}
         onRegionWillChange={e => { if (e.nativeEvent.userInteraction) setMoving(true); }}
         onRegionIsChanging={e => { if (e.nativeEvent.userInteraction && !moving.current) setMoving(true); }}
         onRegionDidChange={e => { finger.current = false; setMoving(false); const c = e.nativeEvent.center; onMoved?.({ lng: c[0], lat: c[1] }); }}

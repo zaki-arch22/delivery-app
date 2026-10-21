@@ -172,6 +172,7 @@ test('a full order: route, fare, distance, couriers offer, choose one, delivered
   expect(await screen.findByTestId('offer-' + r2.offer_id)).toHaveTextContent(/Yacine Fast/);
   expect((await screen.findAllByTestId(/^marker-nearby-/)).length).toBe(2);                 // the two couriers around the pickup, as vehicles
   expect(screen.getByTestId('pulse')).toBeTruthy();                                         // the searching pulse around the pickup
+  expect(screen.getAllByTestId('map').slice(-1)[0].props.accessibilityHint).toBe('locked');   // the map cannot be moved by hand while searching
   // Tapping a courier opens his full profile (rating, deliveries, member since, comments).
   await fireEvent.press(screen.getByTestId('courier-' + r2.offer_id));
   expect(await screen.findByTestId('pp-name')).toHaveTextContent('Yacine Fast');

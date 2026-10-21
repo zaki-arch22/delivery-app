@@ -4,14 +4,14 @@ import { color } from '../lib/theme';
 
 const WAVES = 3, WAVE_MS = 2400;   // three waves, one leaving the centre every 0.8 s
 
-// The "searching" animation (inDrive-style, owner's wish Oct 2026): a faint blue disc around the point that grows slowly
-// and stays small on screen, with waves leaving the centre and fading at its edge, again and again. It only SHOWS that a
+// The "searching" animation (inDrive-style, owner's wish Oct 2026): a faint blue disc around the point that keeps growing
+// slowly for the whole search (half to full size on screen, while the map itself slowly zooms out), with waves leaving the centre and fading at its edge, again and again. It only SHOWS that a
 // search is running: the real search area grows on its own schedule on the server. Screen-sized (not map-sized), so it
 // looks the same at any zoom. Native-driver animations: smooth even while the app is busy.
 export function Pulse({ radius, grow = 0, testID = 'pulse' }: { radius: number; grow?: number; testID?: string }) {
   const size = radius * 2;
-  const outer = useRef(new Animated.Value(0.7 + 0.3 * grow)).current;
-  useEffect(() => { Animated.timing(outer, { toValue: 0.7 + 0.3 * Math.min(1, Math.max(0, grow)), duration: 1000, useNativeDriver: true }).start(); }, [grow, outer]);
+  const outer = useRef(new Animated.Value(0.5 + 0.5 * grow)).current;
+  useEffect(() => { Animated.timing(outer, { toValue: 0.5 + 0.5 * Math.min(1, Math.max(0, grow)), duration: 1000, useNativeDriver: true }).start(); }, [grow, outer]);
   const waves = useRef([...Array(WAVES)].map(() => new Animated.Value(0))).current;
   useEffect(() => {
     const loops = waves.map((v, i) => Animated.loop(Animated.sequence([

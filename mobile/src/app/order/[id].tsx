@@ -18,7 +18,6 @@ import type { Key } from '../../i18n';
 const POLL_MS = 4000;   // status and the courier's position while active; live notifications refresh at once in between
 
 const NEARBY_MS = 10_000;   // couriers around the pickup are refreshed this often while searching
-const PULSE_GROW_MS = 120_000;   // the searching pulse grows slowly to its full (still small) size over two minutes
 
 // One order, from "waiting for the receiver" to "delivered" (contract B). The map shows A, B, the route and the courier;
 // the panel follows the order's state; while couriers answer, their offers appear on top for the customer to choose.
@@ -71,11 +70,15 @@ export default function OrderScreen() {
   const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
   const price = o.locked_da ?? o.offered_da;
   const showBids = o.status === 'searching' && o.bids.length > 0;
+  // While searching: the map stays centred on the pickup and zooms out slowly (zoom 16 down to 12 over the whole search,
+  // fastest at the start), the pulse keeps growing, and the map cannot be moved by hand (owner's wish, like inDrive).
+  const searching = o.status === 'searching';
+  const searchShare = searching && o.search_ends_at ? Math.min(1, Math.max(0, (now - new Date(o.search_started_at).getTime()) / Math.max(1, new Date(o.search_ends_at).getTime() - new Date(o.search_started_at).getTime()))) : 0;
 
   return (
     <View style={s.root} testID="screen-order">
       <AppMap onTouching={setMapTouch} start={A} zoom={13} pins={pins} route={o.route} fit={fit} nearby={near?.couriers ?? []}
-        pulse={o.status === 'searching' ? { at: A, grow: Math.min(1, (now - new Date(o.search_started_at).getTime()) / PULSE_GROW_MS) } : null} pad={{ top: showBids ? H * 0.5 : 110, bottom: H * 0.5 }} />
+        pulse={searching ? { at: A, grow: searchShare } : null} follow={searching ? { center: A, zoom: 16 - 4 * Math.sqrt(searchShare) } : null} pad={{ top: showBids ? H * 0.5 : 110, bottom: H * 0.5 }} />
       <MapOverlay hidden={mapTouch} style={s.top}>
         <View style={[s.topRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
           <RoundButton testID="back" icon="arrow-left" label={t('back')} onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))} />
