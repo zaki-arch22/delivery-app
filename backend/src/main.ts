@@ -40,6 +40,9 @@ async function main() {
   express.get('/privacy', legal('privacy.html'));
   express.get('/delete-account', legal('delete-account.html'));
   express.get('/legal/legal.css', legal('legal.css'));
+  // Our map style (OpenFreeMap "liberty" recoloured like inDrive's night map; built by deploy/map-style.py). The tiles,
+  // icons and fonts still come from OpenFreeMap. Changing this file changes every map at once, with no app update.
+  express.get('/map/style.json', (_req: any, res: any) => { res.setHeader('Cache-Control', 'public, max-age=3600'); res.setHeader('Access-Control-Allow-Origin', '*'); res.sendFile(join(pub, 'map', 'style.json')); });
     // Optional: the server also hands out the staff console's files at /staff/ (one address for a small or free host).
   // Same address = no cross-site access to open. The page may only run its own files and talk to this server.
   const consoleDir = process.env.STAFF_CONSOLE_DIR ? resolve(process.env.STAFF_CONSOLE_DIR) : '';

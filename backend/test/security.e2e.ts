@@ -385,6 +385,11 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
     ok('SEC23 a deleted account cannot be deleted twice or used again (its tokens are dead)', (await api('/delete_account', { confirm: 'DELETE' }, X.token)).s === 401 && (await api('/refresh_token', { refresh_token: X.refresh })).s === 401);
     ok('SEC23 the person who was deleted still logs in again only as a NEW account', (await login('+213551230001')).needs_profile !== undefined && (await pool.query(`SELECT count(*)::int n FROM accounts WHERE phone='+213551230001' AND deleted_at IS NULL`)).rows[0].n === 1);
     ok('SEC23 Y is untouched and still works', (await api('/get_me', undefined, Y.token)).s === 200);
+    {
+      const r = await fetch(HTTP + '/map/style.json'); const st = await r.json() as any;
+      const urls = JSON.stringify([st.sources, st.sprite, st.glyphs]).match(/https?:\/\/[^"/]+/g) ?? [];
+      ok('SEC23 the map style is public JSON whose tiles, icons and fonts come only from OpenFreeMap', r.status === 200 && st.version === 8 && st.layers.length > 50 && urls.every((u: string) => u === 'https://tiles.openfreemap.org'), urls);
+    }
     for (const path of ['/privacy', '/delete-account']) {
       const r = await fetch(HTTP + path); const html = await r.text(); const csp = r.headers.get('content-security-policy') ?? '';
       ok(`SEC23 ${path} is public, in 3 languages, and may run no script at all`, r.status === 200 && /العربية|Français/.test(html) && !/<script/i.test(html) && /default-src 'none'/.test(csp) && !/script-src/.test(csp), { status: r.status, csp });
