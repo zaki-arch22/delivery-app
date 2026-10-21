@@ -1,5 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+import { base64Bytes } from './base64';
 
 export type PickResult = { uri: string } | 'denied' | null;   // null = the person closed the camera/gallery
 
@@ -18,5 +19,13 @@ export async function pickPhoto(source: 'camera' | 'library', front = false): Pr
   return { uri: out.uri };
 }
 
-// The photo file as data the server connection can send.
-export async function photoBlob(uri: string): Promise<Blob> { return (await fetch(uri)).blob(); }
+export type PhotoBody = Blob | Uint8Array;
+// The photo as bytes the server connection can send. The picture's own JPEG bytes are taken straight from the image tool
+// (reading the file back through the phone's file handling lost the picture on some Android phones: "could not be read").
+export async function photoBlob(uri: string): Promise<PhotoBody> {
+  try {
+    const out = await (await ImageManipulator.manipulate(uri).renderAsync()).saveAsync({ compress: 0.85, format: SaveFormat.JPEG, base64: true });
+    if (out.base64 && out.base64.length > 100) return base64Bytes(out.base64);
+  } catch { /* fall back to the file itself */ }
+  return (await fetch(uri)).blob();
+}

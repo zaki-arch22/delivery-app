@@ -17,7 +17,7 @@ export class StepQueue {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private flushing: Promise<void> | null = null;
   private subs = new Set<(e: QueueEvent) => void>();
-  constructor(private client: Client, private store: KeyStore, private retryMs = 10_000, private loadPhoto: (uri: string) => Promise<Blob> = uri => fetch(uri).then(r => r.blob())) {}
+  constructor(private client: Client, private store: KeyStore, private retryMs = 10_000, private loadPhoto: (uri: string) => Promise<Blob | Uint8Array> = uri => fetch(uri).then(r => r.blob())) {}
 
   onEvent(f: (e: QueueEvent) => void) { this.subs.add(f); return () => this.subs.delete(f); }
   private async list() { if (!this.items) { try { this.items = JSON.parse((await this.store.get(KEY)) ?? '[]'); } catch { this.items = []; } } return this.items!; }

@@ -50,6 +50,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Launch pieces (2026-10-21, owner's wish "all of Algeria + a distance limit", "notifications now", "everything missing for launch"): max_km per price table (default 50 km, TOO_FAR; console field; all-Algeria zone button), "Pick up here" button on the home map, address bubble over the centre pin, push sent on the app's high-importance channel with sound, "Delete my account" (server delete_account + attack tests SEC23 + Settings button + public /delete-account page), privacy policy page /privacy (3 languages, draft for legal review) linked from Settings, receiver page moved to MapLibre GL JS 6.13.0 (critical flaw in 5.x). 644 tests + 14 database rules pass. Owner's zone and prices were set by him on Render (2026-10-21).
 
+- Photo upload fix (2026-10-21, owner's report "This photo could not be read"): the server's input guard refused photos that Android labels "application/octet-stream"; now any image type, that label or none is accepted and the content decides (attack test SEC16 kept: a declared web page/JSON is still refused). The app also sends the picture's JPEG bytes straight from the image tool.
+
 ## In progress
 - (none)
 

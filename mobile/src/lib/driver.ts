@@ -34,7 +34,7 @@ export const driver = (c: Client) => ({
   decline: (offerId: number) => c.call('/decline_offer', { offer_id: offerId }),
   job: () => c.call<{ job: Job | null }>('/get_job').then(r => r.job),
   // Photos (parcel at pickup, evidence) are uploaded first; the step then names them.
-  photo: (kind: 'parcel_photo' | 'evidence_photo', blob: Blob) => c.call<{ document_id: string }>('/upload_document?kind=' + kind, blob).then(r => r.document_id),
+  photo: (kind: 'parcel_photo' | 'evidence_photo', blob: Blob | Uint8Array) => c.call<{ document_id: string }>('/upload_document?kind=' + kind, blob).then(r => r.document_id),
   pickedUp: (orderId: string, pickupCode: string, parcelPhoto: string, location: Pt) => c.call<{ job: Job; order_status: string }>('/update_job_step', { order_id: orderId, step: 'picked_up', pickup_code: pickupCode, parcel_photo: parcelPhoto, location }),
   delivered: (orderId: string, code: string, cash: number, location: Pt, method: 'code' | 'qr') => c.call<{ job: Job; order_status: string }>('/update_job_step', { order_id: orderId, step: 'delivered', delivery_code: code, cash_collected_da: cash, location, method }),
   fail: (orderId: string, reason: FailReason, extra: { evidence_photo?: string; note?: string; location?: Pt | null } = {}) => c.call<{ job: Job | null }>('/report_delivery_failure', { order_id: orderId, reason, ...extra }).then(r => r.job),

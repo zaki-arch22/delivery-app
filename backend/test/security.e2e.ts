@@ -200,6 +200,11 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
     ];
     for (const [what, body, type] of fakes) { const r = await up(U, 'id_photo', body, type); ok(`SEC16 ${what} disguised as a photo is refused`, r.s === 415 && r.b.error === 'IMAGE_ONLY', r); }
     ok('SEC16 a declared non-image type is refused', (await up(U, 'id_photo', PHOTO, 'text/html')).b.error === 'IMAGE_ONLY');
+    {
+      const V = (await login('+213550990009', 'driver')).token as string;   // a fresh account: U is near its cap of waiting photos
+      const vague = await up(V, 'id_photo', PHOTO, 'application/octet-stream');
+      ok('SEC16 a real photo labelled vaguely by the phone (application/octet-stream) is accepted', !!vague.b.document_id, vague);
+    }
     ok('SEC16 JSON sent to the photo route is refused', (await up(U, 'id_photo', '{"a":1}', 'application/json')).b.error === 'IMAGE_ONLY');
     const poly = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('<?php system($_GET["c"]); ?>'.repeat(100))]);
     ok('SEC16 a fake JPEG (right first bytes, garbage inside) is refused', (await up(U, 'id_photo', poly)).b.error === 'BAD_IMAGE');

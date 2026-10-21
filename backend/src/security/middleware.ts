@@ -29,7 +29,7 @@ const hasBadKey = (v: any, depth = 0): boolean => { if (depth > 8 || v === null 
 // JSON only on POST; no prototype-pollution keys; query values must be plain text (no arrays/objects).
 export const inputGuard = (req: any, res: any, next: any) => {
   if (req.method === 'POST' && req.path === '/upload_document') {   // the photo route: an image body only (checked again by decoding it)
-    if (!/^image\/(jpeg|png|webp)$/i.test(String(req.headers['content-type'] ?? '').split(';')[0].trim())) return res.status(415).json({ error: 'IMAGE_ONLY', message: 'Send a JPEG, PNG or WebP photo' });
+    if (!photoType(req)) return res.status(415).json({ error: 'IMAGE_ONLY', message: 'Send a JPEG, PNG or WebP photo' });
   } else if (req.method === 'POST' && !/^application\/json/i.test(req.headers['content-type'] ?? '')) return res.status(415).json({ error: 'JSON_ONLY', message: 'Send application/json' });
   if (!Buffer.isBuffer(req.body) && hasBadKey(req.body)) return res.status(400).json({ error: 'BAD_INPUT', message: 'Invalid input' });
   for (const v of Object.values(req.query ?? {})) if (typeof v !== 'string') return res.status(400).json({ error: 'BAD_INPUT', message: 'Invalid query' });
@@ -39,4 +39,12 @@ export const inputGuard = (req: any, res: any, next: any) => {
 export function clientIp(req: any): string {
   const hops = Number(process.env.TRUST_PROXY ?? 0), xff = String(req.headers?.['x-forwarded-for'] ?? '').split(',').map((s: string) => s.trim()).filter(Boolean);
   return hops > 0 && xff.length >= hops ? xff[xff.length - hops] : req.socket?.remoteAddress ?? 'unknown';
+}
+
+// Image types, the vague "application/octet-stream" and no type at all are accepted for a photo (Android often labels a
+// camera file that way); a declared web page, JSON or text is not. The content decides: the upload checks the first bytes
+// are a real JPEG/PNG/WebP, then decodes and redraws the picture.
+export function photoType(req: any) {
+  const t = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+  return t === '' || t === 'application/octet-stream' || /^image\/(jpeg|jpg|pjpeg|png|webp)$/.test(t);
 }

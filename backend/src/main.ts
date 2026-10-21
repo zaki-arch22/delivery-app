@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { SecurityLog } from './security/security-log.service';
-import { headers, inputGuard, ipLimit } from './security/middleware';
+import { headers, inputGuard, ipLimit, photoType } from './security/middleware';
 import { deriveKey } from './security/crypto';
 import { raw, static as serveStatic } from 'express';
 import { existsSync } from 'fs';
@@ -53,7 +53,7 @@ async function main() {
   }
   // Photos are the only non-JSON body, accepted on ONE route only, up to 6 MB (everything else stays at 64 KB of JSON).
   // No login, no reading of a big body: anonymous callers are turned away before a single byte of the photo is read.
-  const readPhoto = raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: MAX_UPLOAD_BYTES });
+  const readPhoto = raw({ type: photoType, limit: MAX_UPLOAD_BYTES });
   app.use('/upload_document', (req: any, res: any, next: any) => {
     if (!/^Bearer \S+$/.test(req.headers.authorization ?? '')) return res.status(401).json({ error: 'BAD_TOKEN', message: 'Login again' });
     readPhoto(req, res, (err: any) => err
