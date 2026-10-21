@@ -18,9 +18,9 @@ import type { Key } from '../../i18n';
 const POLL_MS = 4000;   // status and the courier's position while active; live notifications refresh at once in between
 
 const NEARBY_MS = 10_000;   // couriers around the pickup are refreshed this often while searching
-const ZOOM_SPAN_MS = 120_000;   // the searching zoom-out and pulse take 2 minutes to reach their widest (the search itself goes on)
-const ZOOM_FROM = 16.5, ZOOM_TO = 12.5;   // street level -> about 10 km across
-const PULSE_FROM = 0.2;   // the blue disc starts at a fifth of its size and grows with the zoom-out
+const ZOOM_SPAN_MS = 30_000;   // the searching zoom-out and pulse: clear and fast, 30 s to their widest (the search itself goes on)
+const ZOOM_FROM = 17, ZOOM_TO = 13.5;   // close on the pickup -> about 6 km across
+const PULSE_FROM = 0.15;   // the blue disc starts small and grows with the zoom-out, up to its (limited) full size
 
 // One order, from "waiting for the receiver" to "delivered" (contract B). The map shows A, B, the route and the courier;
 // the panel follows the order's state; while couriers answer, their offers appear on top for the customer to choose.
@@ -77,7 +77,7 @@ export default function OrderScreen() {
   const price = o.locked_da ?? o.offered_da;
   const showBids = o.status === 'searching' && o.bids.length > 0;
   // While searching: the map stays centred on the pickup and zooms out steadily by itself (street level to ~10 km across
-  // in 2 minutes), the blue disc grows with it, and the map cannot be moved by hand (owner's wish, like inDrive).
+  // in 30 s, after a quick zoom-in onto the pickup), the blue disc grows with it, and the map cannot be moved by hand (owner's wish, like inDrive).
   const searching = o.status === 'searching';
   // Computed once per search (not every second): where the zoom-out is now, and how long is left to run.
   const follow = followPlan;

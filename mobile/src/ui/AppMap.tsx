@@ -8,6 +8,7 @@ import { color, font } from '../lib/theme';
 import { Icon } from './Icon';
 import { Pulse } from './Pulse';
 
+export const FOLLOW_IN_MS = 900;   // the quick zoom-in onto the point before the zoom-out
 export type Pin = { id: string; at: Point; label: string; kind: 'pickup' | 'dropoff' | 'driver'; vehicle?: 'motorbike' | 'car' };
 export type AppMapRef = { moveTo(p: Point, zoom?: number): void; fit(points: Point[]): void };
 type Pad = { top: number; bottom: number; left: number; right: number };
@@ -67,15 +68,19 @@ export const AppMap = forwardRef<AppMapRef, {
   // `follow`: the camera is driven by the screen (searching: centred on the pickup, zooming out by itself) and the person
   // cannot move the map by hand. ONE long, linear native animation from `from` to `to` over `ms` (smooth, no JS each
   // second), after a short glide to the starting zoom.
+  // Camera commands sent before the map has loaded are ignored by the native map, so the plan starts once it is ready
+  // (or after 2 s at the latest): a short zoom-in exactly onto the point, then the long zoom-out.
+  const [ready, setReady] = useState(false);
+  useEffect(() => { const h = setTimeout(() => setReady(true), 2000); return () => clearTimeout(h); }, []);
   const followKey = follow ? `${follow.center.lat},${follow.center.lng},${follow.from.toFixed(2)},${follow.to},${Math.round(follow.ms / 1000)}` : '';
   useEffect(() => {
-    if (!follow) return;
+    if (!follow || !ready) return;
     const center: [number, number] = [follow.center.lng, follow.center.lat];
-    cam.current?.jumpTo({ center, zoom: follow.from, padding });   // exactly on the pickup, no glide first
+    cam.current?.easeTo({ center, zoom: follow.from, padding, duration: FOLLOW_IN_MS, easing: 'ease' });   // onto the point
     if (follow.ms <= 0) return;
-    const h = setTimeout(() => cam.current?.easeTo({ center, zoom: follow.to, padding, duration: follow.ms, easing: 'linear' }), 50);
+    const h = setTimeout(() => cam.current?.easeTo({ center, zoom: follow.to, padding, duration: follow.ms, easing: 'linear' }), FOLLOW_IN_MS + 100);
     return () => clearTimeout(h);
-  }, [followKey, padding.bottom]);   // eslint-disable-line react-hooks/exhaustive-deps   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [followKey, padding.bottom, ready]);   // eslint-disable-line react-hooks/exhaustive-deps   // eslint-disable-line react-hooks/exhaustive-deps
 
   const a = pins.find(p => p.kind === 'pickup'), b = pins.find(p => p.kind === 'dropoff');
   const line = useMemo(() => {
@@ -87,12 +92,12 @@ export const AppMap = forwardRef<AppMapRef, {
   return (
     <View style={s.wrap}>
       <View style={StyleSheet.absoluteFill} onTouchStart={() => { if (!follow) setFinger(true); }} onTouchEnd={e => { if (!e.nativeEvent.touches?.length) setFinger(false); }} onTouchCancel={() => setFinger(false)}>
-      <Map ref={mapRef} testID={testID} style={StyleSheet.absoluteFill} dragPan={!follow} touchZoom={!follow} doubleTapHoldZoom={!follow} touchRotate={!follow} touchPitch={!follow} mapStyle={mapStyleUrl()} logo={false} attribution compass={false}
+      <Map ref={mapRef} onDidFinishLoadingMap={() => setReady(true)} testID={testID} style={StyleSheet.absoluteFill} dragPan={!follow} touchZoom={!follow} doubleTapHoldZoom={!follow} touchRotate={!follow} touchPitch={!follow} mapStyle={mapStyleUrl()} logo={false} attribution compass={false}
         onRegionWillChange={e => { if (e.nativeEvent.userInteraction) setMoving(true); }}
         onRegionIsChanging={e => { if (e.nativeEvent.userInteraction && !moving.current) setMoving(true); }}
         onRegionDidChange={e => { finger.current = false; setMoving(false); const c = e.nativeEvent.center; onMoved?.({ lng: c[0], lat: c[1] }); }}
         onPress={() => setFinger(false)}>
-        <Camera ref={cam} initialViewState={follow ? { center: [follow.center.lng, follow.center.lat], zoom: follow.from, padding } : { center: [start.lng, start.lat], zoom }} />
+        <Camera ref={cam} initialViewState={follow ? { center: [follow.center.lng, follow.center.lat], zoom: follow.from - 2, padding } : { center: [start.lng, start.lat], zoom }} />
         {line ? (
           <GeoJSONSource id="route" data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: line.coords } }}>
             <Layer id="route-casing" type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }} paint={{ 'line-color': '#000000', 'line-width': 8, 'line-opacity': 0.35 }} />
@@ -122,7 +127,7 @@ export const AppMap = forwardRef<AppMapRef, {
       ) : null}
       {pulse && pulseXY && !touching ? (
         <View pointerEvents="none" style={pulseXY.x < 0 ? s.pulseCentre : { position: 'absolute', left: pulseXY.x - pulseR, top: pulseXY.y - pulseR }}>
-          <Pulse radius={pulseR} from={pulse.from} ms={pulse.ms} />
+          <Pulse radius={pulseR} from={pulse.from} ms={pulse.ms} delay={follow && ready ? FOLLOW_IN_MS : 0} />
         </View>
       ) : null}
       {touching ? null : <Text style={s.credit}>{t('map_credit')}</Text>}
