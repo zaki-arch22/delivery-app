@@ -231,7 +231,7 @@ const s = StyleSheet.create({
   refChip: { backgroundColor: color.card, borderRadius: 999, paddingHorizontal: space(4), paddingVertical: space(2) },
   refText: { fontFamily: font.semibold, fontSize: 14 },
   sos: { backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 2, borderColor: color.amber, borderRadius: radius, padding: space(4), marginVertical: space(2), gap: space(2) },
-  mapBox: { height: '38%' },
+  mapBox: { flex: 1, minHeight: 0 },
   row: { flexDirection: 'row', gap: space(3), flexWrap: 'wrap', alignItems: 'center' },
   cash: { backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 2, borderColor: color.amber, borderRadius: radius, padding: space(4), marginVertical: space(2) },
   cashOk: { borderColor: color.lime },

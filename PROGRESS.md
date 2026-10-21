@@ -44,6 +44,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Milestone "fixes after the owner's review" (2026-10-20): bottom panels follow the finger (drag up/down, glide to open/folded, plain React Native); a finger on the map hides its pins and floating buttons until lifted; no language step at first launch (phone's language, change in Settings); distance in km on the route screen and the order screen; driver sign-up with first/last name, birth date, colour, plate, ID card, licence, ownership proof and 1-4 vehicle photos, never refused for quality (migration 017, staff console shows all of it); grey status-bar band #26282E on every screen (ui/Frame.tsx); receiver confirmation REMOVED on the owner's request (migration 018: orders search at once, track_confirm/track_decline gone, receiver page keeps "I am expecting it"). 620 tests + 14 database rules pass.
 
+- Fixes after the owner's phone test (2026-10-21): map icons hide using the map's own move events (touch events alone never fired on the phone); bottom panels get a third, full-screen height (content scrolls only there); grey band 70% of the status bar; no "0 DA" lines when there is no price; staff console button fills the whole-Algiers zone. The owner's order was refused with "We do not deliver there yet": his zone does not cover those points or is not open (cannot be checked from here: onrender.com is blocked for this machine).
+
 ## In progress
 - (none)
 

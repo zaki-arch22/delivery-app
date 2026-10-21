@@ -125,7 +125,7 @@ export default function OrderDetails() {
         </View>
         <T kind="muted" style={{ marginTop: space(1) }}>{t(`size_${size}_sub`)}</T>
 
-        <View style={s.fare} testID="price-box">
+        {quoting || quote ? <View style={s.fare} testID="price-box">
           {quoting && !quote ? <T kind="muted">{t('quote_loading')}</T> : quote ? (<>
             <View style={[s.fareRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
               <RoundButton testID="price-down" icon="minus" label={t('price_down')} disabled={!canDown} onPress={() => setPrice(price - step)} light />
@@ -137,13 +137,13 @@ export default function OrderDetails() {
             </View>
             <T kind="muted" testID="trip-info" style={{ textAlign: 'center' }}>{t(quote.vehicle === 'car' ? 'by_car' : 'by_motorbike')} · {t(quote.distance_estimated ? 'trip_info_est' : 'trip_info', { km: km(quote.distance_m), min: minutes(quote.duration_s) })} · {t('price_range', { min: money(quote.min_da), max: money(quote.max_da) })}</T>
           </>) : null}
-        </View>
+        </View> : null}
 
-        <View style={[s.autoRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+        {quote ? <View style={[s.autoRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
           <Icon name="zap" tint={color.lime} />
           <T style={{ flex: 1 }}>{t('auto_accept', { p: money(price) })}</T>
           <Switch testID="auto-accept" value={auto} onValueChange={setAuto} trackColor={{ true: color.lime, false: color.card2 }} thumbColor={color.pureWhite} accessibilityLabel={t('auto_accept', { p: money(price) })} />
-        </View>
+        </View> : null}
 
         <Gap n={2} />
         <T kind="label">{t('recipient_title')}</T>
@@ -177,7 +177,7 @@ export default function OrderDetails() {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.page },
-  mapBox: { height: '36%' },
+  mapBox: { flex: 1, minHeight: 0 },
   top: { position: 'absolute', top: 0, left: 0, right: 0 },
   summary: { margin: space(3), backgroundColor: color.card, borderRadius: 20, padding: space(3), alignItems: 'center', gap: space(3) },
   sumLine: { fontFamily: font.semibold, fontSize: 15 },

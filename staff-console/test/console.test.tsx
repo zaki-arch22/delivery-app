@@ -50,11 +50,11 @@ test('2. login needs the authenticator code; a wrong code is refused with a clea
   expect(localStorage.length + sessionStorage.length).toBe(0);                        // the token is never stored in the browser
 });
 
-test('3. zones: create a rectangle (starts CLOSED), then open it', async () => {
+test('3. zones: create the all-of-Algiers rectangle in one click (starts CLOSED), then open it', async () => {
   await u.click(nav().getByRole('button', { name: 'Zones' }));
   await u.type(await screen.findByLabelText('Zone name'), 'Algiers centre');
-  await u.type(screen.getByLabelText('South latitude'), '36.6'); await u.type(screen.getByLabelText('North latitude'), '36.9');
-  await u.type(screen.getByLabelText('West longitude'), '2.9'); await u.type(screen.getByLabelText('East longitude'), '3.3');
+  await u.click(screen.getByRole('button', { name: /all of Algiers/ }));                 // one click fills the whole wilaya
+  expect(screen.getByLabelText('South latitude')).toHaveValue('36.55'); expect(screen.getByLabelText('East longitude')).toHaveValue('3.42');
   await u.click(screen.getAllByRole('button', { name: 'New zone' }).at(-1)!);
   expect(await screen.findByRole('status')).toHaveTextContent('starts CLOSED');
   const row = (await screen.findByText('Algiers centre')).closest('tr')!; expect(within(row).getByText('Closed')).toBeInTheDocument();

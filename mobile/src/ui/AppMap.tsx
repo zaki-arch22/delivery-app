@@ -21,11 +21,23 @@ export const AppMap = forwardRef<AppMapRef, {
 }>(function AppMap({ start, zoom = 15, pins = [], centerPin, onMoved, route, fit, pad, testID = 'map', onTouching }, ref) {
   const { t } = useApp();
   const cam = useRef<CameraRef>(null);
-  // While a finger is on the map, every icon on it disappears (only the centre pin, which marks the chosen point, stays);
-  // they come back when the last finger is lifted. The screen hides its own buttons and cards too (onTouching).
+  // While a finger is on the map or the map is moving under it, every icon on it disappears (only the centre pin, which
+  // marks the chosen point, stays); they come back when the map stops. The screen hides its own buttons and cards too
+  // (onTouching). Two signals, because on phones the native map keeps the finger's moves to itself: a touch on the map
+  // (a press without moving) and the map's own "starts moving because of the person / stopped moving" events.
   const [touching, setTouching] = useState(false);
-  const isTouching = useRef(false);
-  const touch = (on: boolean) => { if (isTouching.current === on) return; isTouching.current = on; setTouching(on); onTouching?.(on); };
+  const finger = useRef(false), moving = useRef(false), shown = useRef(false);
+  const safety = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sync = () => {
+    const on = finger.current || moving.current;
+    if (safety.current) { clearTimeout(safety.current); safety.current = null; }
+    if (on) safety.current = setTimeout(() => { finger.current = false; moving.current = false; sync(); }, 6000);   // never stay hidden by a lost event
+    if (shown.current === on) return;
+    shown.current = on; setTouching(on); onTouching?.(on);
+  };
+  const setFinger = (on: boolean) => { finger.current = on; sync(); };
+  const setMoving = (on: boolean) => { moving.current = on; sync(); };
+  useEffect(() => () => { if (safety.current) clearTimeout(safety.current); }, []);
   const padding: Pad = { top: 80, bottom: 80, left: 50, right: 50, ...pad };
   const fitNow = (pts: Point[]) => {
     if (pts.length === 0) return;
@@ -46,9 +58,12 @@ export const AppMap = forwardRef<AppMapRef, {
 
   return (
     <View style={s.wrap}>
-      <View style={StyleSheet.absoluteFill} onTouchStart={() => touch(true)} onTouchEnd={e => { if (!e.nativeEvent.touches?.length) touch(false); }} onTouchCancel={() => touch(false)}>
+      <View style={StyleSheet.absoluteFill} onTouchStart={() => setFinger(true)} onTouchEnd={e => { if (!e.nativeEvent.touches?.length) setFinger(false); }} onTouchCancel={() => setFinger(false)}>
       <Map testID={testID} style={StyleSheet.absoluteFill} mapStyle={mapStyleUrl()} logo={false} attribution compass={false}
-        onRegionDidChange={e => { const c = e.nativeEvent.center; onMoved?.({ lng: c[0], lat: c[1] }); }}>
+        onRegionWillChange={e => { if (e.nativeEvent.userInteraction) setMoving(true); }}
+        onRegionIsChanging={e => { if (e.nativeEvent.userInteraction && !moving.current) setMoving(true); }}
+        onRegionDidChange={e => { finger.current = false; setMoving(false); const c = e.nativeEvent.center; onMoved?.({ lng: c[0], lat: c[1] }); }}
+        onPress={() => setFinger(false)}>
         <Camera ref={cam} initialViewState={{ center: [start.lng, start.lat], zoom }} />
         {line ? (
           <GeoJSONSource id="route" data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: line.coords } }}>

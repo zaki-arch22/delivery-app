@@ -13,6 +13,10 @@ export function extractPolygon(text: string): any | null {
 }
 export const rectangle = (s: number, w: number, n: number, e: number) => ({ type: 'Polygon', coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] });
 
+// A generous rectangle around the whole wilaya of Algiers (Zéralda to Rouïba, the coast to Birtouta), so the first
+// zone needs no typed coordinates. It also covers a little sea and the edges of the next wilayas: fine for a test start.
+export const ALGIERS_BOX = { s: '36.55', w: '2.78', n: '36.84', e: '3.42' };
+
 export function Zones() {
   useLang();
   const { data, error, loading, reload } = useLoad(() => api<{ zones: any[] }>('/list_zones'), []);
@@ -47,9 +51,10 @@ export function Zones() {
           <button type="button" role="tab" aria-selected={mode === 'rect'} onClick={() => setMode('rect')}>{t('zones.rect')}</button>
           <button type="button" role="tab" aria-selected={mode === 'paste'} onClick={() => setMode('paste')}>{t('zones.paste')}</button>
         </div>
-        {mode === 'rect' ? (
+        {mode === 'rect' ? (<>
+          <button type="button" onClick={() => { setBox(ALGIERS_BOX); if (!name.trim()) setName('Alger'); }}>{t('zones.algiers')}</button>
           <div className="grid2">{(['s', 'n', 'w', 'e'] as const).map(k => <Field key={k} label={t(k === 's' ? 'zones.south' : k === 'n' ? 'zones.north' : k === 'w' ? 'zones.west' : 'zones.east')}><input inputMode="decimal" value={box[k]} onChange={e => setBox({ ...box, [k]: e.target.value.replace(/[^\d.-]/g, '') })} /></Field>)}</div>
-        ) : (
+        </>) : (
           <Field label="GeoJSON" hint={t('zones.geoHelp')}><textarea rows={6} value={geo} maxLength={60000} onChange={e => setGeo(e.target.value)} /></Field>
         )}
         <button type="button" className="primary" onClick={create}>{t('zones.create')}</button>

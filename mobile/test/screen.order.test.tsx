@@ -99,12 +99,17 @@ test('a full order: route, fare, distance, couriers offer, choose one, delivered
   await fireEvent.press(screen.getByTestId('send-parcel'));
   expect(await screen.findByTestId('pick-title')).toHaveTextContent(/Where does it go\?/);
   expect(screen.getByTestId('marker-A')).toBeTruthy();                                 // the pickup stays on the map
-  expect(screen.getByTestId('status-bar-area')).toHaveStyle({ height: 24, backgroundColor: '#26282E' });   // our grey band, the status bar's height
+  expect(screen.getByTestId('status-bar-area')).toHaveStyle({ height: 20, backgroundColor: '#26282E' });   // our grey band, a bit shorter than the status bar (24)
   // A finger on the map: the pins and floating buttons step aside; they come back when it is lifted.
   const mapEl = screen.getAllByTestId('map').slice(-1)[0];
   await act(async () => { fireEvent(mapEl, 'touchStart', { nativeEvent: { touches: [{}] } }); });
   expect(screen.queryByTestId('marker-A')).toBeNull();
   await act(async () => { fireEvent(mapEl, 'touchEnd', { nativeEvent: { touches: [] } }); });
+  expect(screen.getByTestId('marker-A')).toBeTruthy();
+  // Dragging the map: the map itself says it starts moving because of the person, then that it stopped.
+  await act(async () => { fireEvent(mapEl, 'regionWillChange', { nativeEvent: { userInteraction: true } }); });
+  expect(screen.queryByTestId('marker-A')).toBeNull();
+  await moveMapTo(D);                                                                    // the map stops: everything is back
   expect(screen.getByTestId('marker-A')).toBeTruthy();
   await moveMapTo(D);
   await fireEvent.press(screen.getByTestId('confirm-point'));
@@ -253,6 +258,7 @@ test('a place we do not serve is refused with a clear message, and no order is m
   await sender('0555000001');
   await chooseRoute({ lat: 35.6971, lng: -0.6308 }, D);   // Oran: outside the open zone
   expect(await screen.findByTestId('order-msg')).toHaveTextContent(/We do not deliver there yet/);
+  expect(screen.queryByTestId('auto-accept')).toBeNull();                               // no price: no "0 DA" lines
   expect(screen.queryByTestId('price')).toBeNull();
 });
 
