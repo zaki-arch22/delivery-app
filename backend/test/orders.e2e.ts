@@ -372,6 +372,18 @@ require('http').createServer((req: any, res: any) => {
     const offC = await until(async () => (await pool.query(`SELECT 1 FROM offers WHERE order_id=$1 AND driver_profile_id=$2`, [small.id, C.id])).rows[0]);
     ok('VEH a car courier is shown a SMALL parcel too', !!offC);
     ok('VEH ...and so is the motorbike courier', !!(await until(async () => (await pool.query(`SELECT 1 FROM offers WHERE order_id=$1 AND driver_profile_id=$2`, [small.id, M.id])).rows[0])));
+    // Public profiles (owner's wish): the customer opens the courier from his offer; the courier opens the sender.
+    const reqM = (await api('/list_requests', undefined, M.token)).b.requests.find((r: any) => r.order_id === small.id);
+    await api('/make_bid', { offer_id: reqM.offer_id }, M.token);
+    const pm = (await api('/public_profile?offer_id=' + reqM.offer_id, undefined, custV)).b;
+    ok('PROF the customer sees the courier\'s profile: name, vehicle, deliveries, member since, (no) comments', pm.name === 'Moto Courier' && pm.vehicle === 'motorbike' && pm.completed === 0 && !!pm.member_since && pm.comments.length === 0, pm);
+    // Comments: the courier of an earlier delivered order opens that sender, who was rated "clear instructions" (T10).
+    const pa = (await api('/public_profile?order_id=' + o1.id, undefined, D3.token)).b;
+    ok('PROF comments are shown with their stars and date, never who wrote them', pa.comments.some((c: any) => c.comment === 'clear instructions' && c.stars === 5) && pa.comments.every((c: any) => Object.keys(c).sort().join() === 'at,comment,stars') && pa.completed >= 1, pa);
+    const ps = (await api('/public_profile?offer_id=' + reqM.offer_id, undefined, M.token)).b;
+    ok('PROF the courier sees the sender\'s profile (parcels sent, comments), no vehicle', ps.name === 'Vehicle Sender' && ps.type === 'user' && ps.vehicle === null && ps.completed === 0 && Array.isArray(ps.comments), ps);
+    const nb = (await api(`/nearby_couriers?lat=${P.lat}&lng=${P.lng}`, undefined, custV)).b;
+    ok('PROF the customer\'s map shows the couriers nearby as vehicles (car and motorbike)', nb.couriers.length === 2 && nb.couriers.map((c: any) => c.vehicle).sort().join() === 'car,motorbike', nb);
     await api('/cancel_order', { order_id: small.id, reason: 'test' }, custV);
     const large = (await order(custV, 'veh-large-1', { auto_accept: false }, 'large')).b;
     await until(async () => (await pool.query(`SELECT 1 FROM offers WHERE order_id=$1 AND driver_profile_id=$2`, [large.id, C.id])).rows[0]);

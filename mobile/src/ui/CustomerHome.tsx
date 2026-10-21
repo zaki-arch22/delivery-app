@@ -16,6 +16,7 @@ import { Sheet } from './Sheet';
 import { Drawer } from './Drawer';
 import { PlaceSearch } from './PlaceSearch';
 import { MapOverlay, Button, Notice, RoundButton, T } from './kit';
+import { Nearby, people } from '../lib/people';
 import { Icon } from './Icon';
 
 // Customer mode home (inDrive-style): the map fills the screen, the pickup point is under the fixed pin (move the map, or
@@ -61,6 +62,14 @@ export function CustomerHome() {
     return () => clearTimeout(h);
   }, [center.lat, center.lng, search, lang]);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Couriers online around the pin, as small cars and motorbikes (inDrive-style), refreshed when the map stops and every 20 s.
+  const [near, setNear] = useState<Nearby | null>(null);
+  useEffect(() => {
+    const get = () => people(services.client).nearby(center).then(setNear).catch(() => {});
+    const first = setTimeout(get, 800), h = setInterval(get, 20_000);
+    return () => { clearTimeout(first); clearInterval(h); };
+  }, [center.lat, center.lng]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   const pickupParams = { plat: String(center.lat), plng: String(center.lng), pname: place ?? '' };
   const whereTo = () => router.push({ pathname: '/new-order', params: pickupParams });
   const again = (r: RecentPlace) => router.push({ pathname: '/order-details', params: { ...pickupParams, dlat: String(r.lat), dlng: String(r.lng), dname: r.name, daddr: JSON.stringify(r.address), rname: r.recipient_name ?? '', rphone: r.recipient_phone ?? '' } });
@@ -69,7 +78,7 @@ export function CustomerHome() {
   return (
     <View style={s.root} testID="screen-home">
       <View style={{ flex: 1 }}>
-        <AppMap onTouching={setMapTouch} ref={map} start={ALGIERS} zoom={13} onMoved={setCenter} centerPin={{ kind: 'pickup', label: t('pickup'), title: place }} />
+        <AppMap onTouching={setMapTouch} ref={map} start={ALGIERS} zoom={13} onMoved={setCenter} nearby={near?.couriers ?? []} centerPin={{ kind: 'pickup', label: t('pickup'), title: place }} />
         <MapOverlay hidden={mapTouch} style={s.top}>
           {noLoc ? (
             <Pressable testID="location-banner" onPress={locate} style={s.banner} accessibilityRole="button">

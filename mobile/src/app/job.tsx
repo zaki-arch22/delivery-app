@@ -171,6 +171,7 @@ export default function JobScreen() {
       ) : null}
       <Card style={{ backgroundColor: color.card2 }}>
         <T kind="label">{toPickup ? '📦' : '🏁'} {who.name}</T>
+        {toPickup && job.leg === 'delivery' ? <Button testID="sender-profile" kind="plain" icon="user" label={t('see_sender_profile')} onPress={() => router.push({ pathname: '/public-profile', params: { order_id: job.id } })} /> : null}
         <T testID="job-address">{addressLine(addr)}</T>
         {addr.notes ? <T kind="muted">{addr.notes}</T> : null}
         <View style={s.row}>

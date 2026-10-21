@@ -36,6 +36,7 @@ import Notifications from '../src/app/notifications';
 import Safety from '../src/app/safety';
 import Help from '../src/app/help';
 import AddCustomer from '../src/app/add-customer';
+import PublicProfileScreen from '../src/app/public-profile';
 
 import { AppFrame } from '../src/ui/Frame';
 export const API = process.env.API_URL!;
@@ -64,7 +65,7 @@ export function routes(services: Services) {
       <AppProvider services={services}><PushBridge /><AppFrame><Stack screenOptions={{ headerShown: false }} /></AppFrame></AppProvider>
     </SafeAreaProvider>
   );
-  return { _layout: Layout, index: Start, welcome: Welcome, login: Login, 'contact-phone': ContactPhone, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup, 'new-order': NewOrder, 'order-details': OrderDetails, 'order/[id]': OrderScreen, orders: Orders, 'rate/[id]': Rate, 'problem/[id]': Problem, job: JobScreen, jobs: Jobs, cash: Cash, rules: Rules, record: RecordScreen, profile: Profile, notifications: Notifications, safety: Safety, help: Help, 'add-customer': AddCustomer };
+  return { _layout: Layout, index: Start, welcome: Welcome, login: Login, 'contact-phone': ContactPhone, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup, 'new-order': NewOrder, 'order-details': OrderDetails, 'order/[id]': OrderScreen, orders: Orders, 'rate/[id]': Rate, 'problem/[id]': Problem, job: JobScreen, jobs: Jobs, cash: Cash, rules: Rules, record: RecordScreen, profile: Profile, notifications: Notifications, safety: Safety, help: Help, 'add-customer': AddCustomer, 'public-profile': PublicProfileScreen };
 }
 export async function open(services: Services) {
   const r = await renderRouter(routes(services), { initialUrl: '/' });

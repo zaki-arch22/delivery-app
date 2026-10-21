@@ -391,6 +391,40 @@ const ev = async (type: string) => (await pool.query(`SELECT count(*)::int n FRO
     }
   }
 
+  {
+    // ===== SEC24 public profiles and couriers on the map: only through your own order, nothing to follow anyone with =====
+    await pool.query(`UPDATE driver_details SET is_online=false`);
+    const Dz = await makeDriver('+213551250001', 'Prof Driver', 36.7545, 3.0590);
+    const Dw = await makeDriver('+213551250002', 'Other Driver', 36.9000, 3.3000);   // far away: never sees the request
+    const X = await makeUser('+213551250011', 'Prof Sender'), Y = await makeUser('+213551250012', 'Nosy User');
+    const ox = await order(X.token, 'sec24-order-x', { auto_accept: false });
+    let req: any = null, lastList: any = null; for (let i = 0; i < 50 && !req; i++) { lastList = await api('/list_requests', undefined, Dz.token); req = lastList.b.requests?.find((r: any) => r.order_id === ox.id); if (!req) await sleep(300); }
+    ok('SEC24 (setup) the nearby courier receives the request', !!req, { ox, n: lastList.b.requests?.length });
+    if (!req) req = { offer_id: 0 };
+    await api('/make_bid', { offer_id: req.offer_id }, Dz.token);
+    const prof = (q: string, tok?: string) => api('/public_profile?' + q, undefined, tok);
+    const mine = await prof('offer_id=' + req.offer_id, X.token);
+    ok('SEC24 the customer sees the courier who offered on HIS order', mine.s === 200 && mine.b.name === 'Prof Driver' && mine.b.type === 'driver' && Array.isArray(mine.b.comments), mine.b);
+    ok('SEC24 the profile carries no phone, id, account or document', !/phone|account|national|document|_id"|"id"/.test(JSON.stringify(mine.b)), mine.b);
+    ok('SEC24 another customer cannot open that courier through someone else\'s offer', (await prof('offer_id=' + req.offer_id, Y.token)).s === 404);
+    ok('SEC24 the courier sees the sender of a request shown to him', (await prof('offer_id=' + req.offer_id, Dz.token)).b.name === 'Prof Sender');
+    ok('SEC24 a courier who was not offered the request cannot see the sender', (await prof('offer_id=' + req.offer_id, Dw.token)).s === 404);
+    ok('SEC24 another customer cannot open profiles through my order id', (await prof('order_id=' + ox.id, Y.token)).s === 404 && (await prof('order_id=' + ox.id, Dw.token)).s === 404);
+    let badIds = 0; for (const v of ['abc', '1e3', '-1', '1 OR 1=1', '99999999999999999999', '0']) if ((await prof('offer_id=' + encodeURIComponent(v), X.token)).b.error === 'BAD_ID') badIds++;
+    ok('SEC24 strange offer ids are refused before touching the database', badIds === 6, badIds);
+    ok('SEC24 an unknown offer looks exactly like someone else\'s (no hint it exists)', (await prof('offer_id=999999', X.token)).s === 404);
+    ok('SEC24 no id at all, or a bad order id, is refused', (await prof('', X.token)).b.error === 'BAD_INPUT' && (await prof('order_id=x', X.token)).s === 400);
+    ok('SEC24 profiles need a login', (await prof('offer_id=' + req.offer_id)).s === 401);
+    const near = await api(`/nearby_couriers?lat=${P.lat}&lng=${P.lng}`, undefined, X.token);
+    ok('SEC24 couriers near the pin are shown (online, approved, fresh position)', near.s === 200 && near.b.couriers.length === 1 && near.b.radius_m > 0, near.b);
+    ok('SEC24 ...as a vehicle and a rounded position only: no name, id or exact spot', near.b.couriers.every((c: any) => Object.keys(c).sort().join() === 'lat,lng,vehicle' && Math.round(c.lat * 1000) === c.lat * 1000));
+    ok('SEC24 couriers on the map need a customer login', (await api(`/nearby_couriers?lat=1&lng=1`)).s === 401 && (await api(`/nearby_couriers?lat=1&lng=1`, undefined, Dz.token)).b.error === 'WRONG_PROFILE');
+    let badPts = 0; for (const qs of ['lat=x&lng=1', 'lat=999&lng=3', 'lat=36', '', 'lat=1e400&lng=3']) if ((await api('/nearby_couriers?' + qs, undefined, X.token)).b.error === 'BAD_POINT') badPts++;
+    ok('SEC24 strange positions are refused', badPts === 5, badPts);
+    await api('/cancel_order', { order_id: ox.id, reason: 'test' }, X.token);
+    await pool.query(`UPDATE driver_details SET is_online=false`);
+  }
+
   // ===== SEC15 evidence trail and code hygiene =====
   const need = ['upload_not_image', 'upload_bad_image', 'upload_cap', 'bad_token', 'app_token_on_staff_route', 'refresh_token_reuse', 'rate_limited', 'staff_login_failed', 'otp_wrong', 'sms_ip_cap', 'sms_daily_cap_reached', 'staff_login_ok', 'logout_everywhere', 'google_token_rejected'];
   const missing: string[] = []; for (const t of need) if (!(await ev(t))) missing.push(t);

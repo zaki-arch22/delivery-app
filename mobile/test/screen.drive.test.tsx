@@ -85,7 +85,13 @@ test('online, offer with cash, accept, pickup, wrong code, cash check, delivered
   expect(await openRequest()).toBeTruthy();
   expect(screen.getByTestId('offer-price')).toHaveTextContent(rx(money(o.offered_da)));
   expect(screen.getByTestId('offer-cash')).toHaveTextContent(rx(`Collect ${money(1500 + o.offered_da)} DA in cash`));   // goods + fee paid by the recipient
-  await act(async () => { await fireEvent.press(screen.getByTestId('accept-offer')); });
+  // The courier can open the sender's profile before answering (rating, parcels sent, comments).
+  await fireEvent.press(screen.getByTestId('sender-profile'));
+  await screen.findByTestId('screen-public-profile');
+  expect(await screen.findByTestId('pp-completed')).toBeTruthy();
+  expect(screen.getByText('Sender')).toBeTruthy();
+  await pressBack();
+  await act(async () => { await fireEvent.press(await screen.findByTestId('accept-offer')); });
 
   expect(await screen.findByTestId('job-step')).toHaveTextContent(/Go to the pickup/);
   expect(screen.getByTestId('job-address')).toHaveTextContent(/Rue Larbi Ben Mhidi 5/);

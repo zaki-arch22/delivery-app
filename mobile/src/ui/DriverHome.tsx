@@ -194,6 +194,7 @@ function RequestDetail({ r, now, busy, dist, cash, onBid, onSkip, onBack }: { r:
       <T>{t('offer_pickup', { d: dist(r.pickup_distance_m) })} · {t('offer_trip', { d: dist(r.trip_distance_m) })} · ~{minutes(r.trip_duration_s)} {t('min')}</T>
       <T testID="offer-cash" style={cash > 0 ? s.cash : undefined}>{cash > 0 ? '💵 ⚠ ' + t('offer_cash', { p: money(cash) }) : t('offer_no_cash')}</T>
       <T kind="muted">{t(`size_${r.size}` as any)} · {r.sender_rating ? t('offer_sender', { r: r.sender_rating }) : t('offer_sender_new')} · {r.pickup_address.street ?? r.pickup_address.landmark ?? ''}</T>
+      <Button testID="sender-profile" kind="plain" icon="user" label={t('see_sender_profile')} onPress={() => router.push({ pathname: '/public-profile', params: { offer_id: String(r.offer_id) } })} />
       <Button testID="accept-offer" busy={busy === 'bidown'} label={t('accept_for', { p: money(r.price_da) })} onPress={() => onBid()} />
       {ups.length ? (<>
         <T kind="muted">{t('offer_your_price')}</T>

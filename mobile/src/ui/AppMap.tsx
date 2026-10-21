@@ -6,6 +6,7 @@ import type { Point } from '../lib/location';
 import { useApp } from '../lib/app';
 import { color, font } from '../lib/theme';
 import { Icon } from './Icon';
+import { circle } from '../lib/people';
 
 export type Pin = { id: string; at: Point; label: string; kind: 'pickup' | 'dropoff' | 'driver'; vehicle?: 'motorbike' | 'car' };
 export type AppMapRef = { moveTo(p: Point, zoom?: number): void; fit(points: Point[]): void };
@@ -18,7 +19,8 @@ type Pad = { top: number; bottom: number; left: number; right: number };
 export const AppMap = forwardRef<AppMapRef, {
   start: Point; zoom?: number; pins?: Pin[]; centerPin?: { label: string; kind: 'pickup' | 'dropoff'; title?: string | null }; onMoved?: (p: Point) => void;
   route?: [number, number][] | null; fit?: Point[]; pad?: Partial<Pad>; testID?: string; onTouching?: (touching: boolean) => void;
-}>(function AppMap({ start, zoom = 15, pins = [], centerPin, onMoved, route, fit, pad, testID = 'map', onTouching }, ref) {
+  nearby?: { vehicle: 'motorbike' | 'car'; lat: number; lng: number }[]; area?: { center: Point; radius_m: number } | null;
+}>(function AppMap({ start, zoom = 15, pins = [], centerPin, onMoved, route, fit, pad, testID = 'map', onTouching, nearby = [], area }, ref) {
   const { t } = useApp();
   const cam = useRef<CameraRef>(null);
   // While a finger is on the map or the map is moving under it, every icon on it disappears (only the centre pin, which
@@ -72,6 +74,18 @@ export const AppMap = forwardRef<AppMapRef, {
               paint={line.dashed ? { 'line-color': color.lime, 'line-width': 4, 'line-dasharray': [1.5, 1.5] } : { 'line-color': color.lime, 'line-width': 5 }} />
           </GeoJSONSource>
         ) : null}
+        {area ? (
+          // The search area: couriers inside this circle see the request (it widens after a minute).
+          <GeoJSONSource id="search-area" data={{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [circle(area.center, area.radius_m)] } }}>
+            <Layer id="search-area-fill" type="fill" paint={{ 'fill-color': color.lime, 'fill-opacity': 0.08 }} />
+            <Layer id="search-area-line" type="line" paint={{ 'line-color': color.lime, 'line-width': 1.5, 'line-opacity': 0.6 }} />
+          </GeoJSONSource>
+        ) : null}
+        {touching ? null : nearby.map((c, i) => (
+          <Marker key={'n' + i} id={'nearby-' + i} lngLat={[c.lng, c.lat]} anchor="center">
+            <View style={s.nearby} accessibilityLabel={t(c.vehicle === 'car' ? 'nearby_car' : 'nearby_moto')}><Text style={s.nearbyText}>{c.vehicle === 'car' ? '🚗' : '🛵'}</Text></View>
+          </Marker>
+        ))}
         {touching ? null : pins.map(p => (
           <Marker key={p.id} id={p.id} lngLat={[p.at.lng, p.at.lat]} anchor={p.kind === 'driver' ? 'center' : 'bottom'}>
             <PinView kind={p.kind} label={p.label} vehicle={p.vehicle} />
@@ -111,6 +125,8 @@ const s = StyleSheet.create({
   stem: { width: 3, height: 12, backgroundColor: color.pureWhite, borderBottomLeftRadius: 2, borderBottomRightRadius: 2 },
   driver: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: color.pureWhite, borderWidth: 3, borderColor: color.lime },
   driverText: { fontSize: 20 },
+  nearby: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: color.card, borderWidth: 1.5, borderColor: color.line },
+  nearbyText: { fontSize: 16 },
   // The pin's stem tip sits exactly on the map's centre; the address bubble floats above it (like inDrive).
   centerWrap: { position: 'absolute', left: 0, right: 0, bottom: '50%', alignItems: 'center' },
   bubble: { maxWidth: '70%', backgroundColor: color.pureWhite, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 6,

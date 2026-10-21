@@ -170,6 +170,15 @@ test('a full order: route, fare, distance, couriers offer, choose one, delivered
   expect((await call('/make_bid', { offer_id: r2.offer_id, price_da: rec + 80 }, d2))).toMatchObject({ bid: { price_da: rec + 80 } });   // proposes 20 DA more
   expect(await screen.findByTestId('offers')).toHaveTextContent(/Choose a courier/);
   expect(await screen.findByTestId('offer-' + r2.offer_id)).toHaveTextContent(/Yacine Fast/);
+  expect((await screen.findAllByTestId(/^marker-nearby-/)).length).toBe(2);                 // the two couriers around the pickup, as vehicles
+  expect(screen.getByTestId('source-search-area')).toBeTruthy();                           // the search circle
+  // Tapping a courier opens his full profile (rating, deliveries, member since, comments).
+  await fireEvent.press(screen.getByTestId('courier-' + r2.offer_id));
+  expect(await screen.findByTestId('pp-name')).toHaveTextContent('Yacine Fast');
+  expect(screen.getByTestId('pp-completed')).toHaveTextContent('0');
+  expect(screen.getByTestId('pp-no-comments')).toHaveTextContent(/No comments yet/);
+  await pressBack();
+  await screen.findByTestId('offer-' + r2.offer_id);
   expect(screen.getByTestId('offer-' + r1.offer_id)).toHaveTextContent(new RegExp(`${rec + 60} DA`));
   await act(async () => { await fireEvent.press(screen.getByTestId('decline-' + r2.offer_id)); });   // too expensive
   await waitFor(() => expect(screen.queryByTestId('offer-' + r2.offer_id)).toBeNull());

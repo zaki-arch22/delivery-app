@@ -5,6 +5,7 @@ import { useApp, useNotices } from '../../lib/app';
 import { errorMessage } from '../../lib/errors';
 import { ACTIVE, addressLine, Bid, km, minutes, money, Order, orders, RecallReason, when, whatsappUrl } from '../../lib/orders';
 import { deliveryQr, pickupQr } from '../../lib/proof';
+import { Nearby, people } from '../../lib/people';
 import { Qr } from '../../ui/Qr';
 import { Choice } from '../../ui/Choice';
 import { color, font, radius, space } from '../../lib/theme';
@@ -15,6 +16,9 @@ import { Icon } from '../../ui/Icon';
 import type { Key } from '../../i18n';
 
 const POLL_MS = 4000;   // status and the courier's position while active; live notifications refresh at once in between
+
+const NEARBY_MS = 10_000;   // couriers around the pickup are refreshed this often while searching
+const WIDEN_MS = 60_000;    // the server widens the search circle after a minute (config WIDEN_AFTER_S)
 
 // One order, from "waiting for the receiver" to "delivered" (contract B). The map shows A, B, the route and the courier;
 // the panel follows the order's state; while couriers answer, their offers appear on top for the customer to choose.
@@ -30,12 +34,18 @@ export default function OrderScreen() {
   const [now, setNow] = useState(Date.now());
   const [recalling, setRecalling] = useState(false), [recallReason, setRecallReason] = useState<RecallReason | null>(null);
   const fail = (e: unknown) => { const m = errorMessage(e); setMsg({ text: t(m.key, m.vars), warn: true }); };
+  const [near, setNear] = useState<Nearby | null>(null);   // couriers around the pickup while searching (cars on the map)
 
   const load = useCallback(() => api.get(id).then(x => { setO(x); setWant(w => (w > x.offered_da ? w : x.offered_da)); }).catch(() => {}), [id]);   // eslint-disable-line react-hooks/exhaustive-deps
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useNotices(n => { if (n.order_id === id) load(); });
   useEffect(() => { if (!o || !ACTIVE.includes(o.status)) return; const h = setInterval(load, POLL_MS); return () => clearInterval(h); }, [o?.status, load]);
   useEffect(() => { if (!o || o.status !== 'searching') return; const h = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(h); }, [o?.status]);
+  useEffect(() => {
+    if (!o || o.status !== 'searching') { setNear(null); return; }
+    const at = { lat: o.pickup_lat, lng: o.pickup_lng }, get = () => people(services.client).nearby(at).then(setNear).catch(() => {});
+    get(); const h = setInterval(get, NEARBY_MS); return () => clearInterval(h);
+  }, [o?.status, o?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   async function run(k: string, f: () => Promise<Order>) { setBusy(k); setMsg(null); try { const x = await f(); setO(x); setWant(x.offered_da); } catch (e) { fail(e); load(); } finally { setBusy(null); } }
   const cancel = () => Alert.alert(t('cancel_confirm'), t('cancel_sub'), [
@@ -62,7 +72,8 @@ export default function OrderScreen() {
 
   return (
     <View style={s.root} testID="screen-order">
-      <AppMap onTouching={setMapTouch} start={A} zoom={13} pins={pins} route={o.route} fit={fit} pad={{ top: showBids ? H * 0.5 : 110, bottom: H * 0.5 }} />
+      <AppMap onTouching={setMapTouch} start={A} zoom={13} pins={pins} route={o.route} fit={fit} nearby={near?.couriers ?? []}
+        area={o.status === 'searching' && near ? { center: A, radius_m: now - new Date(o.search_started_at).getTime() > WIDEN_MS ? near.wide_radius_m : near.radius_m } : null} pad={{ top: showBids ? H * 0.5 : 110, bottom: H * 0.5 }} />
       <MapOverlay hidden={mapTouch} style={s.top}>
         <View style={[s.topRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
           <RoundButton testID="back" icon="arrow-left" label={t('back')} onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))} />
@@ -92,13 +103,15 @@ export default function OrderScreen() {
 
         {['assigned', 'picked_up'].includes(o.status) && o.driver ? (
           <Card testID="driver-card" style={{ backgroundColor: color.card2 }}>
-            <View style={[s.drvRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+            <Pressable testID="driver-profile" accessibilityRole="button" accessibilityLabel={t('see_profile') + ': ' + o.driver.name}
+              onPress={() => router.push({ pathname: '/public-profile', params: { order_id: o.id } })} style={[s.drvRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
               <View style={s.avatar}><T style={s.avatarText}>{o.driver.name.charAt(0).toUpperCase()}</T></View>
               <View style={{ flex: 1 }}>
                 <T style={s.strong}>{o.driver.name}</T>
                 <T kind="muted">{o.driver.rating ? `★ ${o.driver.rating}` : t('no_rating')} · {t('deliveries_n', { n: o.driver.deliveries })} · {t(o.driver.vehicle === 'car' ? 'by_car' : 'by_motorbike')}</T>
               </View>
-            </View>
+              <Icon name={rtl ? 'chevron-left' : 'chevron-right'} tint={color.muted} />
+            </Pressable>
             {o.eta_s != null ? <T style={s.eta} testID="eta">{t(o.status === 'assigned' ? 'eta_pickup_then' : 'eta_arrive', { m: minutes(o.eta_s) })}{o.eta_estimated ? ' ' + t('estimate') : ''}</T> : null}
           </Card>
         ) : null}
@@ -195,13 +208,15 @@ function Offers({ bids, now, busy, onAccept, onDecline }: { bids: Bid[]; now: nu
                 <T style={s.offerPrice}>{money(b.price_da)} {t('da')}</T>
                 {b.eta_s != null ? <T style={s.offerEta}>{t('min_n', { n: minutes(b.eta_s) })}</T> : null}
               </View>
-              <View style={[s.drvRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+              <Pressable testID={'courier-' + b.offer_id} accessibilityRole="button" accessibilityLabel={t('see_profile') + ': ' + b.driver.name}
+                onPress={() => router.push({ pathname: '/public-profile', params: { offer_id: String(b.offer_id) } })} style={[s.drvRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
                 <View style={s.avatar}><T style={s.avatarText}>{b.driver.name.charAt(0).toUpperCase()}</T></View>
                 <View style={{ flex: 1 }}>
                   <T style={s.strong}>{b.driver.name} {b.driver.rating ? `★ ${b.driver.rating}` : ''}</T>
                   <T kind="muted">{t('deliveries_n', { n: b.driver.deliveries })} · {t(b.driver.vehicle === 'car' ? 'by_car' : 'by_motorbike')}</T>
                 </View>
-              </View>
+                <Icon name={rtl ? 'chevron-left' : 'chevron-right'} tint={color.muted} />
+              </Pressable>
               <View style={s.bar}><View style={[s.barFill, { width: `${Math.min(100, Math.round((sec / 40) * 100))}%` }]} /></View>
               <View style={[s.offerBtns, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
                 <Button testID={'decline-' + b.offer_id} kind="secondary" style={{ flex: 1 }} busy={busy === 'dec' + b.offer_id} label={t('decline')} onPress={() => onDecline(b)} />

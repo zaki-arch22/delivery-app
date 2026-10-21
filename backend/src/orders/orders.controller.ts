@@ -77,6 +77,14 @@ export class DriverController {
 export class RatingsController {
   constructor(private s: RatingsService) {}
   // Active profile (user or driver) must be a real, active profile; the service checks it belongs to the order.
+  @Access('account') @Get('public_profile') profile(@Req() r: any, @Query('offer_id') offer: string, @Query('order_id') order: string) {
+    if (who(r).status !== 'active') throw fail(403, 'PROFILE_NOT_ACTIVE', 'Profile is not active');
+    return this.s.publicProfile(who(r), { offer_id: offer, order_id: order });
+  }
+  @Access('user') @Get('nearby_couriers') nearby(@Req() r: any, @Query('lat') lat: string, @Query('lng') lng: string) {
+    const p = point({ lat: Number(lat), lng: Number(lng) }, 'position');
+    return this.s.nearbyCouriers(pid(r), p.lat, p.lng);
+  }
   @Access('account') @Post('submit_rating') @HttpCode(200) rate(@Req() r: any, @Body() b: any) {
     if (!pid(r) || who(r).status !== 'active') throw fail(403, 'PROFILE_NOT_ACTIVE', 'Profile is not active');
     return this.s.submit(pid(r), b);

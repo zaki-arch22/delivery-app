@@ -56,6 +56,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - First real test with two phones (2026-10-21): the courier never saw the request. Causes fixed: (1) the phone sent its position only after moving 25 m, so a waiting courier went stale after 2 minutes (now every 15 s + a 30 s resend; first reading ≤ 10 s; "finding your location" warning); (2) a car courier never saw small/medium parcels (now a car takes any parcel); (3) the first precise reading could hang indoors. Not verifiable from here: whether the friend's profile was approved and online with location allowed.
 
+- Couriers on the map + public profiles (2026-10-21, owner's wish): nearby_couriers (cars/motorbikes around the pin on the home map and the searching order, rounded positions, search circle), public_profile (courier from his offer/card, sender from a request/job: rating, deliveries or parcels sent, member since, latest comments without names); attack tests SEC24; screen public-profile.
+
 ## In progress
 - (none)
 
