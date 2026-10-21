@@ -66,8 +66,6 @@ export default function OrderScreen() {
   // While searching the map centres on the pickup (the pulse around it, like inDrive); afterwards it shows the trip.
   const fit = o.status === 'searching' ? [A] : o.driver?.location && ['assigned', 'picked_up'].includes(o.status) ? [o.driver.location, o.status === 'assigned' ? A : B] : [A, B];
   const H = Dimensions.get('window').height;
-  const left = (iso: string | null) => (iso ? Math.max(0, Math.round((new Date(iso).getTime() - now) / 1000)) : 0);
-  const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
   const price = o.locked_da ?? o.offered_da;
   const showBids = o.status === 'searching' && o.bids.length > 0;
   // While searching: the map stays centred on the pickup and zooms out slowly (zoom 16 down to 12 over the whole search,
@@ -92,11 +90,7 @@ export default function OrderScreen() {
 
 
         {o.status === 'searching' ? (<>
-          <View style={[s.timerRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
-            <T kind="muted" style={{ flex: 1 }} testID="couriers-told">{o.couriers_notified ? t('couriers_told', { n: o.couriers_notified }) : t('st_searching_sub')}</T>
-            <T style={s.clock} testID="timer">{clock(left(o.search_ends_at))}</T>
-          </View>
-          <Progress value={left(o.search_ends_at) / 600} />
+          <T kind="muted" testID="couriers-told">{o.couriers_notified ? t('couriers_told', { n: o.couriers_notified }) : t('st_searching_sub')}</T>
           <View style={[s.fareRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
             <RoundButton testID="want-down" icon="minus" label={t('price_down')} light disabled={want - 10 < o.offered_da || want <= o.offered_da} onPress={() => setWant(Math.max(o.offered_da, want - 10))} />
             <View style={{ flex: 1, alignItems: 'center' }}><T style={s.fare} testID="order-price">{money(want)} {t('da')}</T><T kind="muted">{t('your_offer')}</T></View>
@@ -194,9 +188,6 @@ function AutoAccept({ o, busy, onChange, t, rtl }: { o: Order; busy: boolean; on
   );
 }
 
-function Progress({ value }: { value: number }) {
-  return <View style={s.bar}><View style={[s.barFill, { width: `${Math.round(Math.min(1, Math.max(0, value)) * 100)}%` }]} /></View>;
-}
 
 // Couriers' offers, cheapest first (inDrive's "choose a driver"): price and time to arrive first, then who, then Decline/Accept.
 function Offers({ bids, now, busy, onAccept, onDecline }: { bids: Bid[]; now: number; busy: string | null; onAccept: (b: Bid) => void; onDecline: (b: Bid) => void }) {
@@ -255,8 +246,6 @@ const s = StyleSheet.create({
   topRow: { alignItems: 'center', gap: space(3), padding: space(4) },
   refChip: { backgroundColor: color.card, borderRadius: 999, paddingHorizontal: space(4), paddingVertical: space(2) },
   refText: { fontFamily: font.semibold, fontSize: 14 },
-  timerRow: { alignItems: 'center', gap: space(2) },
-  clock: { fontFamily: font.bold, fontSize: 22 },
   bar: { height: 5, borderRadius: 3, backgroundColor: color.card2, overflow: 'hidden', marginVertical: space(2) },
   barFill: { height: 5, backgroundColor: color.pureWhite },
   fareRow: { alignItems: 'center', gap: space(2), backgroundColor: color.card2, borderRadius: 20, padding: space(3), marginTop: space(2) },
