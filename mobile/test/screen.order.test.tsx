@@ -99,11 +99,12 @@ test('a full order: route, fare, distance, couriers offer, choose one, delivered
   await fireEvent.press(screen.getByTestId('send-parcel'));
   expect(await screen.findByTestId('pick-title')).toHaveTextContent(/Where does it go\?/);
   expect(screen.getByTestId('marker-A')).toBeTruthy();                                 // the pickup stays on the map
-  expect(screen.getByTestId('status-bar-area')).toHaveStyle({ height: 20, backgroundColor: '#26282E' });   // our grey band, a bit shorter than the status bar (24)
+  expect(screen.getByTestId('status-bar-area')).toHaveStyle({ height: 12, backgroundColor: '#26282E' });   // our grey band, half the status bar (24)
   // A finger on the map: the pins and floating buttons step aside; they come back when it is lifted.
   const mapEl = screen.getAllByTestId('map').slice(-1)[0];
   await act(async () => { fireEvent(mapEl, 'touchStart', { nativeEvent: { touches: [{}] } }); });
   expect(screen.queryByTestId('marker-A')).toBeNull();
+  expect(screen.getByTestId('dest-sheet').props.pointerEvents).toBe('none');            // the panel slides away too: only the map
   await act(async () => { fireEvent(mapEl, 'touchEnd', { nativeEvent: { touches: [] } }); });
   expect(screen.getByTestId('marker-A')).toBeTruthy();
   // Dragging the map: the map itself says it starts moving because of the person, then that it stopped.
@@ -111,6 +112,7 @@ test('a full order: route, fare, distance, couriers offer, choose one, delivered
   expect(screen.queryByTestId('marker-A')).toBeNull();
   await moveMapTo(D);                                                                    // the map stops: everything is back
   expect(screen.getByTestId('marker-A')).toBeTruthy();
+  expect(screen.getByTestId('dest-sheet').props.pointerEvents).toBe('box-none');
   await moveMapTo(D);
   await fireEvent.press(screen.getByTestId('confirm-point'));
   await screen.findByTestId('screen-order-details');

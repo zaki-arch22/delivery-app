@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Dimensions, Pressable, StyleSheet, Switch, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { idempotencyKey, ApiError } from '../core/api';
 import { useApp } from '../lib/app';
@@ -92,7 +92,7 @@ export default function OrderDetails() {
   return (
     <View style={s.root} testID="screen-order-details">
       <View style={s.mapBox}>
-        <AppMap onTouching={setMapTouch} start={pickup} zoom={13} route={quote?.route ?? null} fit={[pickup, dropoff]} pad={{ top: 130, bottom: 50 }}
+        <AppMap onTouching={setMapTouch} start={pickup} zoom={13} route={quote?.route ?? null} fit={[pickup, dropoff]} pad={{ top: 130, bottom: Dimensions.get('window').height * 0.62 }}
           pins={[{ id: 'A', at: pickup, kind: 'pickup', label: t('pickup') }, { id: 'B', at: dropoff, kind: 'dropoff', label: t('dropoff') }]} />
         <MapOverlay hidden={mapTouch} style={s.top}>
           <View style={[s.summary, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
@@ -110,7 +110,7 @@ export default function OrderDetails() {
           </View>
         </MapOverlay>
       </View>
-      <Sheet inline maxFraction={0.62} footer={footer} testID="details-sheet">
+      <Sheet hidden={mapTouch} maxFraction={0.62} footer={footer} testID="details-sheet">
         <View style={[s.sizes, { flexDirection: rtl ? 'row-reverse' : 'row' }]} accessibilityRole="radiogroup">
           {SIZES.map(z => {
             const on = z.v === size;

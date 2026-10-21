@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Dimensions, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { ApiError } from '../core/api';
 import { useApp, useNotices } from '../lib/app';
@@ -149,7 +149,7 @@ export default function JobScreen() {
   return (
     <View style={s.root} testID="screen-job">
       <View style={s.mapBox}>
-        <AppMap onTouching={setMapTouch} start={target} zoom={14} pins={pins} fit={me ? [me, target] : [target]} pad={{ top: 110, bottom: 60 }} />
+        <AppMap onTouching={setMapTouch} start={target} zoom={14} pins={pins} fit={me ? [me, target] : [target]} pad={{ top: 110, bottom: Dimensions.get('window').height * 0.62 }} />
         <MapOverlay hidden={mapTouch} style={s.top}>
           <View style={s.topRow}>
             <RoundButton testID="back-home-top" icon="arrow-left" label={t('back_home')} onPress={() => router.replace('/home')} />
@@ -158,7 +158,7 @@ export default function JobScreen() {
           </View>
         </MapOverlay>
       </View>
-      <Sheet inline maxFraction={0.66} testID="job-sheet">
+      <Sheet hidden={mapTouch} maxFraction={0.66} testID="job-sheet">
       {unsent ? <Notice testID="unsent" text={t('sync_pending')} /> : null}
       <T kind="title" testID="job-step" style={{ fontSize: 22 }}>{t(job.leg === 'return' ? 'job_return' : toPickup ? 'job_to_pickup' : 'job_to_dropoff')}</T>
       {sos ? (

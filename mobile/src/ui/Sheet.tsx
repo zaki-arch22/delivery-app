@@ -13,9 +13,10 @@ const HANDLE = 34;   // height of the drag handle zone
 // its direction). The content scrolls only at full height; below that, dragging the content moves the panel, so the
 // phone's own scrolling never fights the drag. At the top of the content, dragging down lowers the panel again.
 // Tapping the handle steps up, and from full folds it. Plain React Native (no native library): ships over the air.
-// `inline`: the panel sits UNDER the map instead of over it (as it grows, the map shrinks, so a centre pin stays centred).
-export function Sheet({ children, footer, testID = 'sheet', peek = 150, maxFraction = 0.72, scroll = true, inline = false }:
-  { children: React.ReactNode; footer?: React.ReactNode; testID?: string; peek?: number; maxFraction?: number; scroll?: boolean; inline?: boolean }) {
+// It floats over a full-screen map. `hidden`: a finger is on the map, so the panel slides away (owner's wish: only the map
+// stays) and comes back when the map stops. `above`: a floating button that rides just above the panel (e.g. my location).
+export function Sheet({ children, footer, above, hidden = false, testID = 'sheet', peek = 150, maxFraction = 0.72, scroll = true }:
+  { children: React.ReactNode; footer?: React.ReactNode; above?: React.ReactNode; hidden?: boolean; testID?: string; peek?: number; maxFraction?: number; scroll?: boolean }) {
   const { t, rtl } = useApp();
   const insets = useSafeAreaInsets();
   const pad = Math.max(insets.bottom, space(3));
@@ -31,6 +32,8 @@ export function Sheet({ children, footer, testID = 'sheet', peek = 150, maxFract
   const target = (l: number) => (l === 0 ? low : l === 2 ? full : natural);
   const setLevel = (l: number) => { level.current = l; setAtFull(l === 2); };
   useEffect(() => { const id = height.addListener(v => { now.current = v.value; }); return () => height.removeListener(id); }, [height]);
+  const hide = useRef(new Animated.Value(0)).current;
+  useEffect(() => { Animated.timing(hide, { toValue: hidden ? 1 : 0, duration: hidden ? 140 : 220, useNativeDriver: false }).start(); }, [hidden, hide]);
   const glide = (to: number, velocity = 0) => Animated.spring(height, { toValue: to, velocity, useNativeDriver: false, bounciness: 0, speed: 16 }).start();
   // Content grew or shrank (a new state, a message): follow it at the chosen level, unless the person is dragging.
   useEffect(() => { if (!natural || dragging.current) return; if (now.current === 0) { height.setValue(target(level.current)); return; } glide(target(level.current)); }, [natural, low, full]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -62,24 +65,29 @@ export function Sheet({ children, footer, testID = 'sheet', peek = 150, maxFract
   const Body = scroll ? ScrollView : View;
   const body = scroll
     ? { keyboardShouldPersistTaps: 'handled' as const, contentContainerStyle: s.body, scrollEventThrottle: 16, scrollEnabled: atFull || !natural,
-        onScroll: (e: any) => { scrollY.current = e.nativeEvent.contentOffset.y; }, onContentSizeChange: (_w: number, h: number) => setContentH(h), style: { flexShrink: 1 } }
+        onScroll: (e: any) => { scrollY.current = e.nativeEvent.contentOffset.y; }, onContentSizeChange: (_w: number, h: number) => setContentH(h), style: natural ? { flex: 1 } : { flexShrink: 1 } }
     : { style: s.body, onLayout: (e: any) => setContentH(e.nativeEvent.layout.height) };
   return (
-    <Animated.View testID={testID} {...pan.panHandlers}
-      style={[s.sheet, inline && s.inline, { paddingBottom: pad, direction: rtl ? 'rtl' : 'ltr' }, natural ? { height } : { maxHeight: area * maxFraction }]}>
+    <Animated.View testID={testID} {...pan.panHandlers} pointerEvents={hidden ? 'none' : 'box-none'}
+      style={[s.outer, natural ? { height } : { maxHeight: area * maxFraction },
+        { opacity: hide.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }), transform: [{ translateY: hide.interpolate({ inputRange: [0, 1], outputRange: [0, 400] }) }] }]}>
+      {above ? <View pointerEvents="box-none" style={[s.above, { flexDirection: rtl ? 'row' : 'row-reverse' }]}>{above}</View> : null}
+      <View style={[s.sheet, { paddingBottom: pad, direction: rtl ? 'rtl' : 'ltr' }, natural ? { flex: 1 } : null]}>
       <Pressable onPress={toggle} accessibilityRole="button" accessibilityLabel={t(atFull ? 'sheet_fold' : 'sheet_open')} style={s.handleZone} testID={testID + '-handle'}>
         <View style={s.handle} />
       </Pressable>
       <Body {...body}>{children}</Body>
       {footer ? <View style={s.footer} onLayout={e => setFooterH(e.nativeEvent.layout.height)}>{footer}</View> : null}
+      </View>
     </Animated.View>
   );
 }
 
 const s = StyleSheet.create({
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, overflow: 'hidden', backgroundColor: color.card, borderTopLeftRadius: bigRadius, borderTopRightRadius: bigRadius,
+  outer: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  above: { position: 'absolute', left: space(4), right: space(4), bottom: '100%', marginBottom: space(3) },
+  sheet: { overflow: 'hidden', flexShrink: 1, backgroundColor: color.card, borderTopLeftRadius: bigRadius, borderTopRightRadius: bigRadius,
     elevation: 12, shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 12, shadowOffset: { width: 0, height: -2 } },
-  inline: { position: 'relative', marginTop: -24 },
   handleZone: { alignItems: 'center', justifyContent: 'center', height: HANDLE },
   handle: { width: 48, height: 5, borderRadius: 3, backgroundColor: color.line },
   body: { paddingHorizontal: space(4), paddingBottom: space(2) },

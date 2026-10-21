@@ -46,6 +46,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Fixes after the owner's phone test (2026-10-21): map icons hide using the map's own move events (touch events alone never fired on the phone); bottom panels get a third, full-screen height (content scrolls only there); grey band 70% of the status bar; no "0 DA" lines when there is no price; staff console button fills the whole-Algiers zone. The owner's order was refused with "We do not deliver there yet": his zone does not cover those points or is not open (cannot be checked from here: onrender.com is blocked for this machine).
 
+- Second phone round (2026-10-21): the owner tested 2 minutes after the previous update was published (not yet downloaded). Now: bottom panels float over a full-screen map on every screen, slide away while the map is touched, reach the top of the screen; "my location" rides above the panel; grey band = half the status bar. Checked in a browser with simulated finger drags (scratchpad vis2 scripts): drag up = full, drag down = normal, finger on map = only the map.
+
 ## In progress
 - (none)
 

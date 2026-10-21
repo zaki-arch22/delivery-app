@@ -87,10 +87,9 @@ export function CustomerHome() {
             </Pressable>
           </View>
         </MapOverlay>
-        <MapOverlay hidden={mapTouch} style={[s.locate, rtl ? { left: space(4) } : { right: space(4) }]}><RoundButton testID="my-location" icon="navigation" label={t('my_location')} onPress={locate} /></MapOverlay>
       </View>
 
-      <Sheet inline maxFraction={0.5} testID="home-sheet">
+      <Sheet hidden={mapTouch} maxFraction={0.42} testID="home-sheet" above={<RoundButton testID="my-location" icon="navigation" label={t('my_location')} onPress={locate} />}>
         {searching ? (<>
           <PlaceSearch autoFocus near={center} placeholder={t('search_pickup')} onPick={pickPickup} testID="pickup-search" />
           <Button kind="plain" label={t('close')} onPress={() => setSearching(false)} />
@@ -136,7 +135,6 @@ const s = StyleSheet.create({
   topRow: { alignItems: 'center', gap: space(3), padding: space(4) },
   pickupCard: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space(2), backgroundColor: color.card, borderRadius: radius, paddingHorizontal: space(4), paddingVertical: space(2) },
   pickupName: { fontFamily: font.bold, fontSize: 17 },
-  locate: { position: 'absolute', bottom: space(10) },
   where: { alignItems: 'center', gap: space(3), backgroundColor: color.card2, borderRadius: 18, paddingHorizontal: space(4), minHeight: 64, marginVertical: space(2) },
   whereText: { fontFamily: font.bold, fontSize: 20, flex: 1 },
   recent: { alignItems: 'center', gap: space(4), paddingVertical: space(3) },

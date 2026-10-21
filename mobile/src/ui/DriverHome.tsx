@@ -127,7 +127,7 @@ export function DriverHome() {
         </View>
       </MapOverlay>
 
-      <Sheet testID="driver-sheet" maxFraction={0.62} peek={150}>
+      <Sheet hidden={mapTouch} testID="driver-sheet" maxFraction={0.62} peek={150}>
         {!sel ? <T kind="title" testID="home-hello" style={{ fontSize: 22 }}>{t('home_hello', { name: p.display_name })}</T> : null}
         {state.notice?.code === 'NO_PROFILE_FOR_PATH' ? <Notice testID="notice-no-profile" text={t(state.notice.missing === 'driver' ? 'notice_no_profile_driver' : 'notice_no_profile_user')} /> : null}
         {!active ? <Notice testID="driver-status" warn={p.status === 'suspended' || p.status === 'rejected'} text={t(statusKey)} /> : null}

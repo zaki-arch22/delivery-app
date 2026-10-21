@@ -8,12 +8,12 @@ const AreaHeight = createContext(0);
 export const useAreaHeight = () => useContext(AreaHeight);
 
 // The grey band at the top behind the phone's clock and battery, like the reference screenshots. The owner asked for it
-// a little shorter than the status bar (Oct 2026): 70% of its height (the icons stay readable on the dark screens below).
+// half the status bar's height (Oct 2026); the clock and battery icons stay readable on the dark screens below.
 // Every screen starts BELOW it: the screens are told the top inset is already taken (0), so no screen adds the space twice.
 export function AppFrame({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
   const [h, setH] = useState(0);
-  const band = insets.top ? Math.max(20, Math.round(insets.top * 0.7)) : 0;
+  const band = insets.top ? Math.max(12, Math.round(insets.top * 0.5)) : 0;
   return (
     <View style={{ flex: 1, backgroundColor: color.page }}>
       <View testID="status-bar-area" style={{ height: band, backgroundColor: color.statusBar }} />

@@ -71,7 +71,7 @@ export default function OrderScreen() {
         {showBids ? <Offers bids={o.bids} now={now} busy={busy} onAccept={b => run('acc' + b.offer_id, () => api.acceptBid(o.id, b.offer_id))} onDecline={b => run('dec' + b.offer_id, () => api.declineBid(o.id, b.offer_id))} /> : null}
       </MapOverlay>
 
-      <Sheet testID="order-sheet" maxFraction={showBids ? 0.3 : 0.6} peek={170}>
+      <Sheet hidden={mapTouch} testID="order-sheet" maxFraction={showBids ? 0.3 : 0.6} peek={170}>
         <T kind="title" testID="order-status" style={{ fontSize: 24 }}>{t(('st_' + o.status) as Key, { name: o.recipient_name })}</T>
 
 

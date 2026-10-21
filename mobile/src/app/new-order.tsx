@@ -62,9 +62,8 @@ export default function NewOrder() {
             ) : null}
           </View>
         </MapOverlay>
-        <MapOverlay hidden={mapTouch} style={[s.locate, rtl ? { left: space(4) } : { right: space(4) }]}><RoundButton testID="my-location" icon="navigation" label={t('my_location')} onPress={locate} /></MapOverlay>
       </View>
-      <Sheet inline maxFraction={0.55} testID="dest-sheet"
+      <Sheet hidden={mapTouch} maxFraction={0.42} testID="dest-sheet" above={<RoundButton testID="my-location" icon="navigation" label={t('my_location')} onPress={locate} />}
         footer={<Button testID="confirm-point" label={t(step === 'pickup' ? 'confirm_pickup' : 'confirm_dropoff')} onPress={confirm} />}>
         <T kind="title" testID="pick-title" style={{ fontSize: 22 }}>{t(step === 'pickup' ? 'pick_pickup_title' : 'pick_dropoff_title')}</T>
         {name ? <T style={s.chosen} testID="chosen-name" numberOfLines={1}>{name}</T> : <T kind="muted">{t('pick_hint')}</T>}
@@ -81,6 +80,5 @@ const s = StyleSheet.create({
   topRow: { alignItems: 'center', gap: space(3), padding: space(4) },
   card: { flex: 1, alignItems: 'center', gap: space(2), backgroundColor: color.card, borderRadius: radius, paddingHorizontal: space(4), minHeight: 48 },
   cardText: { fontFamily: font.semibold, flex: 1 },
-  locate: { position: 'absolute', bottom: space(10) },
   chosen: { fontFamily: font.bold, fontSize: 18, marginBottom: space(2) },
 });
