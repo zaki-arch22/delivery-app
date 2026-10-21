@@ -18,8 +18,9 @@ import type { Key } from '../../i18n';
 const POLL_MS = 4000;   // status and the courier's position while active; live notifications refresh at once in between
 
 const NEARBY_MS = 10_000;   // couriers around the pickup are refreshed this often while searching
-const ZOOM_SPAN_MS = 180_000;   // the searching zoom-out and pulse take 3 minutes to reach their widest (the search itself goes on)
+const ZOOM_SPAN_MS = 120_000;   // the searching zoom-out and pulse take 2 minutes to reach their widest (the search itself goes on)
 const ZOOM_FROM = 16.5, ZOOM_TO = 12.5;   // street level -> about 10 km across
+const PULSE_FROM = 0.2;   // the blue disc starts at a fifth of its size and grows with the zoom-out
 
 // One order, from "waiting for the receiver" to "delivered" (contract B). The map shows A, B, the route and the courier;
 // the panel follows the order's state; while couriers answer, their offers appear on top for the customer to choose.
@@ -39,7 +40,7 @@ export default function OrderScreen() {
   const followPlan = useMemo(() => {
     if (!o || o.status !== 'searching') return null;
     const share = Math.min(1, Math.max(0, (Date.now() - new Date(o.search_started_at).getTime()) / ZOOM_SPAN_MS));
-    return { center: { lat: o.pickup_lat, lng: o.pickup_lng }, from: ZOOM_FROM - (ZOOM_FROM - ZOOM_TO) * share, to: ZOOM_TO, ms: Math.round((1 - share) * ZOOM_SPAN_MS) };
+    return { center: { lat: o.pickup_lat, lng: o.pickup_lng }, from: ZOOM_FROM - (ZOOM_FROM - ZOOM_TO) * share, to: ZOOM_TO, ms: Math.round((1 - share) * ZOOM_SPAN_MS), share };
   }, [o?.id, o?.status, o?.search_started_at]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(() => api.get(id).then(x => { setO(x); setWant(w => (w > x.offered_da ? w : x.offered_da)); }).catch(() => {}), [id]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -76,16 +77,15 @@ export default function OrderScreen() {
   const price = o.locked_da ?? o.offered_da;
   const showBids = o.status === 'searching' && o.bids.length > 0;
   // While searching: the map stays centred on the pickup and zooms out steadily by itself (street level to ~10 km across
-  // in 3 minutes), the pulse keeps growing, and the map cannot be moved by hand (owner's wish, like inDrive).
+  // in 2 minutes), the blue disc grows with it, and the map cannot be moved by hand (owner's wish, like inDrive).
   const searching = o.status === 'searching';
-  const searchShare = searching ? Math.min(1, Math.max(0, (now - new Date(o.search_started_at).getTime()) / ZOOM_SPAN_MS)) : 0;
   // Computed once per search (not every second): where the zoom-out is now, and how long is left to run.
   const follow = followPlan;
 
   return (
     <View style={s.root} testID="screen-order">
       <AppMap onTouching={setMapTouch} start={A} zoom={13} pins={pins} route={o.route} fit={fit} nearby={near?.couriers ?? []}
-        pulse={searching ? { at: A, grow: searchShare } : null} follow={follow} pad={{ top: showBids ? H * 0.5 : 110, bottom: H * 0.5 }} />
+        pulse={searching && follow ? { at: A, from: PULSE_FROM + (1 - PULSE_FROM) * follow.share, ms: follow.ms } : null} follow={follow} pad={{ top: showBids ? H * 0.5 : 110, bottom: H * 0.5 }} />
       <MapOverlay hidden={mapTouch} style={s.top}>
         <View style={[s.topRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
           <RoundButton testID="back" icon="arrow-left" label={t('back')} onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))} />

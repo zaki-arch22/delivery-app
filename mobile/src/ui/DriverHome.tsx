@@ -62,7 +62,7 @@ export function DriverHome() {
   });
   useEffect(() => { if (!home?.online || job) return; const h = setInterval(() => api.requests().then(setReqs).catch(() => {}), REQUEST_CHECK_MS); return () => clearInterval(h); }, [home?.online, job]);   // eslint-disable-line react-hooks/exhaustive-deps
   const free = !!home?.online && !job;
-  const radar = free && me ? { at: me, grow: 1 } : null;
+  const radar = free && me ? { at: me } : null;
   const waiting = reqs.find(r => r.status === 'bid');
   useEffect(() => { if (!waiting) return; const h = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(h); }, [waiting?.offer_id]);
 
