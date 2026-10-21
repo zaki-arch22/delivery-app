@@ -62,13 +62,13 @@ echo "   refused: $REFUSED of 14 expected; final balance check: $BAL"
 [ "$REFUSED" = 14 ] && [ "$BAL" = 1 ]; record "database rules" $? db-rules; wipe
 
 # 2. Orders and accounts (fast timers).
-start_server 3399 orders RATE_LIMIT_DISABLED=1 BID_TTL_S=4 SEARCH_WINDOW_S=15 WIDEN_AFTER_S=6 GEOCODER_URL=http://127.0.0.1:5056
+start_server 3399 orders RATE_LIMIT_DISABLED=1 BID_TTL_S=4 SEARCH_WINDOW_S=15 SEARCH_START_M=3000 SEARCH_STEP_M=2000 SEARCH_STEP_S=6 GEOCODER_URL=http://127.0.0.1:5056
 run "backend: orders, matching, cash, ratings" orders "$B" env $T npx ts-node test/orders.e2e.ts
 wipe; run "backend: accounts and profiles" auth "$B" env $T npx ts-node test/auth.e2e.ts
 wipe; run "backend: rules and sanctions" trust "$B" env $T npx ts-node test/trust.e2e.ts
 
 # 3. Notifications.
-start_server 3399 notify RATE_LIMIT_DISABLED=1 BID_TTL_S=3 SEARCH_WINDOW_S=60 WIDEN_AFTER_S=30
+start_server 3399 notify RATE_LIMIT_DISABLED=1 BID_TTL_S=3 SEARCH_WINDOW_S=60 SEARCH_START_M=3000 SEARCH_STEP_M=2000 SEARCH_STEP_S=30
 run "backend: notifications" notify "$B" env $T npx ts-node test/notify.e2e.ts
 
 # 3b. Road distances from our own OSRM server, built from the made-up test grid (test/fixtures/test-grid.osm).
@@ -93,7 +93,7 @@ run "backend: login methods switched off" login-off "$B" env $T npx ts-node test
 wipe
 
 # 4. Staff functions, staff console, mobile foundation (slower timers).
-start_server 3399 staff RATE_LIMIT_DISABLED=1 OFFER_TTL_S=10 SEARCH_WINDOW_S=120 WIDEN_AFTER_S=60
+start_server 3399 staff RATE_LIMIT_DISABLED=1 OFFER_TTL_S=10 SEARCH_WINDOW_S=120 SEARCH_START_M=3000 SEARCH_STEP_M=2000 SEARCH_STEP_S=60
 run "backend: staff functions" staff "$B" env $T npx ts-node test/staff.e2e.ts
 run "staff console: contract match" console-contract "$ROOT/staff-console" node scripts/check-contract.mjs
 run "staff console: type check and build" console-build "$ROOT/staff-console" env VITE_API_URL=http://localhost:3399 npm run build
@@ -105,7 +105,7 @@ run "mobile: foundation and screens against the real backend" mobile "$ROOT/mobi
 # The staff console built to be handed out by the server itself at /staff/ (as on the free host).
 (cd "$ROOT/staff-console" && VITE_BASE=/staff/ npx vite build --outDir "$ROOT/.local/staff-dist" --emptyOutDir >"$LOG/console-staff-dist.log" 2>&1) || echo "   staff console (for /staff/) did not build, see $LOG/console-staff-dist.log"
 echo "do-not-serve" > "$ROOT/.local/staff-dist/.hidden-test"
-start_server 3398 security STAFF_CONSOLE_DIR="$ROOT/.local/staff-dist" TRUST_PROXY=1 STAFF_ORIGINS=https://staff.example.test SMS_DAILY_CAP=100 OFFER_TTL_S=10 SEARCH_WINDOW_S=120 WIDEN_AFTER_S=60
+start_server 3398 security STAFF_CONSOLE_DIR="$ROOT/.local/staff-dist" TRUST_PROXY=1 STAFF_ORIGINS=https://staff.example.test SMS_DAILY_CAP=100 OFFER_TTL_S=10 SEARCH_WINDOW_S=120 SEARCH_START_M=3000 SEARCH_STEP_M=2000 SEARCH_STEP_S=60
 run "backend: security attacks" security "$B" env $T TEST_APP_DATABASE_URL="$TEST_APP_URL" SMS_DAILY_CAP=100 npx ts-node test/security.e2e.ts
 stop_server; wipe
 

@@ -15,7 +15,8 @@ export const color = {
   danger: '#F04438',
   overlay: 'rgba(0,0,0,0.55)',
   pureWhite: '#FFFFFF',
-  statusBar: '#26282E', // our grey band behind the phone's status bar (between panel and field grey)
+  statusBar: '#26282E',
+  search: '#3B82F6',    // the faint blue search circle on the map (owner's wish) // our grey band behind the phone's status bar (between panel and field grey)
   // Older names, kept so every screen follows the new look: they point at the new palette.
   primary: lime, navy: '#FFFFFF', soft: '#2A2C33', white: '#1E1F24', border: '#34363E',
 };

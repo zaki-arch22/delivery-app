@@ -1,18 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useApp } from './app';
 import { account } from './account';
+import type { SearchSettings } from './people';
 
-// What the server switched on (asked once per app start). Today: place search.
-let cached: Promise<{ place_search: boolean }> | null = null;
-export function usePlaceSearch(): boolean {
+// What the server switched on (asked once per app start): place search, and how the search circle grows.
+type Features = { place_search: boolean; search?: SearchSettings };
+let cached: Promise<Features> | null = null;
+function useFeatures(): Features | null {
   const { services } = useApp();
-  const [on, setOn] = useState(false);
+  const [f, setF] = useState<Features | null>(null);
   useEffect(() => {
     let live = true;
     cached = cached ?? account(services.client).config().catch(() => { cached = null; return { place_search: false }; });
-    cached.then(c => { if (live) setOn(!!c.place_search); });
+    cached.then(c => { if (live) setF(c); });
     return () => { live = false; };
   }, [services]);
-  return on;
+  return f;
 }
+export const usePlaceSearch = (): boolean => !!useFeatures()?.place_search;
+export const useSearchSettings = (): SearchSettings | null => useFeatures()?.search ?? null;
 export const resetFeatures = () => { cached = null; };   // tests

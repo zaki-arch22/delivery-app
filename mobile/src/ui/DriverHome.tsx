@@ -14,6 +14,8 @@ import { AppMap, AppMapRef, Pin } from './AppMap';
 import { Sheet } from './Sheet';
 import { Drawer } from './Drawer';
 import { MapOverlay, Button, Notice, RoundButton, T } from './kit';
+import { growSeconds, radiusAt } from '../lib/people';
+import { useSearchSettings } from '../lib/features';
 import { Icon } from './Icon';
 
 const REQUEST_CHECK_MS = 5000;   // fallback check while online (the live connection normally brings requests at once)
@@ -39,6 +41,10 @@ export function DriverHome() {
   const fail = (e: unknown) => { const m = errorMessage(e); setMsg({ text: t(m.key, m.vars), warn: true }); };
   const send = useCallback((lat: number, lng: number) => api.location(lat, lng), [services]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => onPosition(setMe), []);
+  // While online and free, a faint blue circle grows around the courier at the pace of a customer's search: requests from
+  // inside it can reach him (it repeats, like a radar, until a request arrives).
+  const search = useSearchSettings();
+  const [pulse, setPulse] = useState(0);
 
   // Only the LATEST refresh may change the screen: an older answer arriving late ("offline") must not undo a newer one.
   const seq = useRef(0);
@@ -60,6 +66,9 @@ export function DriverHome() {
     if (n.kind.startsWith('offer.') || n.kind.startsWith('bid.') || n.kind.startsWith('job.') || n.kind.startsWith('cash.') || n.kind.startsWith('profile.')) load();
   });
   useEffect(() => { if (!home?.online || job) return; const h = setInterval(() => api.requests().then(setReqs).catch(() => {}), REQUEST_CHECK_MS); return () => clearInterval(h); }, [home?.online, job]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const free = !!home?.online && !job;
+  useEffect(() => { if (!free) return; const h = setInterval(() => setPulse(Date.now()), 500); return () => clearInterval(h); }, [free]);
+  const radar = free && me && search ? { center: me, radius_m: radiusAt(search, ((pulse || Date.now()) / 1000) % (growSeconds(search) + 4)) } : null;
   const waiting = reqs.find(r => r.status === 'bid');
   useEffect(() => { if (!waiting) return; const h = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(h); }, [waiting?.offer_id]);
 
@@ -85,7 +94,7 @@ export function DriverHome() {
           if (!(await selfieThenOnline())) return;
         }
         if (!(await tracking.ensure(send))) { await api.setOnline(false); setMsg({ text: t('location_needed'), warn: true }); }
-        else { const pos = lastPosition(); if (pos) map.current?.moveTo(pos, 15); }
+        else { const pos = lastPosition(); if (pos) map.current?.moveTo(pos, 13); }
       } else { await api.setOnline(false); tracking.stop(); }
       await load();
     } catch (e) { fail(e); } finally { setBusy(null); }
@@ -114,7 +123,7 @@ export function DriverHome() {
 
   return (
     <View style={s.root} testID="screen-home">
-      <AppMap onTouching={setMapTouch} ref={map} start={me ?? ALGIERS} zoom={me ? 15 : 12} pins={pins} fit={fit} pad={{ top: 120, bottom: 420 }} />
+      <AppMap area={radar} onTouching={setMapTouch} ref={map} start={me ?? ALGIERS} zoom={me ? 13 : 12} pins={pins} fit={fit} pad={{ top: 120, bottom: 420 }} />
       <MapOverlay hidden={mapTouch} style={s.top}>
         <View style={[s.topRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
           <RoundButton testID="open-menu" icon="menu" label={t('menu')} onPress={() => setMenu(true)} />

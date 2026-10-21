@@ -58,6 +58,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Couriers on the map + public profiles (2026-10-21, owner's wish): nearby_couriers (cars/motorbikes around the pin on the home map and the searching order, rounded positions, search circle), public_profile (courier from his offer/card, sender from a request/job: rating, deliveries or parcels sent, member since, latest comments without names); attack tests SEC24; screen public-profile.
 
+- Clear map + growing search circle (2026-10-21, owner's wish): map style OpenFreeMap "liberty" (app and receiver page); the search radius grows continuously (1 km + 1 km every 8 s, max 8 km; SEARCH_START_M/STEP_M/STEP_S/MAX_M replace RADIUS_1_M/RADIUS_2_M/WIDEN_AFTER_S), drawn as a faint blue circle on the customer's searching order (server clock offset applied) and as a repeating radar around a free online courier; app_config carries the numbers.
+
 ## In progress
 - (none)
 

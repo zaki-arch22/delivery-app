@@ -1,13 +1,17 @@
 // Tunable values with starting defaults. They must be tuned with real data; none is a fact about Algiers.
 const n = (k: string, d: number) => Number(process.env[k] ?? d);
 export const cfg = {
-  tickMs: () => n('TICK_MS', 3000),
+  tickMs: () => n('TICK_MS', 2000),   // also how closely the server follows the growing search circle
   bidTtlS: () => n('BID_TTL_S', 40),              // how long a courier's price offer waits for the customer's answer
   broadcastMax: () => n('BROADCAST_MAX', 10),     // a request is shown to at most this many nearby couriers at once
   searchWindowS: () => n('SEARCH_WINDOW_S', 600), // how long an order searches before it expires
-  radius1: () => n('RADIUS_1_M', 3000),           // first search radius
-  radius2: () => n('RADIUS_2_M', 8000),           // widened radius
-  widenAfterS: () => n('WIDEN_AFTER_S', 60),
+  // The search circle grows smoothly (owner's wish, Oct 2026): 1 km at the start, +1 km every 8 s, up to 8 km (reached
+  // after 56 s). Nearest couriers get the request first (shortest pickup), farther ones join within a minute. The app draws
+  // the same circle from these numbers, so what the customer sees is exactly where couriers are asked.
+  searchStartM: () => n('SEARCH_START_M', 1000),
+  searchStepM: () => n('SEARCH_STEP_M', 1000),
+  searchStepS: () => n('SEARCH_STEP_S', 8),
+  searchMaxM: () => n('SEARCH_MAX_M', 8000),
   locationFreshS: () => n('LOCATION_FRESH_S', 120), // driver location older than this is ignored
   routeFactor: () => n('ROUTE_FACTOR', 1.3),      // fallback only: straight line -> road distance
   fallbackKmh: () => n('FALLBACK_KMH', 20),       // fallback only: city speed
@@ -30,3 +34,7 @@ export const cfgN = {
   retryBaseS: () => n('RETRY_BASE_S', 2),   // retry delay doubles each attempt
   maxAttempts: () => n('MAX_ATTEMPTS', 5),
 };
+
+// Radius of the search circle `ageS` seconds after the search started (the same formula runs in the app).
+export const searchRadiusM = (ageS: number) => Math.min(cfg.searchMaxM(), cfg.searchStartM() + (cfg.searchStepM() * Math.max(0, ageS)) / cfg.searchStepS());
+export const searchSettings = () => ({ start_m: cfg.searchStartM(), step_m: cfg.searchStepM(), step_s: cfg.searchStepS(), max_m: cfg.searchMaxM() });

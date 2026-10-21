@@ -130,7 +130,7 @@
     if (!window.maplibregl || !data) { box.remove(); return; }
     var dest = [data.dropoff.lng, data.dropoff.lat], drv = data.driver && data.driver.location ? [data.driver.location.lng, data.driver.location.lat] : null;
     if (map) { box.replaceWith(map.getContainer()); } else {
-      map = new maplibregl.Map({ container: box, style: 'https://tiles.openfreemap.org/styles/dark', center: drv || dest, zoom: 14, attributionControl: { compact: true, customAttribution: t('map_credit') } });
+      map = new maplibregl.Map({ container: box, style: 'https://tiles.openfreemap.org/styles/liberty', center: drv || dest, zoom: 14, attributionControl: { compact: true, customAttribution: t('map_credit') } });
       homeMarker = new maplibregl.Marker({ color: '#B4EF2A' }).setLngLat(dest).addTo(map);
     }
     if (drv) { if (!driverMarker) driverMarker = new maplibregl.Marker({ color: '#FFFFFF' }).setLngLat(drv).addTo(map); else driverMarker.setLngLat(drv); }

@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Db } from '../db/db.service';
-import { cfg } from '../common/config';
+import { cfg, searchRadiusM } from '../common/config';
 import { notify, Q } from '../notify/notify';
 import { NOT_BLOCKED_SQL } from '../trust/rules';
 import { fail } from '../common/errors';
@@ -92,7 +92,7 @@ export class Matching implements OnModuleInit, OnModuleDestroy {
       const [{ live }] = await q(`SELECT count(*)::int live FROM offers WHERE order_id=$1 AND status IN ('offered','bid')`, [orderId]);
       const room = cfg.broadcastMax() - live;
       if (room <= 0) return;
-      const radius = o.age >= cfg.widenAfterS() ? cfg.radius2() : cfg.radius1();
+      const radius = searchRadiusM(Number(o.age));
       // A courier who already saw it (and did not just lose it to an expiry or a reassignment) is not asked again.
       const found = await q(
         `SELECT p.id FROM driver_details d JOIN profiles p ON p.id = d.profile_id JOIN orders o ON o.id = $1

@@ -383,6 +383,8 @@ require('http').createServer((req: any, res: any) => {
     const ps = (await api('/public_profile?offer_id=' + reqM.offer_id, undefined, M.token)).b;
     ok('PROF the courier sees the sender\'s profile (parcels sent, comments), no vehicle', ps.name === 'Vehicle Sender' && ps.type === 'user' && ps.vehicle === null && ps.completed === 0 && Array.isArray(ps.comments), ps);
     const nb = (await api(`/nearby_couriers?lat=${P.lat}&lng=${P.lng}`, undefined, custV)).b;
+    const cfgApp = (await api('/app_config')).b;
+    ok('SEARCH the app is told how the search circle grows (start, step, every N s, max), the same numbers the server searches with', JSON.stringify(cfgApp.search) === JSON.stringify({ start_m: 3000, step_m: 2000, step_s: 6, max_m: 8000 }) && JSON.stringify(nb.search) === JSON.stringify(cfgApp.search), cfgApp);
     ok('PROF the customer\'s map shows the couriers nearby as vehicles (car and motorbike)', nb.couriers.length === 2 && nb.couriers.map((c: any) => c.vehicle).sort().join() === 'car,motorbike', nb);
     await api('/cancel_order', { order_id: small.id, reason: 'test' }, custV);
     const large = (await order(custV, 'veh-large-1', { auto_accept: false }, 'large')).b;

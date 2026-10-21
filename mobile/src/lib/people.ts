@@ -7,7 +7,14 @@ export interface PublicProfile {
   rating: string | null; rating_count: number; completed: number; member_since: string;
   comments: { stars: number; comment: string; at: string }[];
 }
-export interface Nearby { couriers: { vehicle: 'motorbike' | 'car'; lat: number; lng: number }[]; radius_m: number; wide_radius_m: number }
+export interface SearchSettings { start_m: number; step_m: number; step_s: number; max_m: number }
+export interface Nearby { couriers: { vehicle: 'motorbike' | 'car'; lat: number; lng: number }[]; search: SearchSettings; server_time: string }
+
+// The search circle `ageS` seconds after the search started: the SAME formula as the server's (config searchRadiusM),
+// so the circle the customer sees is exactly where couriers are being asked.
+export const radiusAt = (s: SearchSettings, ageS: number) => Math.min(s.max_m, s.start_m + (s.step_m * Math.max(0, ageS)) / s.step_s);
+// How long the circle takes to reach its full size (the courier's "looking for requests" circle repeats at this pace).
+export const growSeconds = (s: SearchSettings) => ((s.max_m - s.start_m) / s.step_m) * s.step_s;
 
 export const people = (c: Client) => ({
   profile: (by: { offer_id?: number | string; order_id?: string }) =>

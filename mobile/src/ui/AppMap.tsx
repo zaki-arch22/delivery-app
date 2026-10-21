@@ -12,7 +12,7 @@ export type Pin = { id: string; at: Point; label: string; kind: 'pickup' | 'drop
 export type AppMapRef = { moveTo(p: Point, zoom?: number): void; fit(points: Point[]): void };
 type Pad = { top: number; bottom: number; left: number; right: number };
 
-// The one map of the app (MapLibre + free OpenStreetMap tiles from OpenFreeMap, dark style). Pins carry an icon and a
+// The one map of the app (MapLibre + free OpenStreetMap tiles from OpenFreeMap, light "liberty" style: clear like a street map). Pins carry an icon and a
 // spoken label, never colour alone. `route`: the road's shape from the server; without it (no routing server) a dashed
 // straight line joins the two points, so nobody mistakes it for the road.
 // With `centerPin`, a fixed pin sits in the middle and the person moves the map under it (`onMoved` gives the new centre).
@@ -75,10 +75,10 @@ export const AppMap = forwardRef<AppMapRef, {
           </GeoJSONSource>
         ) : null}
         {area ? (
-          // The search area: couriers inside this circle see the request (it widens after a minute).
+          // The search area: couriers inside this faint blue circle are asked; it grows smoothly, like the server's search.
           <GeoJSONSource id="search-area" data={{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [circle(area.center, area.radius_m)] } }}>
-            <Layer id="search-area-fill" type="fill" paint={{ 'fill-color': color.lime, 'fill-opacity': 0.08 }} />
-            <Layer id="search-area-line" type="line" paint={{ 'line-color': color.lime, 'line-width': 1.5, 'line-opacity': 0.6 }} />
+            <Layer id="search-area-fill" type="fill" paint={{ 'fill-color': color.search, 'fill-opacity': 0.12 }} />
+            <Layer id="search-area-line" type="line" paint={{ 'line-color': color.search, 'line-width': 2, 'line-opacity': 0.55 }} />
           </GeoJSONSource>
         ) : null}
         {touching ? null : nearby.map((c, i) => (
