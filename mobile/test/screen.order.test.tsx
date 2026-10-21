@@ -96,7 +96,7 @@ test('a full order: route, fare, distance, couriers offer, choose one, delivered
   // The pickup is the centre of the home map ("My location" moves it, then the person drags to the exact place).
   await act(async () => { await fireEvent.press(screen.getByTestId('my-location')); });
   await moveMapTo(P);
-  await fireEvent.press(screen.getByTestId('send-parcel'));
+  await fireEvent.press(screen.getByTestId('confirm-pickup'));                         // "Pick up here" confirms the pickup point
   expect(await screen.findByTestId('pick-title')).toHaveTextContent(/Where does it go\?/);
   expect(screen.getByTestId('marker-A')).toBeTruthy();                                 // the pickup stays on the map
   expect(screen.getByTestId('status-bar-area')).toHaveStyle({ height: 12, backgroundColor: '#26282E' });   // our grey band, half the status bar (24)

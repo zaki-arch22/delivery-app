@@ -24,6 +24,7 @@ export function errorMessage(e: unknown): { key: Key; vars?: Record<string, numb
     case 'QUOTE_EXPIRED': return { key: 'err_quote_expired' };
     case 'PRICE_OUT_OF_RANGE': case 'PRICE_NOT_ALLOWED': return { key: 'err_price_range' };
     case 'ZONE_CLOSED': return { key: 'zone_closed' };
+    case 'TOO_FAR': return { key: 'too_far' };
     case 'PRICING_NOT_SET': return { key: 'err_not_ready' };
     case 'CANNOT_CANCEL': return { key: 'err_cannot_cancel' };
     case 'PRICE_LOCKED': return { key: 'err_price_locked' };

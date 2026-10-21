@@ -61,6 +61,14 @@ require('http').createServer((req: any, res: any) => {
   ok('T1 driver token refused on a user function', (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, D1.token)).b.error === 'WRONG_PROFILE');
   ok('T1 user token refused on a driver function', (await api('/get_job', undefined, A)).b.error === 'WRONG_PROFILE');
   // T2 quote
+  {
+    // A trip longer than the staff-set maximum is refused even inside an open zone (the whole country may be one zone).
+    await pool.query(`UPDATE pricing_rules SET max_km=1 WHERE active`);
+    const far = (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, A)).b;
+    await pool.query(`UPDATE pricing_rules SET max_km=50 WHERE active`);
+    ok('T2 a trip longer than the maximum distance is refused (TOO_FAR, the limit in the message)', far.error === 'TOO_FAR' && /1 km/.test(far.message), far);
+    ok('T2 the same trip within the limit is priced', (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, A)).b.recommended_da > 0);
+  }
   ok('T2 outside the open zone is refused', (await api('/get_quote', { pickup: { lat: 35.69, lng: -0.63 }, dropoff: D, size: 'small' }, A)).b.error === 'ZONE_CLOSED');
   const q1 = (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, A)).b, q2 = (await api('/get_quote', { pickup: P, dropoff: D, size: 'large' }, A)).b;
   ok('T2 small parcel -> motorbike, large -> car', q1.vehicle === 'motorbike' && q2.vehicle === 'car', [q1, q2]);

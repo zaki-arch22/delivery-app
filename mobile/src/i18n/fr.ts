@@ -305,6 +305,7 @@ export const fr: Record<Key, string> = {
   by_car: "En voiture",
   quote_loading: "Calcul du prix…",
   confirm_order: "Commander pour {p} DA",
+  too_far: "Ce trajet est trop long : nous livrons dans une même agglomération. Choisissez une destination plus proche.",
   zone_closed: "Nous ne livrons pas encore là. Choisissez des lieux dans notre zone de service.",
   order_ref: "Commande {ref}",
   st_searching: "Recherche d’un livreur…",

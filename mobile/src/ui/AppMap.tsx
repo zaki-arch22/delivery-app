@@ -16,7 +16,7 @@ type Pad = { top: number; bottom: number; left: number; right: number };
 // straight line joins the two points, so nobody mistakes it for the road.
 // With `centerPin`, a fixed pin sits in the middle and the person moves the map under it (`onMoved` gives the new centre).
 export const AppMap = forwardRef<AppMapRef, {
-  start: Point; zoom?: number; pins?: Pin[]; centerPin?: { label: string; kind: 'pickup' | 'dropoff' }; onMoved?: (p: Point) => void;
+  start: Point; zoom?: number; pins?: Pin[]; centerPin?: { label: string; kind: 'pickup' | 'dropoff'; title?: string | null }; onMoved?: (p: Point) => void;
   route?: [number, number][] | null; fit?: Point[]; pad?: Partial<Pad>; testID?: string; onTouching?: (touching: boolean) => void;
 }>(function AppMap({ start, zoom = 15, pins = [], centerPin, onMoved, route, fit, pad, testID = 'map', onTouching }, ref) {
   const { t } = useApp();
@@ -81,6 +81,9 @@ export const AppMap = forwardRef<AppMapRef, {
       </View>
       {centerPin ? (
         <View pointerEvents="none" style={s.centerWrap} accessibilityLabel={centerPin.label} testID="center-pin">
+          {centerPin.title && !touching ? (
+            <View style={s.bubble} testID="center-pin-title"><Text style={s.bubbleText} numberOfLines={1}>{centerPin.title}</Text></View>
+          ) : null}
           <PinView kind={centerPin.kind} label={centerPin.label} />
         </View>
       ) : null}
@@ -108,6 +111,10 @@ const s = StyleSheet.create({
   stem: { width: 3, height: 12, backgroundColor: color.pureWhite, borderBottomLeftRadius: 2, borderBottomRightRadius: 2 },
   driver: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: color.pureWhite, borderWidth: 3, borderColor: color.lime },
   driverText: { fontSize: 20 },
-  centerWrap: { position: 'absolute', left: '50%', top: '50%', marginLeft: -20, marginTop: -52, alignItems: 'center' },
+  // The pin's stem tip sits exactly on the map's centre; the address bubble floats above it (like inDrive).
+  centerWrap: { position: 'absolute', left: 0, right: 0, bottom: '50%', alignItems: 'center' },
+  bubble: { maxWidth: '70%', backgroundColor: color.pureWhite, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 6,
+    elevation: 6, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
+  bubbleText: { color: color.ink, fontFamily: font.semibold, fontSize: 15 },
   credit: { position: 'absolute', bottom: 2, right: 6, fontSize: 10, color: color.muted, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 4, fontFamily: font.regular },
 });

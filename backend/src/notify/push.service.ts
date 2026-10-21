@@ -20,7 +20,9 @@ class FcmPush implements PushProvider {
   async send(token: string, _platform: string, m: PushMsg) {
     try {
       await this.app.messaging().send({ token, notification: { title: m.title, body: m.body }, data: m.data,
-        android: { priority: m.priority === 'high' ? 'high' : 'normal' }, apns: { headers: { 'apns-priority': m.priority === 'high' ? '10' : '5' } } });
+        // channelId: the app's own HIGH-importance channel ("default", made by the app), so the banner pops up with sound.
+        android: { priority: m.priority === 'high' ? 'high' : 'normal', notification: { channelId: 'default', sound: 'default' } },
+        apns: { headers: { 'apns-priority': m.priority === 'high' ? '10' : '5' }, payload: { aps: { sound: 'default' } } } });
       return 'ok' as const;
     } catch (e: any) { if (/not-registered|invalid-registration|invalid-argument/.test(e.code ?? '')) return 'invalid_token' as const; throw e; }
   }

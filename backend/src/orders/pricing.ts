@@ -16,5 +16,5 @@ export async function priceFor(db: Db, size: Size, distance_m: number) {
   const recommended_da = up10(raw);
   const min_da = Math.min(recommended_da, up10((recommended_da * r.min_percent) / 100));
   const max_da = Math.max(recommended_da, down10((recommended_da * r.max_percent) / 100));
-  return { pricing_version: r.version as number, vehicle, recommended_da, min_da, max_da };
+  return { pricing_version: r.version as number, vehicle, recommended_da, min_da, max_da, max_km: r.max_km as number };
 }

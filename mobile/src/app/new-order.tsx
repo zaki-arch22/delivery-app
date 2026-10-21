@@ -25,12 +25,14 @@ export default function NewOrder() {
   const [pname, setPname] = useState<string>(prm.pname ?? '');
   const [center, setCenter] = useState<Point>(given ?? ALGIERS);
   const [name, setName] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(false);   // the map just stopped: "Done" waits for the place's name (like inDrive)
   const [locMsg, setLocMsg] = useState<string | null>(null);
   const search = usePlaceSearch();
   const step: 'pickup' | 'dropoff' = pickup ? 'dropoff' : 'pickup';
   useEffect(() => {
     if (!search) return;
-    const h = setTimeout(() => { orders(services.client).reverse(center, lang).then(r => setName(r.place?.name ?? null)).catch(() => setName(null)); }, 700);
+    setResolving(true);
+    const h = setTimeout(() => { orders(services.client).reverse(center, lang).then(r => setName(r.place?.name ?? null)).catch(() => setName(null)).finally(() => setResolving(false)); }, 500);
     return () => clearTimeout(h);
   }, [center.lat, center.lng, search, lang]);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -49,7 +51,7 @@ export default function NewOrder() {
   return (
     <View style={s.root} testID="screen-new-order">
       <View style={{ flex: 1 }}>
-        <AppMap onTouching={setMapTouch} ref={map} start={given ?? ALGIERS} zoom={given ? 14 : 13} onMoved={setCenter} centerPin={{ kind: step, label: t(step === 'pickup' ? 'pickup' : 'dropoff') }}
+        <AppMap onTouching={setMapTouch} ref={map} start={given ?? ALGIERS} zoom={given ? 14 : 13} onMoved={setCenter} centerPin={{ kind: step, label: t(step === 'pickup' ? 'pickup' : 'dropoff'), title: resolving ? null : name }}
           pins={pickup ? [{ id: 'A', at: pickup, kind: 'pickup', label: t('pickup') }] : []} />
         <MapOverlay hidden={mapTouch} style={s.top}>
           <View style={[s.topRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>

@@ -305,6 +305,7 @@ export const ar: Record<Key, string> = {
   by_car: "بالسيارة",
   quote_loading: "جارٍ حساب السعر…",
   confirm_order: "اطلب بـ {p} دج",
+  too_far: "هذه المسافة طويلة جداً: نوصّل داخل نفس المدينة وضواحيها. اختر وجهة أقرب.",
   zone_closed: "لا نوصل إلى هناك بعد. اختر أماكن داخل منطقة خدمتنا.",
   order_ref: "الطلب {ref}",
   st_searching: "جارٍ البحث عن مندوب…",

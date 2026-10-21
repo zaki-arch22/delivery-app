@@ -37,6 +37,7 @@ export class OrdersService {
     if (!(await inOpenZone(this.db, pickup)) || !(await inOpenZone(this.db, dropoff))) throw fail(422, 'ZONE_CLOSED', 'We do not serve this area yet');
     const route = await this.routing.route(pickup, dropoff, true);
     const price = await priceFor(this.db, b.size as Size, route.distance_m);
+    if (route.distance_m > price.max_km * 1000) throw fail(422, 'TOO_FAR', `Deliveries go up to ${price.max_km} km`);
     const data = { pickup, dropoff, size: b.size, distance_m: route.distance_m, duration_s: route.duration_s, distance_estimated: route.estimated, line: route.line ?? null, ...price };
     const q = await this.db.one(`INSERT INTO quotes(user_profile_id, data, expires_at) VALUES ($1,$2, now() + interval '5 minutes') RETURNING id, expires_at`, [userId, data]);
     return { quote_id: q.id, expires_at: q.expires_at, vehicle: price.vehicle, distance_m: route.distance_m, duration_s: route.duration_s, distance_estimated: route.estimated, recommended_da: price.recommended_da, min_da: price.min_da, max_da: price.max_da, route: route.line ?? null };

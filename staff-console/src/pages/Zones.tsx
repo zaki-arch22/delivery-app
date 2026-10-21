@@ -16,6 +16,9 @@ export const rectangle = (s: number, w: number, n: number, e: number) => ({ type
 // A generous rectangle around the whole wilaya of Algiers (Zéralda to Rouïba, the coast to Birtouta), so the first
 // zone needs no typed coordinates. It also covers a little sea and the edges of the next wilayas: fine for a test start.
 export const ALGIERS_BOX = { s: '36.55', w: '2.78', n: '36.84', e: '3.42' };
+// A rectangle around the whole of Algeria (it also covers some sea and border land). With it, the maximum trip length set
+// with the prices is what keeps every delivery local.
+export const ALGERIA_BOX = { s: '18.9', w: '-8.8', n: '37.2', e: '12.1' };
 
 export function Zones() {
   useLang();
@@ -52,7 +55,10 @@ export function Zones() {
           <button type="button" role="tab" aria-selected={mode === 'paste'} onClick={() => setMode('paste')}>{t('zones.paste')}</button>
         </div>
         {mode === 'rect' ? (<>
-          <button type="button" onClick={() => { setBox(ALGIERS_BOX); if (!name.trim()) setName('Alger'); }}>{t('zones.algiers')}</button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" onClick={() => { setBox(ALGIERS_BOX); if (!name.trim()) setName('Alger'); }}>{t('zones.algiers')}</button>
+            <button type="button" onClick={() => { setBox(ALGERIA_BOX); if (!name.trim()) setName('Algérie'); }}>{t('zones.algeria')}</button>
+          </div>
           <div className="grid2">{(['s', 'n', 'w', 'e'] as const).map(k => <Field key={k} label={t(k === 's' ? 'zones.south' : k === 'n' ? 'zones.north' : k === 'w' ? 'zones.west' : 'zones.east')}><input inputMode="decimal" value={box[k]} onChange={e => setBox({ ...box, [k]: e.target.value.replace(/[^\d.-]/g, '') })} /></Field>)}</div>
         </>) : (
           <Field label="GeoJSON" hint={t('zones.geoHelp')}><textarea rows={6} value={geo} maxLength={60000} onChange={e => setGeo(e.target.value)} /></Field>

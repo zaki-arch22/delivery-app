@@ -305,6 +305,7 @@ export const en = {
   by_car: "By car",
   quote_loading: "Calculating the price…",
   confirm_order: "Order for {p} DA",
+  too_far: "This trip is too long: we deliver within one city area. Choose a closer destination.",
   zone_closed: "We do not deliver there yet. Choose places inside our service area.",
   order_ref: "Order {ref}",
   st_searching: "Looking for a courier…",

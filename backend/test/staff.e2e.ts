@@ -67,6 +67,9 @@ const BOX = { type: 'Polygon', coordinates: [[[2.9, 36.6], [3.3, 36.6], [3.3, 36
   await order(U.token, 'staff-price-order-1'); // an order priced under version 1 (no drivers online: it will just search)
   const v2 = (await S('/create_pricing_version', { base_da: 200, per_km_da: 40, min_percent: 80, max_percent: 150 })).b.version;
   const pr = (await S('/get_pricing')).b;
+  ok('S2 the maximum trip length defaults to 50 km', pr.active.max_km === 50, pr.active);
+  ok('S2 a maximum trip length outside 1-1000 km is refused', (await S('/create_pricing_version', { base_da: 200, per_km_da: 40, min_percent: 80, max_percent: 150, max_km: 0 })).b.error === 'BAD_MAX_KM'
+    && (await S('/create_pricing_version', { base_da: 200, per_km_da: 40, min_percent: 80, max_percent: 150, max_km: '30' })).b.error === 'BAD_MAX_KM');
   ok('S2 a new price table replaces the old; only ONE is active; history kept', pr.active.version === v2 && pr.history.filter((r: any) => r.active).length === 1 && pr.history.length === 2);
   ok('S2 an existing order keeps the price table it was made with', (await pool.query(`SELECT pricing_version FROM orders LIMIT 1`)).rows[0].pricing_version === v1);
   await pool.query(`UPDATE orders SET status='cancelled'`);

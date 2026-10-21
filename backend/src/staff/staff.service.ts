@@ -321,11 +321,13 @@ export class StaffService {
     const v = { base_da: nat(b?.base_da, 'base_da'), per_km_da: nat(b?.per_km_da, 'per_km_da'), medium_extra_da: nat(b?.medium_extra_da ?? 0, 'medium_extra_da'), large_extra_da: nat(b?.large_extra_da ?? 0, 'large_extra_da'), car_extra_da: nat(b?.car_extra_da ?? 0, 'car_extra_da') };
     if (!isInt(b?.min_percent) || b.min_percent < 1 || b.min_percent > 100) throw bad('BAD_PERCENT', 'min_percent must be 1 to 100');
     if (!isInt(b?.max_percent) || b.max_percent < 100) throw bad('BAD_PERCENT', 'max_percent must be 100 or more');
+    const maxKm = b?.max_km ?? 50;
+    if (!isInt(maxKm) || maxKm < 1 || maxKm > 1000) throw bad('BAD_MAX_KM', 'max_km must be 1 to 1000');
     return this.db.tx(async q => {
       await q(`UPDATE pricing_rules SET active=false WHERE active`);   // only one price table is active; old orders keep their own version
-      const [r] = await q(`INSERT INTO pricing_rules(base_da, per_km_da, medium_extra_da, large_extra_da, car_extra_da, min_percent, max_percent, active, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8) RETURNING version`,
-        [v.base_da, v.per_km_da, v.medium_extra_da, v.large_extra_da, v.car_extra_da, b.min_percent, b.max_percent, staff]);
-      await audit(q, staff, 'create_pricing', 'pricing', String(r.version), { ...v, min_percent: b.min_percent, max_percent: b.max_percent }); return { version: r.version };
+      const [r] = await q(`INSERT INTO pricing_rules(base_da, per_km_da, medium_extra_da, large_extra_da, car_extra_da, min_percent, max_percent, max_km, active, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9) RETURNING version`,
+        [v.base_da, v.per_km_da, v.medium_extra_da, v.large_extra_da, v.car_extra_da, b.min_percent, b.max_percent, maxKm, staff]);
+      await audit(q, staff, 'create_pricing', 'pricing', String(r.version), { ...v, min_percent: b.min_percent, max_percent: b.max_percent, max_km: maxKm }); return { version: r.version };
     });
   }
 }

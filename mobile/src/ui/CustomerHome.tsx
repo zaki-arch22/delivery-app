@@ -69,7 +69,7 @@ export function CustomerHome() {
   return (
     <View style={s.root} testID="screen-home">
       <View style={{ flex: 1 }}>
-        <AppMap onTouching={setMapTouch} ref={map} start={ALGIERS} zoom={13} onMoved={setCenter} centerPin={{ kind: 'pickup', label: t('pickup') }} />
+        <AppMap onTouching={setMapTouch} ref={map} start={ALGIERS} zoom={13} onMoved={setCenter} centerPin={{ kind: 'pickup', label: t('pickup'), title: place }} />
         <MapOverlay hidden={mapTouch} style={s.top}>
           {noLoc ? (
             <Pressable testID="location-banner" onPress={locate} style={s.banner} accessibilityRole="button">
@@ -89,7 +89,9 @@ export function CustomerHome() {
         </MapOverlay>
       </View>
 
-      <Sheet hidden={mapTouch} maxFraction={0.42} testID="home-sheet" above={<RoundButton testID="my-location" icon="navigation" label={t('my_location')} onPress={locate} />}>
+      <Sheet hidden={mapTouch} maxFraction={0.42} testID="home-sheet"
+        footer={searching ? undefined : <Button testID="confirm-pickup" label={t('confirm_pickup')} onPress={whereTo} />}
+        above={<RoundButton testID="my-location" icon="navigation" label={t('my_location')} onPress={locate} />}>
         {searching ? (<>
           <PlaceSearch autoFocus near={center} placeholder={t('search_pickup')} onPick={pickPickup} testID="pickup-search" />
           <Button kind="plain" label={t('close')} onPress={() => setSearching(false)} />
