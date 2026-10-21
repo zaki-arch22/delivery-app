@@ -65,6 +65,14 @@ const BOX = { type: 'Polygon', coordinates: [[[2.9, 36.6], [3.3, 36.6], [3.3, 36
   const v1 = (await S('/create_pricing_version', { base_da: 100, per_km_da: 30, medium_extra_da: 50, large_extra_da: 150, car_extra_da: 100, min_percent: 80, max_percent: 150 })).b.version;
   ok('S2 with prices, quotes work', (await api('/get_quote', { pickup: P, dropoff: D, size: 'small' }, U.token)).b.recommended_da > 0);
   await order(U.token, 'staff-price-order-1'); // an order priced under version 1 (no drivers online: it will just search)
+  {
+    // Owner's decision: a request never ends by itself (this server runs with the default: no search window).
+    const [o] = (await pool.query(`SELECT id FROM orders ORDER BY created_at DESC LIMIT 1`)).rows;
+    await pool.query(`UPDATE orders SET search_started_at = now() - interval '3 hours' WHERE id=$1`, [o.id]);
+    await new Promise(r => setTimeout(r, 2500));   // several matching rounds
+    const v = (await api('/get_order?id=' + o.id, undefined, U.token)).b;
+    ok('S2 a request with no courier keeps searching (no automatic end, no deadline shown)', v.status === 'searching' && v.search_ends_at === null, v);
+  }
   const v2 = (await S('/create_pricing_version', { base_da: 200, per_km_da: 40, min_percent: 80, max_percent: 150 })).b.version;
   const pr = (await S('/get_pricing')).b;
   ok('S2 the maximum trip length defaults to 50 km', pr.active.max_km === 50, pr.active);

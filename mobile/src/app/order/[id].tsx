@@ -18,6 +18,7 @@ import type { Key } from '../../i18n';
 const POLL_MS = 4000;   // status and the courier's position while active; live notifications refresh at once in between
 
 const NEARBY_MS = 10_000;   // couriers around the pickup are refreshed this often while searching
+const ZOOM_SPAN_MS = 600_000;   // the searching zoom-out and pulse reach their widest after 10 minutes (the search itself goes on)
 
 // One order, from "waiting for the receiver" to "delivered" (contract B). The map shows A, B, the route and the courier;
 // the panel follows the order's state; while couriers answer, their offers appear on top for the customer to choose.
@@ -68,10 +69,10 @@ export default function OrderScreen() {
   const H = Dimensions.get('window').height;
   const price = o.locked_da ?? o.offered_da;
   const showBids = o.status === 'searching' && o.bids.length > 0;
-  // While searching: the map stays centred on the pickup and zooms out slowly (zoom 16 down to 12 over the whole search,
+  // While searching: the map stays centred on the pickup and zooms out slowly (zoom 16 down to 12 over 10 minutes,
   // fastest at the start), the pulse keeps growing, and the map cannot be moved by hand (owner's wish, like inDrive).
   const searching = o.status === 'searching';
-  const searchShare = searching && o.search_ends_at ? Math.min(1, Math.max(0, (now - new Date(o.search_started_at).getTime()) / Math.max(1, new Date(o.search_ends_at).getTime() - new Date(o.search_started_at).getTime()))) : 0;
+  const searchShare = searching ? Math.min(1, Math.max(0, (now - new Date(o.search_started_at).getTime()) / ZOOM_SPAN_MS)) : 0;
 
   return (
     <View style={s.root} testID="screen-order">

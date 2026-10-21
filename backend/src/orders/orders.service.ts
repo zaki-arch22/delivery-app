@@ -243,7 +243,7 @@ export class OrdersService {
          o.distance_m, o.duration_s, o.delivery_code, o.pickup_code, o.inspection, o.recipient_expecting_at, o.pickup_photo_doc, o.pickup_distance_m, o.delivery_distance_m, o.tracking_hash IS NOT NULL has_tracking, o.cancel_reason, o.pickup_address, o.dropoff_address, o.recipient_name, o.recipient_phone,
          ST_Y(o.pickup_point::geometry) pickup_lat, ST_X(o.pickup_point::geometry) pickup_lng, ST_Y(o.dropoff_point::geometry) dropoff_lat, ST_X(o.dropoff_point::geometry) dropoff_lng,
          o.created_at, o.assigned_at, o.picked_up_at, o.delivered_at, o.auto_accept, o.route_line route, o.search_started_at,
-         CASE WHEN o.status='searching' THEN o.search_started_at + make_interval(secs => $3) END search_ends_at,
+         CASE WHEN o.status='searching' AND $3 > 0 THEN o.search_started_at + make_interval(secs => $3) END search_ends_at,
          (SELECT count(*)::int FROM offers f WHERE f.order_id=o.id AND f.status IN ('offered','bid')) couriers_notified,
          (SELECT count(*)::int FROM orders x WHERE x.driver_profile_id=o.driver_profile_id AND x.status='delivered' AND x.leg='delivery') driver_deliveries,
          dp.id driver_id, dp.display_name driver_name, dp.photo_url driver_photo,

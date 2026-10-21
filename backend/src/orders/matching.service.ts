@@ -81,7 +81,7 @@ export class Matching implements OnModuleInit, OnModuleDestroy {
     await this.db.tx(async q => {
       const [o] = await q(`SELECT id, status, user_profile_id, ref, offered_da, search_started_at, extract(epoch FROM now() - search_started_at) AS age FROM orders WHERE id=$1 FOR UPDATE`, [orderId]);
       if (!o || o.status !== 'searching') return;
-      if (o.age > cfg.searchWindowS()) {
+      if (cfg.searchWindowS() > 0 && o.age > cfg.searchWindowS()) {
         await q(`UPDATE orders SET status='expired' WHERE id=$1`, [orderId]);
         const w = await q(`UPDATE offers SET status='expired' WHERE order_id=$1 AND status IN ('offered','bid') RETURNING id, driver_profile_id`, [orderId]);
         for (const x of w) await notify(q, { profile: x.driver_profile_id, kind: 'offer.withdrawn', order: orderId, data: { offer_id: Number(x.id), reason: 'order_expired' }, push: false, dedupe: `offer:${x.id}:end` });
@@ -101,7 +101,8 @@ export class Matching implements OnModuleInit, OnModuleDestroy {
             AND NOT EXISTS (SELECT 1 FROM offers f WHERE f.order_id = o.id AND f.driver_profile_id = p.id AND f.status <> 'expired')
           ORDER BY ST_Distance(d.last_location, o.pickup_point) ASC
           LIMIT $3`, [orderId, radius, room]);
-      const ends = new Date(new Date(o.search_started_at).getTime() + cfg.searchWindowS() * 1000);
+      // A request stays in a courier's list until the search ends (or for a day when searches never end by themselves).
+      const ends = cfg.searchWindowS() > 0 ? new Date(new Date(o.search_started_at).getTime() + cfg.searchWindowS() * 1000) : new Date(Date.now() + cfg.offerOpenS() * 1000);
       for (const c of found) {
         const [{ n }] = await q(`SELECT count(*)::int + 1 AS n FROM offers WHERE order_id=$1`, [orderId]);
         const [off] = await q(

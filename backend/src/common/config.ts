@@ -4,7 +4,10 @@ export const cfg = {
   tickMs: () => n('TICK_MS', 2000),   // also how closely the server follows the growing search circle
   bidTtlS: () => n('BID_TTL_S', 40),              // how long a courier's price offer waits for the customer's answer
   broadcastMax: () => n('BROADCAST_MAX', 10),     // a request is shown to at most this many nearby couriers at once
-  searchWindowS: () => n('SEARCH_WINDOW_S', 600), // how long an order searches before it expires
+  // How long an order searches before it ends by itself. 0 = never (owner's decision, Oct 2026): a request keeps
+  // searching until a courier takes it or the customer cancels it.
+  searchWindowS: () => n('SEARCH_WINDOW_S', 0),
+  offerOpenS: () => n('OFFER_OPEN_S', 86400),     // with no search window, how long a request stays in a courier's list
   // The search area grows smoothly: 1 km at the start, +1 km every 8 s, up to 8 km (reached after 56 s). Nearest couriers
   // get the request first (shortest pickup), farther ones join within a minute. (The app's pulse is only a picture of
   // "searching", deliberately not tied to these numbers: owner's wish, like inDrive.)

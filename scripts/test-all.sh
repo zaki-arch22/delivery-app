@@ -93,7 +93,7 @@ run "backend: login methods switched off" login-off "$B" env $T npx ts-node test
 wipe
 
 # 4. Staff functions, staff console, mobile foundation (slower timers).
-start_server 3399 staff RATE_LIMIT_DISABLED=1 OFFER_TTL_S=10 SEARCH_WINDOW_S=120 SEARCH_START_M=3000 SEARCH_STEP_M=2000 SEARCH_STEP_S=60
+start_server 3399 staff RATE_LIMIT_DISABLED=1 OFFER_TTL_S=10 SEARCH_START_M=3000 SEARCH_STEP_M=2000 SEARCH_STEP_S=60
 run "backend: staff functions" staff "$B" env $T npx ts-node test/staff.e2e.ts
 run "staff console: contract match" console-contract "$ROOT/staff-console" node scripts/check-contract.mjs
 run "staff console: type check and build" console-build "$ROOT/staff-console" env VITE_API_URL=http://localhost:3399 npm run build

@@ -124,7 +124,7 @@ Not built (decided): two-person approval for large cash adjustments (needs a tea
 
 ## E. Order status rules (the only allowed moves)
 (created) -> searching (couriers are searched at once)
-searching -> assigned (the customer chooses a courier's offer, or auto-accept; price locks at that offer) | cancelled | expired (no courier in the search window)
+searching -> assigned (the customer chooses a courier's offer, or auto-accept; price locks at that offer) | cancelled | expired (only if a search window is configured; by default a request never ends by itself)
 assigned -> picked_up | cancelled | searching (staff reassign)
 picked_up -> delivered (correct delivery_code) | failed (driver reports failure)
 failed -> a new `return` order is created for the same driver, pointing back to the sender's pickup address.

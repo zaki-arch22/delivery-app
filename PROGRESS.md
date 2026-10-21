@@ -62,6 +62,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Searching animation like inDrive (2026-10-21, owner's wish with screenshots): the geographic growing circle was replaced by `ui/Pulse` (faint blue disc that grows slowly within a small screen size + repeating waves from the centre), anchored on the pickup by projecting it to the screen; while searching the map is locked (no hand gestures), centred on the pickup and zooms out slowly (16 → 12 over the search window, sqrt curve), the disc keeps growing (half → full size over the search). The real search area keeps its own schedule on the server (1 km + 1 km/8 s, max 8 km). app_config/nearby no longer carry search numbers.
 
+- No automatic end of a request (2026-10-21, owner): SEARCH_WINDOW_S defaults to 0 = never expires (searches until a courier takes it or the customer cancels); offers stay a day in couriers' lists (OFFER_OPEN_S); search countdown and progress bar removed from the app; zoom-out/pulse span fixed at 10 minutes.
+
 ## In progress
 - (none)
 
