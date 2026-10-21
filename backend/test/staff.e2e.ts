@@ -68,6 +68,17 @@ const BOX = { type: 'Polygon', coordinates: [[[2.9, 36.6], [3.3, 36.6], [3.3, 36
   const v2 = (await S('/create_pricing_version', { base_da: 200, per_km_da: 40, min_percent: 80, max_percent: 150 })).b.version;
   const pr = (await S('/get_pricing')).b;
   ok('S2 the maximum trip length defaults to 50 km', pr.active.max_km === 50, pr.active);
+  {
+    // Migration 021 opens the whole of Algeria (its border + 5 km); the 50 km limit keeps trips local.
+    await pool.query(require('fs').readFileSync(require('path').join(__dirname, '..', 'db', '021_algeria_open.sql'), 'utf8'));
+    const q = (a: any, b: any) => api('/get_quote', { pickup: a, dropoff: b, size: 'small' }, U.token);
+    const kolea = { lat: 36.64, lng: 2.76 }, koleaCentre = { lat: 36.636, lng: 2.768 }, oran = { lat: 35.697, lng: -0.633 }, tunis = { lat: 36.80, lng: 10.18 };
+    ok('S2 all of Algeria is open: Koléa (Tipaza) is served', (await q(kolea, koleaCentre)).b.recommended_da > 0);
+    ok('S2 ...and Oran too, for a local trip', (await q(oran, { lat: 35.70, lng: -0.62 })).b.recommended_da > 0);
+    ok('S2 ...but a trip from Koléa to Oran is refused as too long', (await q(kolea, oran)).b.error === 'TOO_FAR');
+    ok('S2 a place outside Algeria (Tunis) is refused', (await q(tunis, tunis)).b.error === 'ZONE_CLOSED');
+    await pool.query(`DELETE FROM zones WHERE name='Algérie'`);
+  }
   ok('S2 a maximum trip length outside 1-1000 km is refused', (await S('/create_pricing_version', { base_da: 200, per_km_da: 40, min_percent: 80, max_percent: 150, max_km: 0 })).b.error === 'BAD_MAX_KM'
     && (await S('/create_pricing_version', { base_da: 200, per_km_da: 40, min_percent: 80, max_percent: 150, max_km: '30' })).b.error === 'BAD_MAX_KM');
   ok('S2 a new price table replaces the old; only ONE is active; history kept', pr.active.version === v2 && pr.history.filter((r: any) => r.active).length === 1 && pr.history.length === 2);

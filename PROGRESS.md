@@ -52,6 +52,8 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - Photo upload fix (2026-10-21, owner's report "This photo could not be read"): the server's input guard refused photos that Android labels "application/octet-stream"; now any image type, that label or none is accepted and the content decides (attack test SEC16 kept: a declared web page/JSON is still refused). The app also sends the picture's JPEG bytes straight from the image tool.
 
+- All of Algeria open by default (2026-10-21, owner: "the whole of Algeria as a country"): migration 021 creates/opens the zone "Algérie" (Natural Earth border + 5 km; Koléa, Oran, Annaba, Tamanrasset in; Tunis, Oujda, Bamako out). Applied on Render automatically at the next deploy. Trips stay ≤ 50 km.
+
 ## In progress
 - (none)
 
