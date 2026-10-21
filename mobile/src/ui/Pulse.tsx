@@ -11,7 +11,7 @@ const WAVES = 3, WAVE_MS = 2400;   // three waves, one leaving the centre every 
 export function Pulse({ radius, grow = 0, testID = 'pulse' }: { radius: number; grow?: number; testID?: string }) {
   const size = radius * 2;
   const outer = useRef(new Animated.Value(0.5 + 0.5 * grow)).current;
-  useEffect(() => { Animated.timing(outer, { toValue: 0.5 + 0.5 * Math.min(1, Math.max(0, grow)), duration: 1000, useNativeDriver: true }).start(); }, [grow, outer]);
+  useEffect(() => { Animated.timing(outer, { toValue: 0.5 + 0.5 * Math.min(1, Math.max(0, grow)), duration: 1000, easing: Easing.linear, useNativeDriver: true }).start(); }, [grow, outer]);
   const waves = useRef([...Array(WAVES)].map(() => new Animated.Value(0))).current;
   useEffect(() => {
     const loops = waves.map((v, i) => Animated.loop(Animated.sequence([

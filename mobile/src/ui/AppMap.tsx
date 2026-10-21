@@ -20,7 +20,7 @@ export const AppMap = forwardRef<AppMapRef, {
   start: Point; zoom?: number; pins?: Pin[]; centerPin?: { label: string; kind: 'pickup' | 'dropoff'; title?: string | null }; onMoved?: (p: Point) => void;
   route?: [number, number][] | null; fit?: Point[]; pad?: Partial<Pad>; testID?: string; onTouching?: (touching: boolean) => void;
   nearby?: { vehicle: 'motorbike' | 'car'; lat: number; lng: number }[]; pulse?: { at: Point; grow?: number } | null;
-  follow?: { center: Point; zoom: number } | null;
+  follow?: { center: Point; from: number; to: number; ms: number } | null;
 }>(function AppMap({ start, zoom = 15, pins = [], centerPin, onMoved, route, fit, pad, testID = 'map', onTouching, nearby = [], pulse, follow }, ref) {
   const { t } = useApp();
   const cam = useRef<CameraRef>(null);
@@ -64,12 +64,18 @@ export const AppMap = forwardRef<AppMapRef, {
   useImperativeHandle(ref, () => ({ moveTo: (p, z = 16) => cam.current?.easeTo({ center: [p.lng, p.lat], zoom: z, duration: 600 }), fit: fitNow }));
   const fitKey = (fit ?? []).map(p => `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`).join('|');
   useEffect(() => { if (fit?.length && !follow) { const h = setTimeout(() => fitNow(fit), 250); return () => clearTimeout(h); } }, [fitKey, padding.bottom, !follow]);
-  // `follow`: the camera is driven by the screen (searching: centred on the pickup, slowly zooming out) and the person
-  // cannot move the map by hand. Each step glides linearly into the next, so the zoom-out looks continuous.
+  // `follow`: the camera is driven by the screen (searching: centred on the pickup, zooming out by itself) and the person
+  // cannot move the map by hand. ONE long, linear native animation from `from` to `to` over `ms` (smooth, no JS each
+  // second), after a short glide to the starting zoom.
+  const followKey = follow ? `${follow.center.lat},${follow.center.lng},${follow.from.toFixed(2)},${follow.to},${Math.round(follow.ms / 1000)}` : '';
   useEffect(() => {
     if (!follow) return;
-    cam.current?.easeTo({ center: [follow.center.lng, follow.center.lat], zoom: follow.zoom, padding, duration: 1200, easing: 'linear' });
-  }, [follow?.center.lat, follow?.center.lng, follow?.zoom, padding.bottom]);   // eslint-disable-line react-hooks/exhaustive-deps
+    const center: [number, number] = [follow.center.lng, follow.center.lat];
+    cam.current?.easeTo({ center, zoom: follow.from, padding, duration: 700, easing: 'ease' });
+    if (follow.ms <= 0) return;
+    const h = setTimeout(() => cam.current?.easeTo({ center, zoom: follow.to, padding, duration: follow.ms, easing: 'linear' }), 800);
+    return () => clearTimeout(h);
+  }, [followKey, padding.bottom]);   // eslint-disable-line react-hooks/exhaustive-deps   // eslint-disable-line react-hooks/exhaustive-deps
 
   const a = pins.find(p => p.kind === 'pickup'), b = pins.find(p => p.kind === 'dropoff');
   const line = useMemo(() => {
