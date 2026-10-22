@@ -22,7 +22,7 @@ Branch: `claude/optimistic-cannon-iw9rm9` (repo zaki-arch22/delivery-app). Resum
 
 - Milestone "push and build prep": PushBridge (register_device for the active profile/language, tap opens the right screen), incoming parcels card for registered recipients, staff console shows problem reasons in words, eas.json + app.config.js + mobile/BUILD.md. 358 tests + 12 database rules green.
 
-- Client proposal PDF (`docs/client/Parcel-Delivery-Platform-Proposal.pdf`, 25 pages): vision, architecture, technology, hosting, roadmap, costs, risks. It proposes Google Maps and Google Cloud (Cloud Run + Cloud SQL) for production; neither is decided in CLAUDE.md yet (owner/client decision).
+- Client proposal PDF (`docs/client/Parcel-Delivery-Platform-Proposal.pdf`, 25 pages; French version written from the developer to the client, no name fields: `docs/client/Plateforme-Livraison-Colis-Proposition.pdf`, 27 pages): vision, architecture, technology, hosting, roadmap, costs, risks. It proposes Google Maps and Google Cloud (Cloud Run + Cloud SQL) for production; neither is decided in CLAUDE.md yet (owner/client decision).
 
 ## In progress
 - Android build with over-the-air updates DONE (preview APK, build 6309a8d5): https://expo.dev/artifacts/eas/iT_Dnk_AFiHsvEgpg6eiC__QZQYAXJlDNUOrW2oFR64.apk . After this one, JS changes go out with `npx eas-cli update --channel preview` (needs u.expo.dev allowed). It points to a placeholder server (no backend reachable yet): screens open, login shows 'No connection'.
