@@ -7,6 +7,6 @@ module.exports = ({ config }) => ({
   ...config,
   android: { ...config.android, ...(firebase ? { googleServicesFile: './google-services.json' } : {}) },
   // Google sign-in reads the Firebase file; without it the button shows a calm error instead of breaking the build.
-  plugins: [...(config.plugins ?? []), ...(firebase ? ['@react-native-google-signin/google-signin'] : [])],
+  plugins: [...(config.plugins ?? []), ...(firebase ? ['@react-native-google-signin/google-signin'] : []), './plugins/real-phones-only'],
   extra: { ...(config.extra ?? {}), ...(process.env.EXPO_PROJECT_ID ? { eas: { projectId: process.env.EXPO_PROJECT_ID } } : {}) },
 });
