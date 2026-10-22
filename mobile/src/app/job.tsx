@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Dimensions, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ApiError } from '../core/api';
 import { useApp, useNotices } from '../lib/app';
 import { driver, FAIL_REASONS, FailReason, Job, NEEDS_EVIDENCE, RELEASE_REASONS, ReleaseReason } from '../lib/driver';
@@ -16,6 +16,7 @@ import { Sheet } from '../ui/Sheet';
 import { lastPosition, onPosition } from '../lib/tracker';
 import { Choice } from '../ui/Choice';
 import { MapOverlay, Button, Card, Field, Gap, Notice, RoundButton, Screen, T } from '../ui/kit';
+import { Icon } from '../ui/Icon';
 
 // The driver's active delivery (contract C: get_job, update_job_step, report_delivery_failure, release_job).
 // Every handover is proved (TRUST_AND_SAFETY.md): at pickup the SENDER's code (or QR) + a photo of the parcel, at the door the
@@ -23,6 +24,8 @@ import { MapOverlay, Button, Card, Field, Gap, Notice, RoundButton, Screen, T } 
 export default function JobScreen() {
   const [mapTouch, setMapTouch] = useState(false);   // a finger is moving the map: floating buttons step aside
   const { t, services } = useApp();
+  const { accepted } = useLocalSearchParams<{ accepted?: string }>();
+  const [welcomed, setWelcomed] = useState(accepted !== '1');   // the big "you got the job" screen, shown once when the customer just chose him
   const api = driver(services.client);
   const [job, setJob] = useState<Job | null | undefined>(undefined);
   const [done, setDone] = useState<Job | null>(null);
@@ -219,6 +222,20 @@ export default function JobScreen() {
       {msg ? <Notice testID="job-msg" warn={msg.warn} text={msg.text} /> : null}
       <Gap />
       </Sheet>
+      {!welcomed && job.status === 'assigned' ? (
+        <View style={s.chosen} testID="job-chosen" accessibilityViewIsModal accessibilityLiveRegion="assertive">
+          <View style={s.chosenIcon}><Icon name="check" size={56} tint={color.ink} /></View>
+          <T style={s.chosenTitle}>{t('chosen_title')}</T>
+          <T style={s.chosenPrice} testID="chosen-price">{money(job.locked_da)} {t('da')}</T>
+          <T style={s.chosenLine}>{t('chosen_sub')}</T>
+          <View style={s.chosenCard}>
+            <T style={s.chosenLine}>📦 {addressLine(job.pickup_address)}</T>
+            <T style={s.chosenMuted}>{t('chosen_sender', { name: job.sender_name })}</T>
+            {job.cash_to_collect_da > 0 ? <T style={s.chosenMuted}>💵 {t('chosen_cash', { p: money(job.cash_to_collect_da) })}</T> : null}
+          </View>
+          <Button testID="chosen-go" kind="secondary" icon="navigation" label={t('chosen_go')} onPress={() => setWelcomed(true)} />
+        </View>
+      ) : null}
       <QrScanner visible={!!scan} title={t(scan === 'PCK1' ? 'scan_pickup_qr' : 'scan_delivery_qr')} onCode={scanned} onClose={() => setScan(null)} />
     </View>
   );
@@ -237,4 +254,11 @@ const s = StyleSheet.create({
   cash: { backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 2, borderColor: color.amber, borderRadius: radius, padding: space(4), marginVertical: space(2) },
   cashOk: { borderColor: color.lime },
   cashText: { fontFamily: font.bold, fontSize: 20, lineHeight: 30 },
+  chosen: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: color.lime, alignItems: 'center', justifyContent: 'center', padding: space(6), gap: space(3), zIndex: 50, elevation: 50 },
+  chosenIcon: { width: 104, height: 104, borderRadius: 52, borderWidth: 4, borderColor: color.ink, alignItems: 'center', justifyContent: 'center' },
+  chosenTitle: { fontFamily: font.bold, fontSize: 30, lineHeight: 44, color: color.ink, textAlign: 'center' },
+  chosenPrice: { fontFamily: font.bold, fontSize: 40, lineHeight: 56, color: color.ink, writingDirection: 'ltr' },
+  chosenLine: { fontFamily: font.semibold, fontSize: 18, lineHeight: 28, color: color.ink, textAlign: 'center' },
+  chosenMuted: { fontSize: 16, lineHeight: 24, color: color.ink, textAlign: 'center' },
+  chosenCard: { alignSelf: 'stretch', backgroundColor: 'rgba(14,15,18,0.08)', borderRadius: radius, padding: space(4), gap: space(1) },
 });

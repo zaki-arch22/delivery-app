@@ -690,4 +690,9 @@ export const fr: Record<Key, string> = {
   n_wallet_topup_rejected: "Recharge refusée",
   n_wallet_adjusted: "Votre portefeuille a été corrigé",
   n_payout_changed: "Votre compte BaridiMob a changé (finit par {last4})",
+  chosen_title: "Le client vous a choisi !",
+  chosen_sub: "La course est à vous. Allez au point de retrait.",
+  chosen_sender: "Expéditeur : {name}",
+  chosen_cash: "Espèces à encaisser à la livraison : {p} DA",
+  chosen_go: "Commencer la course",
 };

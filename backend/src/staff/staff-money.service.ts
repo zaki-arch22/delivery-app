@@ -11,7 +11,7 @@ const page = (p: any) => Math.max(1, Number(p) || 1);
 const num = (rows: any[], ...keys: string[]) => rows.map(r => { for (const k of keys) if (r[k] != null) r[k] = Number(r[k]); return r; });
 const DAY = `(date_trunc('day', now() AT TIME ZONE 'Africa/Algiers') AT TIME ZONE 'Africa/Algiers')`;   // start of today in Algiers
 
-// Staff: the money pages (seller payments, courier wallets, cash limits), the dashboard, the live feed and the audit log.
+// Staff: the money pages (seller payments, courier wallets, cash limits), the dashboard and the audit log.
 @Injectable()
 export class StaffMoneyService {
   constructor(private db: Db) {}
@@ -159,34 +159,22 @@ export class StaffMoneyService {
                   (SELECT count(*) FROM violations WHERE status='appealed')::int appeals,
                   (SELECT count(*) FROM order_events WHERE type='emergency' AND created_at > now() - interval '24 hours')::int sos_24h,
                   (SELECT count(*) FROM orders WHERE status='picked_up' AND code_attempts >= 5)::int locked_codes`),
+      // The last 7 days, one row each: how well the service worked (not a picture: numbers to act on).
       this.db.query(`SELECT to_char(d, 'YYYY-MM-DD') AS day,
-                       (SELECT count(*) FROM orders o WHERE o.leg='delivery' AND (o.created_at AT TIME ZONE 'Africa/Algiers')::date = d)::int created,
-                       (SELECT count(*) FROM orders o WHERE o.leg='delivery' AND o.status='delivered' AND (o.delivered_at AT TIME ZONE 'Africa/Algiers')::date = d)::int delivered,
-                       (SELECT COALESCE(sum(locked_da),0) FROM orders o WHERE o.leg='delivery' AND o.status='delivered' AND (o.delivered_at AT TIME ZONE 'Africa/Algiers')::date = d)::int fees_da
-                     FROM generate_series((now() AT TIME ZONE 'Africa/Algiers')::date - 13, (now() AT TIME ZONE 'Africa/Algiers')::date, interval '1 day') AS g(t), LATERAL (SELECT t::date AS d) x ORDER BY d`),
+                       count(o.id) FILTER (WHERE o.leg='delivery')::int created,
+                       count(o.id) FILTER (WHERE o.leg='delivery' AND o.status='delivered')::int delivered,
+                       count(o.id) FILTER (WHERE o.status='cancelled')::int cancelled,
+                       count(o.id) FILTER (WHERE o.leg='delivery' AND o.status IN ('failed','expired'))::int failed,
+                       round(avg(extract(epoch FROM o.assigned_at - o.search_started_at)) FILTER (WHERE o.assigned_at IS NOT NULL))::int avg_assign_s,
+                       COALESCE(sum(o.locked_da) FILTER (WHERE o.leg='delivery' AND o.status='delivered'),0)::int fees_da,
+                       COALESCE(sum(o.cod_amount_da) FILTER (WHERE o.leg='delivery' AND o.status='delivered'),0)::int cod_da,
+                       (SELECT count(*) FROM problem_reports r WHERE (r.created_at AT TIME ZONE 'Africa/Algiers')::date = d)::int problems
+                     FROM generate_series((now() AT TIME ZONE 'Africa/Algiers')::date - 6, (now() AT TIME ZONE 'Africa/Algiers')::date, interval '1 day') AS g(t)
+                     CROSS JOIN LATERAL (SELECT t::date AS d) x
+                     LEFT JOIN orders o ON (o.created_at AT TIME ZONE 'Africa/Algiers')::date = d
+                     GROUP BY d ORDER BY d DESC`),
     ]);
-    return { at: new Date().toISOString(), wallet_active: walletOn(), orders, people, money, cases, days };
-  }
-
-  // ---------- live feed: what happened since the last look (the console asks every few seconds) ----------
-  async feed(f: any) {
-    const since = typeof f.since === 'string' && !Number.isNaN(Date.parse(f.since)) ? new Date(f.since) : new Date(Date.now() - 24 * 3600_000);
-    const rows = await this.db.query(
-      `(SELECT 'e'||e.id key, e.created_at at, e.type kind, o.id order_id, o.ref, e.data FROM order_events e JOIN orders o ON o.id=e.order_id
-          WHERE e.created_at > $1 AND e.type IN ('created','assigned','delivered','delivery_failed','cancelled','cancelled_by_support','recalled_by_sender','emergency','flag_far_away','flag_check',
-            'settlement_sent','settlement_confirmed','settlement_disputed','settlement_overdue','settlement_resolved','recipient_reported') ORDER BY e.id DESC LIMIT 60)
-       UNION ALL
-       (SELECT 'p'||r.id, r.created_at, 'problem', o.id, o.ref, jsonb_build_object('reason', r.reason) FROM problem_reports r LEFT JOIN orders o ON o.id=r.order_id
-          WHERE r.created_at > $1 ORDER BY r.id DESC LIMIT 30)
-       UNION ALL
-       (SELECT 'd'||p.id, p.created_at, 'driver_signup', NULL, NULL, jsonb_build_object('name', p.display_name) FROM profiles p WHERE p.type='driver' AND p.created_at > $1 ORDER BY p.created_at DESC LIMIT 20)
-       UNION ALL
-       (SELECT 't'||t.id, t.created_at, 'topup_request', NULL, NULL, jsonb_build_object('amount_da', t.amount_da) FROM wallet_topups t WHERE t.created_at > $1 ORDER BY t.id DESC LIMIT 20)
-       UNION ALL
-       (SELECT 'v'||v.id, v.appealed_at, 'appeal', v.order_id, NULL, jsonb_build_object('rule', v.rule) FROM violations v WHERE v.appealed_at > $1 ORDER BY v.appealed_at DESC LIMIT 20)
-       ORDER BY at DESC LIMIT 80`, [since]);
-    const DANGER = ['emergency', 'settlement_disputed', 'settlement_overdue'], WARN = ['delivery_failed', 'flag_far_away', 'flag_check', 'problem', 'recipient_reported', 'appeal', 'cancelled_by_support', 'recalled_by_sender'];
-    return { now: new Date().toISOString(), items: rows.map((r: any) => ({ ...r, level: DANGER.includes(r.kind) ? 'danger' : WARN.includes(r.kind) ? 'warn' : 'info' })) };
+    return { at: new Date().toISOString(), wallet_active: walletOn(), orders, people, money, cases, week: days };
   }
 
   // ---------- audit: every staff action, forever ----------

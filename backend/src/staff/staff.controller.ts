@@ -3,12 +3,13 @@ import { Access, Public } from '../auth/guard';
 import { StaffService } from './staff.service';
 import { TrustService } from '../trust/trust.service';
 import { StaffMoneyService } from './staff-money.service';
+import { StaffOpsService } from './staff-ops.service';
 
 const sid = (r: any): string => r.staff.id;
 
 @Controller()
 export class StaffController {
-  constructor(private s: StaffService, private t: TrustService, private m: StaffMoneyService) {}
+  constructor(private s: StaffService, private t: TrustService, private m: StaffMoneyService, private o: StaffOpsService) {}
   @Public() @Post('staff_login') @HttpCode(200) login(@Req() r: any, @Body() b: any) { return this.s.login(b?.email, b?.password, b?.code, r.ip); }
   @Access('staff') @Post('staff_logout') @HttpCode(200) logout(@Req() r: any) { return this.s.logout(sid(r)); }
 
@@ -54,9 +55,13 @@ export class StaffController {
   @Access('staff') @Post('add_wallet_adjustment') @HttpCode(200) walletAdjust(@Req() r: any, @Body() b: any) { return this.m.walletAdjust(sid(r), b); }
   @Access('staff') @Post('set_cash_limit') @HttpCode(200) cashLimit(@Req() r: any, @Body() b: any) { return this.m.setCashLimit(sid(r), b); }
 
-  // Overview: dashboard, live feed, audit log, customers
+  // Overview: dashboard, live operations, the day-by-day operations log, alerts, search, audit log, customers
   @Access('staff') @Get('get_dashboard') dashboard() { return this.m.dashboard(); }
-  @Access('staff') @Get('get_staff_feed') feed(@Query() q: any) { return this.m.feed(q); }
+  @Access('staff') @Get('get_live_operations') live() { return this.o.live(); }
+  @Access('staff') @Get('get_day_log') dayLog(@Query() q: any) { return this.o.dayLog(q); }
+  @Access('staff') @Get('get_staff_alerts') alerts(@Req() r: any) { return this.o.alerts(sid(r)); }
+  @Access('staff') @Post('mark_alerts_seen') @HttpCode(200) seen(@Req() r: any) { return this.o.markAlertsSeen(sid(r)); }
+  @Access('staff') @Get('staff_search') search(@Query() q: any) { return this.o.search(q); }
   @Access('staff') @Get('list_audit_log') auditLog(@Query() q: any) { return this.m.auditLog(q); }
   @Access('staff') @Get('list_users') users(@Query() q: any) { return this.m.listUsers(q); }
 

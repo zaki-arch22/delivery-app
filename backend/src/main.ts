@@ -49,7 +49,7 @@ async function main() {
   if (consoleDir) {
     if (!existsSync(join(consoleDir, 'index.html'))) throw new Error('STAFF_CONSOLE_DIR has no index.html (build the staff console with VITE_BASE=/staff/)');
     app.use('/staff', (_req: any, res: any, next: any) => {
-      res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+      res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self'; font-src 'self'; img-src 'self' data: blob: https://tiles.openfreemap.org; connect-src 'self' https://tiles.openfreemap.org; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
       next();
     }, serveStatic(consoleDir, { index: 'index.html', dotfiles: 'ignore', redirect: true }),
       (_req: any, res: any) => res.status(404).json({ error: 'NOT_FOUND', message: 'Not found' }));   // nothing else, no error details

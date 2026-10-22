@@ -116,6 +116,8 @@ export class MoneyService {
       await q(`UPDATE cod_settlements SET status='confirmed', confirmed_at=now() WHERE order_id=$1`, [orderId]);
       await q(`INSERT INTO cash_ledger(driver_profile_id, order_id, type, amount_da) VALUES ($1,$2,'paid_to_seller',$3) ON CONFLICT DO NOTHING`, [s.driver_profile_id, orderId, -s.amount_da]);
       await event(q, orderId, 'settlement_confirmed', userId, { amount_da: s.amount_da, from: s.status });
+      // The seller says the money arrived: the cases about this payment are settled too.
+      await q(`UPDATE problem_reports SET status='resolved', resolution='The seller confirmed the money arrived', resolved_at=now() WHERE order_id=$1 AND reason IN ('cod_not_received','check:cod_overdue') AND status <> 'resolved'`, [orderId]);
       await notify(q, { profile: s.driver_profile_id, kind: 'settlement.confirmed', order: orderId, dedupe: `settle:${orderId}:confirmed`, data: { ref: s.ref, amount_da: s.amount_da } });
     });
     return this.listSales(userId);

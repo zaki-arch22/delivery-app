@@ -28,7 +28,7 @@ export async function applyGrants(c: Client, role: string, password?: string) {
   await c.query(`REVOKE DELETE, TRUNCATE ON cod_settlements, wallet_topups FROM ${R}`);
   await c.query(`REVOKE ALL ON staff_users FROM ${R}`);
   await c.query(`GRANT SELECT ON staff_users TO ${R}`);
-  await c.query(`GRANT UPDATE (failed_attempts, locked_until, totp_last_step, token_version) ON staff_users TO ${R}`);
+  await c.query(`GRANT UPDATE (failed_attempts, locked_until, totp_last_step, token_version, alerts_seen_at) ON staff_users TO ${R}`);
   await c.query(`REVOKE ALL ON schema_migrations FROM ${R}`);
   await c.query(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${R}`);
   return role;

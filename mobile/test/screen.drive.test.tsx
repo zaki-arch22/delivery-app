@@ -30,6 +30,8 @@ let sender = '', n = 0;
 const rx = (text: string) => new RegExp(text.replace(/[\u00a0 ]/g, '\\s'));
 
 // Driver home, online (tests can run alone or in order).
+// The customer chose this courier: the big "you got the job" screen comes first; he taps "Start the job".
+async function startJob() { await fireEvent.press(await screen.findByTestId('chosen-go')); }
 async function driverOnlineHome(services = svc()) {
   await db.query(`DELETE FROM otp_codes`);   // the same test number logs in many times: stay under the 5-codes-per-hour protection
   await open(services);
@@ -93,6 +95,7 @@ test('online, offer with cash, accept, pickup, wrong code, cash check, delivered
   expect(screen.getByText('Sender')).toBeTruthy();
   await pressBack();
   await act(async () => { await fireEvent.press(await screen.findByTestId('accept-offer')); });
+  await startJob();
 
   expect(await screen.findByTestId('job-step')).toHaveTextContent(/Go to the pickup/);
   expect(screen.getByTestId('job-address')).toHaveTextContent(/Rue Larbi Ben Mhidi 5/);
@@ -182,6 +185,7 @@ test('cannot deliver: the job turns into a return to the sender, finished with t
   const o = await newOrder();
   expect(await openRequest()).toBeTruthy();
   await act(async () => { await fireEvent.press(screen.getByTestId('accept-offer')); });
+  await startJob();
   await pickup(o.id);
   await fireEvent.press(await screen.findByTestId('cant-deliver'));
   expect(screen.getByTestId('fail-confirm').props.accessibilityState.disabled).toBe(true);   // a reason is required
@@ -209,6 +213,7 @@ test('the driver gives a job back before pickup: it searches again for another d
   const o = await newOrder();
   expect(await openRequest()).toBeTruthy();
   await act(async () => { await fireEvent.press(screen.getByTestId('accept-offer')); });
+  await startJob();
   await fireEvent.press(await screen.findByTestId('give-back'));
   expect(screen.getByTestId('release-confirm').props.accessibilityState.disabled).toBe(true);   // a reason is required
   await fireEvent.press(screen.getByTestId('release-vehicle_problem'));
@@ -223,6 +228,7 @@ test('the sender cancels after the driver accepted: the driver is told; going of
   const o = await newOrder();
   expect(await openRequest()).toBeTruthy();
   await act(async () => { await fireEvent.press(screen.getByTestId('accept-offer')); });
+  await startJob();
   await screen.findByTestId('picked-up');
   await call('/cancel_order', { order_id: o.id, reason: 'changed my mind' }, sender);
   expect(await screen.findByTestId('job-none')).toHaveTextContent(/The sender cancelled this delivery/);   // live notification
@@ -239,6 +245,7 @@ test('no network in the middle of a job: steps are saved on the phone and sent w
   const o = await newOrder();
   expect(await openRequest()).toBeTruthy();
   await act(async () => { await fireEvent.press(screen.getByTestId('accept-offer')); });
+  await startJob();
   const pc = (await db.query(`SELECT pickup_code FROM orders WHERE id=$1`, [o.id])).rows[0].pickup_code;
   await fireEvent.changeText(await screen.findByTestId('pickup-code-input'), pc);
   await act(async () => { await fireEvent.press(screen.getByTestId('parcel-photo')); });
@@ -284,6 +291,7 @@ test('the weekly selfie before going online, and the emergency button on a job',
   const o = await newOrder();
   expect(await openRequest()).toBeTruthy();
   await act(async () => { await fireEvent.press(screen.getByTestId('accept-offer')); });
+  await startJob();
   await fireEvent.press(await screen.findByTestId('sos'));
   expect(screen.getByTestId('sos-17')).toBeTruthy(); expect(screen.getByTestId('sos-1055')).toBeTruthy();
   await act(async () => { await fireEvent.press(screen.getByTestId('sos-team')); });
@@ -303,6 +311,27 @@ test('a courier offers a higher price; the customer chooses him; the job opens b
   expect(v.bids.map((b: any) => b.price_da)).toEqual([up]);
   await call('/accept_bid', { order_id: o.id, offer_id: v.bids[0].offer_id }, sender);
   expect(await screen.findByTestId('screen-job', {}, { timeout: 15000 })).toBeTruthy();   // the live notice opens the job
+  // A big, unmissable "you got the job" screen: the price, the pickup, the sender; then the job itself.
+  expect(await screen.findByTestId('job-chosen')).toHaveTextContent(/The customer chose you!/);
+  expect(screen.getByTestId('chosen-price')).toHaveTextContent(rx(`${money(up)} DA`));
+  expect(screen.getByTestId('job-chosen')).toHaveTextContent(/Rue Larbi Ben Mhidi 5/);
+  await fireEvent.press(screen.getByTestId('chosen-go'));
+  expect(screen.queryByTestId('job-chosen')).toBeNull();
+  expect(screen.getByTestId('job-step')).toHaveTextContent(/Go to the pickup/);
   expect((await db.query(`SELECT locked_da FROM orders WHERE id=$1`, [o.id])).rows[0].locked_da).toBe(up);
+  await call('/cancel_order', { order_id: o.id }, sender);
+});
+
+test('even when the live connection is down, the courier sees within seconds that the customer chose him', async () => {
+  class DeadSocket { onopen: any; onclose: any; onmessage: any; onerror: any; constructor() {} send() {} close() {} }   // never connects
+  await driverOnlineHome(svc(undefined, undefined, DeadSocket as any));
+  const o = await newOrder({ auto_accept: false });
+  expect(await openRequest()).toBeTruthy();
+  await act(async () => { await fireEvent.press(screen.getByTestId('accept-offer')); });
+  expect(await screen.findByTestId('bid-waiting')).toBeTruthy();
+  const v = await call('/get_order?id=' + o.id, undefined, sender);
+  await call('/accept_bid', { order_id: o.id, offer_id: v.bids[0].offer_id }, sender);
+  expect(await screen.findByTestId('job-chosen', {}, { timeout: 8000 })).toHaveTextContent(/The customer chose you!/);   // found by the 2-second check
+  await fireEvent.press(screen.getByTestId('chosen-go'));
   await call('/cancel_order', { order_id: o.id }, sender);
 });

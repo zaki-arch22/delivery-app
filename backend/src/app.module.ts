@@ -30,10 +30,11 @@ import { Watchdog } from './trust/watchdog';
 import { MoneyService } from './money/money.service';
 import { MoneyController } from './money/money.controller';
 import { StaffMoneyService } from './staff/staff-money.service';
+import { StaffOpsService } from './staff/staff-ops.service';
 
 @Module({
   imports: [DbModule],
   controllers: [AuthController, NotifyController, StaffController, ...(process.env.TEST_HOOKS === '1' ? [DevController] : []), UserOrdersController, DriverController, RatingsController, TrackingController, DocumentsController, MoneyController],
-  providers: [SecurityLog, Maintenance, AuthService, Sms, Google, Realtime, PushService, StaffService, Routing, Eta, Places, Matching, OrdersService, RatingsService, DriverService, Documents, Tracking, TrustService, Watchdog, MoneyService, StaffMoneyService, { provide: APP_GUARD, useClass: AuthGuard }],
+  providers: [SecurityLog, Maintenance, AuthService, Sms, Google, Realtime, PushService, StaffService, Routing, Eta, Places, Matching, OrdersService, RatingsService, DriverService, Documents, Tracking, TrustService, Watchdog, MoneyService, StaffMoneyService, StaffOpsService, { provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule {}

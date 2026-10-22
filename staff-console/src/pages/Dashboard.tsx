@@ -1,98 +1,115 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { fmtDate, fmtNum, t, useLang, Key } from '../i18n';
-import { ErrorBox, Loading } from '../ui';
-import { FeedList, useLive } from '../live';
+import { dur, Loading } from '../ui';
+import { AlertList, useLive } from '../live';
 import type { Nav, Page } from '../App';
 
-type Tile = { k: string; v: number | null; unit?: 'da' | 'min' | 's'; go?: Page; tone?: 'warn' | 'bad' | 'good' };
-const dur = (s: number | null) => (s == null ? '—' : s < 90 ? `${s} s` : `${Math.round(s / 60)} ${t('dash.min')}`);
-
-// The whole platform at a glance (get_dashboard, refreshed every 30 s) and the live activity (get_staff_feed).
+// The control room (owner's wish, Oct 2026: a screen to RUN the service, not to look at vague numbers):
+// 1. what is waiting for a person right now, each with its button; 2. the situation right now; 3. today against yesterday;
+// 4. the last 7 days as numbers (a day opens its log); 5. open alerts; 6. money in one line.
 export function Dashboard({ nav }: { nav: Nav }) {
   useLang();
-  const { dash, items, refreshDash } = useLive();
+  const { dash, alerts, refreshDash } = useLive();
   useEffect(() => { refreshDash(); }, [refreshDash]);   // fresh numbers every time the page opens
   if (!dash) return <><h1>{t('dash.title')}</h1><Loading /></>;
-  const o = dash.orders, p = dash.people, m = dash.money, c = dash.cases;
-  const groups: { title: Key; tiles: Tile[] }[] = [
-    { title: 'dash.cases', tiles: [
-      { k: 'sos_24h', v: c.sos_24h, go: 'problems', tone: c.sos_24h ? 'bad' : undefined }, { k: 'settle_disputed', v: m.settle_disputed, go: 'settlements', tone: m.settle_disputed ? 'bad' : undefined },
-      { k: 'settle_overdue', v: m.settle_overdue, go: 'settlements', tone: m.settle_overdue ? 'bad' : undefined }, { k: 'problems_open', v: c.problems_open, go: 'problems', tone: c.problems_open ? 'warn' : undefined },
-      { k: 'drivers_pending', v: p.drivers_pending, go: 'drivers', tone: p.drivers_pending ? 'warn' : undefined }, { k: 'topups_pending', v: m.topups_pending, go: 'wallets', tone: m.topups_pending ? 'warn' : undefined },
-      { k: 'appeals', v: c.appeals, go: 'trust', tone: c.appeals ? 'warn' : undefined }, { k: 'locked_codes', v: c.locked_codes, go: 'orders' }] },
-    { title: 'dash.now', tiles: [
-      { k: 'searching_now', v: o.searching_now, go: 'orders' }, { k: 'active_now', v: o.active_now, go: 'orders' }, { k: 'drivers_online', v: p.drivers_online, go: 'drivers' },
-      { k: 'avg_assign', v: o.avg_assign_s, unit: 's' }, { k: 'avg_trip', v: o.avg_trip_s, unit: 's' }] },
-    { title: 'dash.today', tiles: [
-      { k: 'created_today', v: o.created_today, go: 'orders' }, { k: 'delivered_today', v: o.delivered_today, go: 'orders', tone: 'good' }, { k: 'cancelled_today', v: o.cancelled_today }, { k: 'failed_today', v: o.failed_today },
-      { k: 'fees_today', v: o.fees_today_da, unit: 'da' }, { k: 'cod_today', v: o.cod_today_da, unit: 'da' }] },
-    { title: 'dash.money', tiles: [
-      { k: 'cash_held', v: m.cash_held_da, unit: 'da', go: 'cash' }, { k: 'settle_pending', v: m.settle_pending_da, unit: 'da', go: 'settlements' }, { k: 'settle_sent', v: m.settle_sent, go: 'settlements' },
-      { k: 'paid_to_sellers_30d', v: m.paid_to_sellers_30d_da, unit: 'da' }, { k: 'commission_today', v: m.commission_today_da, unit: 'da' }, { k: 'commission_30d', v: m.commission_30d_da, unit: 'da' }, { k: 'wallets_owing', v: m.wallets_owing, go: 'wallets' }] },
-    { title: 'dash.people', tiles: [
-      { k: 'users', v: p.users, go: 'customers' }, { k: 'users_new_7d', v: p.users_new_7d, go: 'customers' }, { k: 'drivers', v: p.drivers, go: 'drivers' }, { k: 'blocked', v: p.blocked, go: 'trust' }, { k: 'delivered_total', v: o.delivered_total }] },
+  const o = dash.orders, p = dash.people, m = dash.money, c = dash.cases, week: any[] = dash.week ?? [];
+  const todo: { n: number; k: Key; go: Page; tone: 'bad' | 'warn' }[] = ([
+    { n: c.sos_24h, k: 'todo.sos', go: 'problems', tone: 'bad' }, { n: m.settle_disputed, k: 'todo.disputed', go: 'settlements', tone: 'bad' },
+    { n: m.settle_overdue, k: 'todo.overdue', go: 'settlements', tone: 'bad' }, { n: c.locked_codes, k: 'todo.locked', go: 'live', tone: 'bad' },
+    { n: c.problems_open, k: 'todo.problems', go: 'problems', tone: 'warn' }, { n: p.drivers_pending, k: 'todo.drivers', go: 'drivers', tone: 'warn' },
+    { n: m.topups_pending, k: 'todo.topups', go: 'wallets', tone: 'warn' }, { n: c.appeals, k: 'todo.appeals', go: 'trust', tone: 'warn' },
+  ] as const).filter(x => x.n > 0) as any;
+  const today = week[0] ?? {}, yday = week[1] ?? {};
+  const rate = (d: any) => (d.created ? Math.round((d.delivered / d.created) * 100) : null);
+  const cmp: { k: Key; v: number | null; y: number | null; unit?: 'da' | '%' | 's'; goodUp: boolean }[] = [
+    { k: 'dash.created_today', v: today.created, y: yday.created, goodUp: true }, { k: 'dash.delivered_today', v: today.delivered, y: yday.delivered, goodUp: true },
+    { k: 'dash.success', v: rate(today), y: rate(yday), unit: '%', goodUp: true }, { k: 'dash.cancelled_today', v: today.cancelled, y: yday.cancelled, goodUp: false },
+    { k: 'dash.avg_assign', v: today.avg_assign_s, y: yday.avg_assign_s, unit: 's', goodUp: false }, { k: 'dash.fees_today', v: today.fees_da, y: yday.fees_da, unit: 'da', goodUp: true },
   ];
-  const value = (x: Tile) => (x.unit === 's' ? dur(x.v) : `${fmtNum(x.v)}${x.unit === 'da' ? ' ' + t('common.da') : ''}`);
+  const show = (v: number | null, unit?: string) => (v == null ? '—' : unit === 's' ? dur(v) : unit === '%' ? `${v}%` : `${fmtNum(v)}${unit === 'da' ? ' ' + t('common.da') : ''}`);
+  const openAlerts = alerts.filter(a => !a.handled);
   return (
     <>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
+      <div className="page-head">
         <h1>{t('dash.title')}</h1>
-        <span className="muted">{t('dash.updated')}: {fmtDate(dash.at)} <button type="button" className="link" aria-label={t('dash.updated')} onClick={refreshDash}>↻</button></span>
+        <span className="muted">{t('dash.updated')}: {fmtDate(dash.at)} <button type="button" className="link" aria-label={t('common.refresh')} onClick={refreshDash}>↻</button></span>
       </div>
       {!dash.wallet_active && <p className="help">{t('dash.walletOff')}</p>}
+
+      <section className="card" aria-label={t('todo.title')}>
+        <h2>{t('todo.title')}</h2>
+        {!todo.length ? <p className="ok-msg">✓ {t('todo.clear')}</p> : (
+          <ul className="todo">{todo.map(x => (
+            <li key={x.k} className={'todo-item ' + x.tone}>
+              <span className="todo-n num">{fmtNum(x.n)}</span><span className="todo-k">{t(x.k)}</span>
+              <button type="button" className={x.tone === 'bad' ? 'danger' : 'primary'} onClick={() => nav.go(x.go)}>{t('todo.open')}</button>
+            </li>))}</ul>)}
+      </section>
+
       <div className="dash">
         <div className="dash-main">
-          {groups.map(g => (
-            <section key={g.title} className="card" aria-label={t(g.title)}>
-              <h3>{t(g.title)}</h3>
-              <div className="tiles">
-                {g.tiles.map(x => {
-                  const body = <><span className="tile-v num">{value(x)}</span><span className="tile-k">{t(('dash.' + x.k) as Key)}</span></>;
-                  return x.go ? <button type="button" key={x.k} className={'tile ' + (x.tone ?? '')} onClick={() => nav.go(x.go!)}>{body}</button>
-                    : <div key={x.k} className={'tile ' + (x.tone ?? '')}>{body}</div>;
-                })}
-              </div>
-            </section>))}
-          <DeliveredChart days={dash.days} />
+          <section className="card" aria-label={t('dash.now')}>
+            <h2>{t('dash.now')}</h2>
+            {o.searching_now > 0 && p.drivers_online === 0 && <p className="error">⚠ {t('dash.noCourier')}</p>}
+            <div className="tiles">
+              <button type="button" className={'tile ' + (o.searching_now ? 'warn' : '')} onClick={() => nav.go('live')}><span className="tile-v num">{o.searching_now}</span><span className="tile-k">{t('dash.searching_now')}</span></button>
+              <button type="button" className="tile" onClick={() => nav.go('live')}><span className="tile-v num">{o.active_now}</span><span className="tile-k">{t('dash.active_now')}</span></button>
+              <button type="button" className="tile" onClick={() => nav.go('live')}><span className="tile-v num">{p.drivers_online}</span><span className="tile-k">{t('dash.drivers_online')}</span></button>
+              <div className="tile"><span className="tile-v num">{dur(o.avg_assign_s)}</span><span className="tile-k">{t('dash.avg_assign')}</span></div>
+            </div>
+          </section>
+
+          <section className="card" aria-label={t('dash.vsYesterday')}>
+            <h2>{t('dash.vsYesterday')}</h2>
+            <div className="tiles">{cmp.map(x => {
+              const diff = x.v != null && x.y != null ? x.v - x.y : null, better = diff == null || diff === 0 ? null : (diff > 0) === x.goodUp;
+              return (
+                <div key={x.k} className="tile">
+                  <span className="tile-v num">{show(x.v, x.unit)}</span><span className="tile-k">{t(x.k)}</span>
+                  <span className={'delta ' + (better == null ? '' : better ? 'up' : 'down')}>{diff == null || diff === 0 ? '=' : diff > 0 ? '▲' : '▼'} {t('dash.yesterday')}: {show(x.y, x.unit)}</span>
+                </div>);
+            })}</div>
+          </section>
+
+          <section className="card" aria-label={t('dash.week')}>
+            <h2>{t('dash.week')}</h2>
+            <p className="muted small">{t('dash.weekHelp')}</p>
+            <div className="table-wrap keep-table"><table>
+              <thead><tr><th>{t('col.day')}</th><th>{t('log.created')}</th><th>{t('log.delivered')}</th><th>{t('col.successRate')}</th><th>{t('log.cancelled')}</th><th>{t('log.failed')}</th><th>{t('col.findTime')}</th><th>{t('log.fees')}</th><th>{t('col.problems')}</th></tr></thead>
+              <tbody>{week.map(d => (
+                <tr key={d.day} className="clickable" tabIndex={0} onClick={() => nav.go('log', { day: d.day })} onKeyDown={e => e.key === 'Enter' && nav.go('log', { day: d.day })}>
+                  <td className="num"><strong>{d.day}</strong></td><td className="num">{d.created}</td><td className="num">{d.delivered}</td><td className="num">{rate(d) == null ? '—' : rate(d) + '%'}</td>
+                  <td className="num">{d.cancelled}</td><td className="num">{d.failed}</td><td className="num">{dur(d.avg_assign_s)}</td><td className="num">{fmtNum(d.fees_da)} {t('common.da')}</td><td className="num">{d.problems}</td>
+                </tr>))}</tbody>
+            </table></div>
+          </section>
+
+          <section className="card" aria-label={t('dash.money')}>
+            <h2>{t('dash.money')}</h2>
+            <div className="tiles">
+              <button type="button" className="tile" onClick={() => nav.go('cash')}><span className="tile-v num">{fmtNum(m.cash_held_da)} {t('common.da')}</span><span className="tile-k">{t('dash.cash_held')}</span></button>
+              <button type="button" className="tile" onClick={() => nav.go('settlements')}><span className="tile-v num">{fmtNum(m.settle_pending_da)} {t('common.da')}</span><span className="tile-k">{t('dash.settle_pending')} ({m.settle_pending})</span></button>
+              <div className="tile"><span className="tile-v num">{fmtNum(m.paid_to_sellers_30d_da)} {t('common.da')}</span><span className="tile-k">{t('dash.paid_to_sellers_30d')}</span></div>
+              <div className="tile"><span className="tile-v num">{fmtNum(m.commission_30d_da)} {t('common.da')}</span><span className="tile-k">{t('dash.commission_30d')}</span></div>
+              <button type="button" className="tile" onClick={() => nav.go('wallets')}><span className="tile-v num">{m.wallets_owing}</span><span className="tile-k">{t('dash.wallets_owing')}</span></button>
+            </div>
+          </section>
+
+          <section className="card" aria-label={t('dash.people')}>
+            <h2>{t('dash.people')}</h2>
+            <div className="tiles">
+              <button type="button" className="tile" onClick={() => nav.go('customers')}><span className="tile-v num">{p.users}</span><span className="tile-k">{t('dash.users')} · {t('dash.users_new_7d')}: +{p.users_new_7d}</span></button>
+              <button type="button" className="tile" onClick={() => nav.go('drivers')}><span className="tile-v num">{p.drivers}</span><span className="tile-k">{t('dash.drivers')}</span></button>
+              <button type="button" className="tile" onClick={() => nav.go('trust')}><span className="tile-v num">{p.blocked}</span><span className="tile-k">{t('dash.blocked')}</span></button>
+              <div className="tile"><span className="tile-v num">{fmtNum(o.delivered_total)}</span><span className="tile-k">{t('dash.delivered_total')}</span></div>
+            </div>
+          </section>
         </div>
-        <aside className="card dash-feed" aria-label={t('live.title')}>
-          <h3>{t('live.title')}</h3>
-          <FeedList items={items} limit={30} onOpenOrder={id => nav.go('orders', { orderId: id })} />
+        <aside className="card dash-side" aria-label={t('dash.openAlerts')}>
+          <h2>{t('dash.openAlerts')} ({openAlerts.length})</h2>
+          <AlertList alerts={openAlerts} go={nav.go} limit={12} />
         </aside>
       </div>
-      <ErrorBox error={null} />
     </>
-  );
-}
-
-// One series (delivered orders per day): thin bars from the baseline, a hover tooltip, and a table view.
-function DeliveredChart({ days }: { days: { day: string; created: number; delivered: number; fees_da: number }[] }) {
-  const [table, setTable] = useState(false), [hover, setHover] = useState<number | null>(null);
-  const W = 640, H = 180, pad = 28, max = Math.max(1, ...days.map(d => d.delivered));
-  const step = (W - pad * 2) / days.length, bw = Math.max(6, Math.min(26, step - 8));
-  const y = (v: number) => H - pad - ((H - pad * 2) * v) / max;
-  const h = hover == null ? null : days[hover];
-  return (
-    <section className="card" aria-label={t('dash.chart')}>
-      <div className="row" style={{ justifyContent: 'space-between' }}><h3>{t('dash.chart')}</h3><button type="button" className="link" onClick={() => setTable(!table)}>{t(table ? 'dash.chartHide' : 'dash.chartTable')}</button></div>
-      <div className="chart" onMouseLeave={() => setHover(null)}>
-        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t('dash.chart')} preserveAspectRatio="none">
-          {[0, 0.5, 1].map(f => <line key={f} x1={pad} x2={W - pad} y1={y(max * f)} y2={y(max * f)} className="grid" />)}
-          <text x={4} y={y(max) + 4} className="axis">{max}</text><text x={4} y={y(0) + 4} className="axis">0</text>
-          {days.map((d, i) => {
-            const x = pad + i * step + (step - bw) / 2, top = y(d.delivered), hgt = Math.max(0, y(0) - top);
-            return (
-              <g key={d.day} onMouseEnter={() => setHover(i)}>
-                <rect x={pad + i * step} y={pad / 2} width={step} height={H - pad} fill="transparent" />
-                {hgt > 0 && <path className={'bar' + (hover === i ? ' on' : '')} d={`M${x},${y(0)} V${top + 4} Q${x},${top} ${x + 4},${top} H${x + bw - 4} Q${x + bw},${top} ${x + bw},${top + 4} V${y(0)} Z`} />}
-                {(i % 2 === days.length % 2 || i === days.length - 1) && <text x={x + bw / 2} y={H - 8} textAnchor="middle" className="axis">{d.day.slice(8)}/{d.day.slice(5, 7)}</text>}
-              </g>);
-          })}
-        </svg>
-        {h && <div className="tip" style={{ left: `${((pad + hover! * step + step / 2) / W) * 100}%` }}><strong>{h.day}</strong><div>{t('dash.deliveredCol')}: <span className="num">{h.delivered}</span></div><div className="muted">{t('dash.createdCol')}: {h.created} · {fmtNum(h.fees_da)} {t('common.da')}</div></div>}
-      </div>
-      {table && <div className="table-wrap"><table><thead><tr><th>{t('dash.day')}</th><th>{t('dash.createdCol')}</th><th>{t('dash.deliveredCol')}</th><th>{t('dash.feesCol')}</th></tr></thead>
-        <tbody>{days.map(d => <tr key={d.day}><td className="num">{d.day}</td><td className="num">{d.created}</td><td className="num">{d.delivered}</td><td className="num">{fmtNum(d.fees_da)}</td></tr>)}</tbody></table></div>}
-    </section>
   );
 }

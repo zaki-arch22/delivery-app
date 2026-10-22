@@ -75,3 +75,11 @@ export function ActionDialog({ title, help, onClose, onSubmit, needReason = true
 
 export const addressText = (a: Record<string, string> | null | undefined) =>
   !a ? '—' : ['street', 'commune', 'building', 'entrance', 'floor', 'apartment', 'landmark', 'notes'].map(k => a[k]).filter(Boolean).join(' · ') || '—';
+
+// A duration in words staff read at a glance: "45 s", "12 min", "2 h 05".
+export const dur = (s: number | null | undefined) => {
+  if (s == null) return '—';
+  if (s < 90) return `${Math.max(0, Math.round(s))} ${t('common.s')}`;
+  const m = Math.round(s / 60);
+  return m < 90 ? `${m} ${t('common.min')}` : `${Math.floor(m / 60)} ${t('common.h')} ${String(m % 60).padStart(2, '0')}`;
+};

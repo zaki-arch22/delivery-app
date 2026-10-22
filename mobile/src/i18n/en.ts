@@ -690,5 +690,10 @@ export const en = {
   n_wallet_topup_rejected: "Top-up refused",
   n_wallet_adjusted: "Your wallet was corrected",
   n_payout_changed: "Your BaridiMob account was changed (ends {last4})",
+  chosen_title: "The customer chose you!",
+  chosen_sub: "The job is yours. Go to the pickup now.",
+  chosen_sender: "Sender: {name}",
+  chosen_cash: "Cash to collect at delivery: {p} DA",
+  chosen_go: "Start the job",
 };
 export type Key = keyof typeof en;

@@ -174,9 +174,9 @@ const cashHeld = async (pid: string) => (await pool.query(`SELECT COALESCE(sum(a
   ok('M8 a sender cannot use courier money routes', (await api('/list_settlements', undefined, A.token)).s === 403 && (await api('/mark_settlement_sent', { order_id: o1.id, method: 'cash' }, A.token)).s === 403 && (await api('/get_wallet', undefined, A.token)).s === 403);
   ok('M8 a courier cannot use seller routes', (await api('/list_sales', undefined, D1.token)).s === 403 && (await api('/confirm_settlement', { order_id: o1.id }, D1.token)).s === 403);
   ok('M8 money routes need a login', (await api('/set_payout_account', { rip: '00799999001111111122', holder_name: 'Evil' })).s === 401 && (await api('/get_payout_account')).s === 401);
-  for (const p of ['/list_settlements_staff', '/list_topups', '/get_dashboard', '/get_staff_feed', '/list_audit_log', '/list_users', '/get_driver_wallet?profile_id=' + D1.id])
+  for (const p of ['/list_settlements_staff', '/list_topups', '/get_dashboard', '/get_staff_alerts', '/get_live_operations', '/get_day_log', '/staff_search?q=Amel', '/list_audit_log', '/list_users', '/get_driver_wallet?profile_id=' + D1.id])
     ok(`M8 ${p} is for staff only`, (await api(p, undefined, A.token)).b.error === 'STAFF_ONLY');
-  for (const p of ['/resolve_settlement', '/decide_topup', '/add_wallet_adjustment', '/set_cash_limit'])
+  for (const p of ['/resolve_settlement', '/decide_topup', '/add_wallet_adjustment', '/set_cash_limit', '/mark_alerts_seen'])
     ok(`M8 ${p} is for staff only`, (await api(p, { order_id: o1.id }, D1.token)).b.error === 'STAFF_ONLY');
   ok('M8 bad ids are refused cleanly', (await api('/confirm_settlement', { order_id: "1' OR '1'='1" }, A.token)).b.error === 'BAD_ID' && (await S('/decide_topup', { id: 1e20, decision: 'approve' })).b.error === 'BAD_ID');
   const denied = async (sql: string) => { try { await appPool.query(sql); return false; } catch { return true; } };
@@ -212,13 +212,38 @@ const cashHeld = async (pid: string) => (await pool.query(`SELECT COALESCE(sum(a
   ok('M9 staff see the wallet history and the cash limit', sw.entries.length >= 4 && sw.effective_limit_da === 5000 && sw.credit_da === 1000, sw);
   await api('/cancel_order', { order_id: o5.id }, A.token);
 
-  // ===== M10 staff overview: dashboard, live feed, customers, cash limit, commission =====
+  // ===== M10 staff overview: dashboard, alerts, live operations, operations log, search, customers, cash limit, commission =====
   const dash = (await S('/get_dashboard')).b;
   ok('M10 the dashboard counts orders, people and money', dash.orders.delivered_total === 2 && dash.people.drivers >= 2 && dash.money.commission_30d_da === (await pool.query(`SELECT COALESCE(sum(commission_da),0)::int n FROM orders`)).rows[0].n
-    && dash.days.length === 14 && dash.wallet_active === true && typeof dash.cases.problems_open === 'number', dash);
-  const feed = (await S('/get_staff_feed?since=' + encodeURIComponent(new Date(Date.now() - 3600_000).toISOString()))).b;
-  ok('M10 the live feed shows money events, the worst flagged', feed.items.some((i: any) => i.kind === 'settlement_disputed' && i.level === 'danger') && feed.items.some((i: any) => i.kind === 'topup_request') && !!feed.now, feed.items?.slice(0, 3));
-  ok('M10 the feed only shows what is new', (await S('/get_staff_feed?since=' + encodeURIComponent(feed.now))).b.items.length === 0);
+    && dash.week.length === 7 && dash.week[0].delivered === 2 && dash.wallet_active === true && typeof dash.cases.problems_open === 'number', dash);
+  // Alerts: only the important things, and opening them marks them seen (for this staff member).
+  let al = (await S('/get_staff_alerts')).b;
+  ok('M10 alerts: money disputes and late payments are urgent, top-ups are work to do', al.alerts.some((a: any) => a.kind === 'money' && a.level === 'danger' && a.reason === 'cod_not_received')
+    && al.alerts.some((a: any) => a.kind === 'money' && a.reason === 'check:cod_overdue') && al.alerts.some((a: any) => a.kind === 'topup' && a.level === 'info'), al.alerts.slice(0, 4));
+  ok('M10 alerts: ordinary events (orders created, delivered) are NOT alerts', !al.alerts.some((a: any) => ['created', 'delivered', 'assigned'].includes(a.kind)));
+  ok('M10 alerts: new ones are counted until seen', al.unseen > 0 && al.unseen === al.alerts.filter((a: any) => a.unseen).length);
+  ok('M10 alerts: already handled ones say so', al.alerts.filter((a: any) => a.reason === 'cod_not_received').every((a: any) => a.handled === true));
+  await S('/mark_alerts_seen', {});
+  al = (await S('/get_staff_alerts')).b;
+  ok('M10 alerts: once opened, the counter is 0 (kept on the server)', al.unseen === 0 && al.alerts.length > 0);
+  // Live operations: an order in progress appears with its courier.
+  r = await order(A.token, 'money-key-live'); const live1 = r.b;
+  let lv = (await S('/get_live_operations')).b;
+  ok('M10 live operations: the searching order is there, with how many couriers saw it', lv.orders.some((o: any) => o.id === live1.id && o.status === 'searching' && typeof o.couriers_notified === 'number' && Array.isArray(o.flags))
+    && lv.couriers.some((c: any) => c.id === D1.id), lv.orders.map((o: any) => o.ref));
+  await api('/cancel_order', { order_id: live1.id }, A.token);
+  lv = (await S('/get_live_operations')).b;
+  ok('M10 live operations: a cancelled order leaves the live board', !lv.orders.some((o: any) => o.id === live1.id));
+  // The operations log: finished orders, day by day.
+  const lg = (await S('/get_day_log')).b;
+  ok('M10 operations log: today, with its numbers and the finished orders', lg.summary.delivered === 2 && lg.orders.some((o: any) => o.id === live1.id && o.status === 'cancelled') && lg.days.length === 30 && lg.days[0].day === lg.day, lg.summary);
+  ok('M10 operations log: filter by outcome', (await S('/get_day_log?outcome=delivered')).b.orders.every((o: any) => o.status === 'delivered') && (await S('/get_day_log?outcome=bogus')).b.error === 'BAD_OUTCOME');
+  ok('M10 operations log: another day has its own list (empty here)', (await S('/get_day_log?day=2020-01-01')).b.orders.length === 0 && (await S("/get_day_log?day=2020-01-01'%20OR%201=1")).b.day !== "2020-01-01' OR 1=1");
+  // One search box: reference, phone or name.
+  const sr = async (q: string) => (await S('/staff_search?q=' + encodeURIComponent(q))).b.results;
+  ok('M10 search: by order reference, name and phone', (await sr(o1.ref)).some((x: any) => x.type === 'order' && x.id === o1.id) && (await sr('Amel')).some((x: any) => x.type === 'user')
+    && (await sr('552000010')).some((x: any) => x.type === 'driver' && x.id === D1.id));
+  ok('M10 search: an injection attempt finds nothing', (await sr("%' OR 1=1 --")).length === 0 && (await sr('x')).length === 0);
   const users = (await S('/list_users?q=Amel')).b.users;
   ok('M10 customers list: orders and payout account', users.length === 1 && users[0].orders >= 5 && users[0].has_payout === true, users);
   ok('M10 the cash-limit ceiling can be changed (audited)', (await S('/set_cash_limit', { driver_profile_id: D1.id, cash_limit_da: 3000 })).s === 200 && (await api('/get_wallet', undefined, D1.token)).b.cash_limit_da === 3000

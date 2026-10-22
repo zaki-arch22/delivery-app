@@ -17,6 +17,7 @@ import { MapOverlay, Button, Notice, RoundButton, T } from './kit';
 import { Icon } from './Icon';
 
 const REQUEST_CHECK_MS = 5000;   // fallback check while online (the live connection normally brings requests at once)
+const ANSWER_CHECK_MS = 2000;    // while the courier waits for the customer's answer: the choice must show at once, even if the live connection dropped
 
 // Courier mode home (contract C): the map with my position, the big online switch, and while online the requests near me.
 // Several couriers see a request at once: I accept the customer's price or offer a higher one, then the customer chooses.
@@ -43,6 +44,13 @@ export function DriverHome() {
 
   // Only the LATEST refresh may change the screen: an older answer arriving late ("offline") must not undo a newer one.
   const seq = useRef(0);
+  // The customer chose this courier: open the job with a big, unmissable "You got the job" screen (once per job).
+  const waitingAnswer = useRef(false), shown = useRef<string | null>(null);
+  const chosen = useCallback((orderId?: string) => {
+    if (orderId && shown.current === orderId) return;
+    shown.current = orderId ?? 'auto'; waitingAnswer.current = false; setOpen(null);
+    router.push({ pathname: '/job', params: { accepted: '1' } });
+  }, []);
   const load = useCallback(async () => {
     if (!active) return;
     const mine = ++seq.current;
@@ -50,20 +58,24 @@ export function DriverHome() {
       const [h, j] = await Promise.all([api.home(), api.job()]);
       if (mine !== seq.current) return;
       setHome(h); setJob(j);
-      if (h.online) { await tracking.ensure(send); setReqs(j ? [] : await api.requests()); } else { tracking.stop(); setReqs([]); }
+      if (j && j.status === 'assigned' && waitingAnswer.current) { chosen(j.id); return; }   // accepted while the live message was missed
+      if (!j) shown.current = null;
+      if (h.online) { await tracking.ensure(send); const rq = j ? [] : await api.requests(); if (mine !== seq.current) return; setReqs(rq); waitingAnswer.current = rq.some(r => r.status === 'bid'); }
+      else { tracking.stop(); setReqs([]); waitingAnswer.current = false; }
     } catch { /* offline: keep what is shown, the next check retries */ }
-  }, [services, active]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [services, active, chosen]);   // eslint-disable-line react-hooks/exhaustive-deps
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useNotices(n => {
-    if (n.kind === 'bid.accepted') { setOpen(null); router.push('/job'); return; }
+    if (n.kind === 'bid.accepted') { chosen(n.order_id ?? undefined); return; }
     if (n.kind === 'bid.declined') setMsg({ text: t('bid_declined'), warn: true });
     if (n.kind === 'bid.expired') setMsg({ text: t('bid_expired') });
     if (n.kind.startsWith('offer.') || n.kind.startsWith('bid.') || n.kind.startsWith('job.') || n.kind.startsWith('cash.') || n.kind.startsWith('profile.')) load();
   });
-  useEffect(() => { if (!home?.online || job) return; const h = setInterval(() => api.requests().then(setReqs).catch(() => {}), REQUEST_CHECK_MS); return () => clearInterval(h); }, [home?.online, job]);   // eslint-disable-line react-hooks/exhaustive-deps
   const free = !!home?.online && !job;
   const radar = free && me ? { at: me } : null;
   const waiting = reqs.find(r => r.status === 'bid');
+  // Fallback checks while online and free (requests AND the job: an answer must never be missed).
+  useEffect(() => { if (!home?.online || job) return; const h = setInterval(() => { load(); }, waiting ? ANSWER_CHECK_MS : REQUEST_CHECK_MS); return () => clearInterval(h); }, [home?.online, job, !!waiting, load]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!waiting) return; const h = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(h); }, [waiting?.offer_id]);
 
   // Once a week the courier takes a selfie before going online (the approved person is the one working).
@@ -97,7 +109,8 @@ export function DriverHome() {
     setBusy('bid' + (price ?? 'own')); setMsg(null);
     try {
       const out = await api.bid(r.offer_id, price);
-      if (out.job) { setOpen(null); router.push('/job'); return; }
+      if (out.job) { chosen(out.job.id); return; }
+      waitingAnswer.current = true;
       await load();
     } catch (e) { fail(e); load(); } finally { setBusy(null); }
   }

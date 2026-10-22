@@ -690,4 +690,9 @@ export const ar: Record<Key, string> = {
   n_wallet_topup_rejected: "رُفض الشحن",
   n_wallet_adjusted: "تم تصحيح محفظتك",
   n_payout_changed: "تغيّر حسابك في بريدي موب (ينتهي بـ {last4})",
+  chosen_title: "العميل اختارك!",
+  chosen_sub: "المهمة لك. توجّه الآن إلى نقطة الاستلام.",
+  chosen_sender: "المرسل: {name}",
+  chosen_cash: "نقد للتحصيل عند التسليم: {p} دج",
+  chosen_go: "ابدأ المهمة",
 };

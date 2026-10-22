@@ -153,23 +153,38 @@ test('9. ratings page shows its empty state', async () => {
   expect(await screen.findByText('Nothing here yet.')).toBeInTheDocument();
 });
 
-test('9b. money and overview: dashboard, a disputed seller payment decided, a top-up approved, customers, audit log, live alerts', async () => {
+test('9b. money and overview: to-do dashboard, alerts, a disputed seller payment decided, a top-up approved, customers, audit log, live operations, operations log, search', async () => {
   const drv = driver.active_profile.id, usr = user.active_profile.id;
   await db.query(`INSERT INTO cod_settlements(order_id, driver_profile_id, seller_profile_id, amount_da, seller_rip, seller_holder, status, due_at, dispute_note, disputed_at)
                   VALUES ($1,$2,$3,2500,'00799999001234567890','Seller Test','disputed', now() - interval '1 hour','Nothing arrived', now())`, [orderId, drv, usr]);
   await db.query(`INSERT INTO cash_ledger(driver_profile_id, order_id, type, amount_da) VALUES ($1,$2,'cod_collected',2500)`, [drv, orderId]);
   const doc = await upload('transfer_receipt', driver.token); await db.query(`UPDATE documents SET profile_id=$2 WHERE id=$1`, [doc, drv]);
   await db.query(`INSERT INTO wallet_topups(driver_profile_id, amount_da, reference, receipt_doc) VALUES ($1, 1000, 'BM-TOPUP-1', $2)`, [drv, doc]);
+  await db.query(`INSERT INTO problem_reports(order_id, reporter_profile_id, reason, note) VALUES ($1,$2,'cod_not_received','Nothing arrived')`, [orderId, usr]);
 
   await u.click(nav().getByRole('button', { name: 'Dashboard' }));
   expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
-  const disputed = await screen.findByRole('button', { name: /Disputed by sellers/ });
-  await waitFor(() => expect(within(disputed).getByText('1')).toBeInTheDocument());
+  // "To do now": each waiting thing with its own button (no vague numbers).
+  const todo = await screen.findByRole('region', { name: 'To do now' });
+  const disputedItem = (await within(todo).findByText('seller payments disputed')).closest('li')!;
+  expect(within(disputedItem).getByText('1')).toBeInTheDocument();
+  expect(within(todo).getByText('wallet top-ups to check')).toBeInTheDocument();
   expect(screen.getByText(/Commission is not charged yet/)).toBeInTheDocument();                   // no platform account on the test server
   await waitFor(() => expect(nav().getByRole('button', { name: 'Seller payments' })).toHaveAttribute('title', 'Seller payments: 1'));   // waiting work counted in the menu
-  expect(screen.getByRole('img', { name: 'Delivered orders, last 14 days' })).toBeInTheDocument();
+  expect(within(screen.getByRole('region', { name: 'Last 7 days' })).getAllByRole('row').length).toBe(8);   // a table of numbers instead of a chart
+  expect(screen.getByRole('region', { name: 'Today compared with yesterday' })).toBeInTheDocument();
+  // Alerts: only important things; opening the bell clears the red counter, on the server too.
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Alerts: [1-9]/ })).toBeInTheDocument(), { timeout: 12000 });
+  await u.click(screen.getByRole('button', { name: /^Alerts/ }));
+  const panel = await screen.findByRole('dialog', { name: 'Alerts' });
+  expect(within(panel).getByText('Seller payment problem')).toBeInTheDocument();
+  expect(within(panel).getByText('Wallet top-up to check')).toBeInTheDocument();
+  expect(within(panel).queryByText(/New order|Delivered/)).toBeNull();                             // ordinary events are not alerts
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Alerts: 0' })).toBeInTheDocument());
+  await waitFor(async () => expect((await db.query(`SELECT alerts_seen_at > now() - interval '1 minute' ok FROM staff_users`)).rows[0].ok).toBe(true));
+  await u.click(screen.getByRole('button', { name: /^Alerts/ }));
 
-  await u.click(disputed);                                                                         // a tile opens its page
+  await u.click(within(disputedItem).getByRole('button', { name: 'Open' }));                       // the to-do button opens its page
   expect(await screen.findByRole('heading', { name: 'Seller payments (cash on delivery)' })).toBeInTheDocument();
   const row = (await screen.findByText(ref)).closest('tr')!;
   expect(within(row).getByText('Disputed')).toBeInTheDocument();
@@ -207,10 +222,33 @@ test('9b. money and overview: dashboard, a disputed seller payment decided, a to
   expect(screen.getByText('resolve_settlement')).toBeInTheDocument();
   expect(screen.getByText('set_cash_limit')).toBeInTheDocument();
 
-  expect(screen.getByRole('button', { name: /^Alerts: \d+$/ })).toBeInTheDocument();                // the bell with the live alerts
-  await u.click(screen.getByRole('button', { name: /^Alerts/ }));
-  expect(await screen.findByRole('dialog', { name: 'Live activity' })).toBeInTheDocument();
-  await u.click(screen.getByRole('button', { name: /^Alerts/ }));
+
+  // Live operations: an order in progress, apart from the history.
+  const q = await call('/get_quote', { pickup: { lat: 36.7538, lng: 3.0588 }, dropoff: { lat: 36.765, lng: 3.07 }, size: 'small' }, user.token);
+  const live = await (await fetch(API + '/create_order', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + user.token, 'idempotency-key': 'console-live-1' },
+    body: JSON.stringify({ quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: { street: 'Rue Larbi Ben Mhidi' }, dropoff_address: { street: 'Bab El Oued' }, recipient_name: 'Amine', recipient_phone: '+213770000009', payer: 'sender' }) })).json() as any;
+  await u.click(nav().getByRole('button', { name: 'Live operations' }));
+  const searching = await screen.findByRole('region', { name: 'Searching for a courier' });
+  expect(await within(searching).findByText(live.ref)).toBeInTheDocument();
+  expect(screen.getByText('The map cannot be shown on this device.')).toBeInTheDocument();        // no WebGL in the test browser
+  await u.click(within(searching).getByText(live.ref));
+  d = await dialog(); expect(await within(d).findByRole('button', { name: 'Cancel order' })).toBeEnabled();
+  await u.click(within(d).getByRole('button', { name: 'Close' }));
+  // The operations log: today, the finished (cancelled) order is there; the live one is not.
+  await u.click(nav().getByRole('button', { name: 'Operations log' }));
+  expect(await screen.findByRole('heading', { name: 'Operations log' })).toBeInTheDocument();
+  expect(await screen.findByText(ref)).toBeInTheDocument();
+  expect(screen.queryByText(live.ref)).toBeNull();
+  await u.click(screen.getByRole('tab', { name: 'Delivered' }));
+  await waitFor(() => expect(screen.queryByText(ref)).toBeNull());
+  await u.click(screen.getByRole('button', { name: /Previous day/ }));
+  expect(await screen.findByText('Nothing here yet.')).toBeInTheDocument();
+  // One search box: the order by its reference.
+  await u.type(screen.getByRole('searchbox'), live.ref);
+  await u.click(await screen.findByRole('option', { name: new RegExp(live.ref) }));
+  expect(await screen.findByRole('heading', { name: 'Orders' })).toBeInTheDocument();
+  expect((await dialog())).toHaveTextContent(live.ref);
+  await u.click(within(await dialog()).getByRole('button', { name: 'Close' }));
 });
 
 test('10. language: Arabic switches the whole console to right-to-left, French works too', async () => {
