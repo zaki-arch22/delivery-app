@@ -151,9 +151,9 @@ export default function DriverSignup() {
 const s = StyleSheet.create({
   row: { flexDirection: 'row', gap: space(3), flexWrap: 'wrap', alignItems: 'center' },
   choice: { minHeight: minTouch, minWidth: 130, paddingHorizontal: space(4), borderRadius: radius, borderWidth: 2, borderColor: 'transparent', backgroundColor: color.card2, justifyContent: 'center' },
-  choiceOn: { borderColor: color.lime },
+  choiceOn: { borderColor: color.brand },
   choiceText: { fontFamily: font.semibold, textAlign: 'center' },
-  choiceTextOn: { color: color.lime },
+  choiceTextOn: { color: color.accent },
   slot: { backgroundColor: color.card, borderRadius: 20, padding: space(4), marginVertical: space(2) },
   slotHead: { flexDirection: 'row', gap: space(3), alignItems: 'center' },
   thumb: { width: 72, height: 54, borderRadius: 8 },

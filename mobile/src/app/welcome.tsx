@@ -13,7 +13,7 @@ export default function Welcome() {
   const Path = ({ id, icon, title, sub, path }: { id: string; icon: IconName; title: string; sub: string; path: 'user' | 'driver' }) => (
     <Pressable testID={id} accessibilityRole="button" accessibilityLabel={title} onPress={() => router.push({ pathname: '/login', params: { path } })}
       style={({ pressed }) => [s.card, { flexDirection: rtl ? 'row-reverse' : 'row' }, pressed && { opacity: 0.85 }]}>
-      <View style={s.icon}><Icon name={icon} size={30} tint={color.ink} /></View>
+      <View style={s.icon}><Icon name={icon} size={30} tint={color.onBrand} /></View>
       <View style={{ flex: 1 }}><T style={s.cardTitle}>{title}</T><T kind="muted">{sub}</T></View>
       <Icon name="chevron-right" tint={color.muted} />
     </Pressable>
@@ -33,11 +33,11 @@ export default function Welcome() {
   );
 }
 const s = StyleSheet.create({
-  hero: { backgroundColor: color.lime, borderRadius: 28, padding: space(6) },
-  brand: { color: color.ink, fontFamily: font.bold, fontSize: 15, opacity: 0.7 },
-  heroTitle: { color: color.ink, fontFamily: font.bold, fontSize: 28, lineHeight: 40 },
-  heroSub: { color: color.ink, fontSize: 16, lineHeight: 24, marginTop: space(2) },
+  hero: { backgroundColor: color.brand, borderRadius: 28, padding: space(6) },
+  brand: { color: color.onBrand, fontFamily: font.bold, fontSize: 15, opacity: 0.7 },
+  heroTitle: { color: color.onBrand, fontFamily: font.bold, fontSize: 28, lineHeight: 40 },
+  heroSub: { color: color.onBrand, fontSize: 16, lineHeight: 24, marginTop: space(2) },
   card: { alignItems: 'center', gap: space(4), backgroundColor: color.card, borderRadius: 24, padding: space(5), marginVertical: space(2) },
-  icon: { width: 56, height: 56, borderRadius: 18, backgroundColor: color.lime, alignItems: 'center', justifyContent: 'center' },
+  icon: { width: 56, height: 56, borderRadius: 18, backgroundColor: color.brand, alignItems: 'center', justifyContent: 'center' },
   cardTitle: { fontFamily: font.bold, fontSize: 20, lineHeight: 30 },
 });

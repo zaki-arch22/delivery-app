@@ -30,7 +30,7 @@ export class Places {
     u.searchParams.set('lat', String(lat)); u.searchParams.set('lon', String(lng)); u.searchParams.set('limit', '1');
     if (l !== 'default') u.searchParams.set('lang', l);
     try {
-      const r = await fetch(u, { signal: AbortSignal.timeout(cfg.geocoderTimeoutMs()), redirect: 'error', headers: { 'user-agent': 'delivery-app (test server)' } });
+      const r = await fetch(u, { signal: AbortSignal.timeout(cfg.geocoderTimeoutMs()), redirect: 'error', headers: { 'user-agent': cfg.userAgent() } });
       if (!r.ok) return { place: null };
       const text = await r.text();
       if (text.length > 100_000) return { place: null };
@@ -55,7 +55,7 @@ export class Places {
     if (l !== 'default') u.searchParams.set('lang', l);
     if (near) { u.searchParams.set('lat', String(near.lat)); u.searchParams.set('lon', String(near.lng)); }
     try {
-      const r = await fetch(u, { signal: AbortSignal.timeout(cfg.geocoderTimeoutMs()), redirect: 'error', headers: { 'user-agent': 'delivery-app (test server)' } });
+      const r = await fetch(u, { signal: AbortSignal.timeout(cfg.geocoderTimeoutMs()), redirect: 'error', headers: { 'user-agent': cfg.userAgent() } });
       if (!r.ok) { this.log.warn(`search service answered ${r.status}`); return { places: [], unavailable: true }; }
       const text = await r.text();
       if (text.length > 300_000) return { places: [], unavailable: true };

@@ -2,7 +2,7 @@
 # ONE web service runs the API and also hands out the staff console at /staff/.
 # The database is a free Neon database (PostgreSQL + PostGIS); its address is pasted once as OWNER_DATABASE_URL.
 # Free limits: the server sleeps after 15 minutes without visits (the next visit waits about 1 minute), no permanent disk
-# (photos are kept in the database), road distances use the straight-line estimate (no OSRM on the free plan).
+# (photos are kept in the database). Road routes come from the FOSSGIS public OSRM service (see ROUTING_URL below).
 services:
   - type: web
     name: delivery-api
@@ -23,6 +23,13 @@ services:
       # light use only: fine for testing; a real launch runs its own Photon server (backend/deploy/README.md).
       - key: GEOCODER_URL
         value: https://photon.komoot.io
+      # Real road routes (the line on the map, km and minutes): the free public OSRM service of FOSSGIS, run by OpenStreetMap
+      # volunteers (https://routing.openstreetmap.de/about.html). Fair use only, fine for testing; a real launch runs its own
+      # OSRM (backend/deploy/osrm.md). If it is slow or down, the app falls back to the straight-line estimate by itself.
+      - key: ROUTING_URL
+        value: https://routing.openstreetmap.de/routed-car
+      - key: ROUTING_TIMEOUT_MS
+        value: "3000"
       # Secrets made by Render itself (never written anywhere else).
       - key: JWT_SECRET
         generateValue: true

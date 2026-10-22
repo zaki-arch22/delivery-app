@@ -55,6 +55,22 @@ test('registered for the active profile and language; language change and profil
   expect(await screen.findByTestId('order-status')).toHaveTextContent(/Looking for a courier/);
 });
 
+test('a notification tapped while the app was CLOSED opens its screen once the app has started', async () => {
+  pushState.token = null;
+  const s = svc();
+  const first = await open(s);
+  await loginThroughScreens('0557000001', 'user');
+  await screen.findByTestId('send-parcel');
+  const q = await call('/get_quote', { pickup: { lat: 36.7538, lng: 3.0588 }, dropoff: { lat: 36.765, lng: 3.07 }, size: 'small' }, s.client.token!);
+  const o = await call('/create_order', { quote_id: q.quote_id, offered_da: q.recommended_da, pickup_address: { street: 'Rue A' }, dropoff_address: { street: 'Rue B' }, recipient_name: 'Omar', recipient_phone: '+213661111111', payer: 'sender' }, s.client.token!, { 'idempotency-key': 'push-cold-start-1' });
+  first.unmount();   // the app is closed
+  // The app is started again (same phone, same login) by a tap on that order's notification.
+  pushState.launch = { id: '7', kind: 'order.bid', order_id: o.id };
+  await open(s);
+  expect(await screen.findByTestId('order-status', {}, { timeout: 8000 })).toHaveTextContent(/Looking for a courier/);
+  expect(pushState.launch).toBe(null);   // used once: reopening the app later does not jump to it again
+});
+
 test('a registered recipient sees the incoming parcel and its code on the home screen (live, and from a tapped push)', async () => {
   pushState.token = null;
   // Someone else sends a parcel to Hana's number.

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Dimensions, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ApiError } from '../core/api';
+import { ratedNow } from '../lib/rated';
 import { useApp, useNotices } from '../lib/app';
 import { driver, FAIL_REASONS, FailReason, Job, NEEDS_EVIDENCE, RELEASE_REASONS, ReleaseReason } from '../lib/driver';
 import { currentPosition } from '../lib/location';
@@ -38,6 +39,8 @@ export default function JobScreen() {
   const [msg, setMsg] = useState<{ text: string; warn?: boolean } | null>(null), [busy, setBusy] = useState<string | null>(null);
   const [cancelled, setCancelled] = useState(false);
   const [unsent, setUnsent] = useState(false);   // a step is saved on the phone, waiting for network
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [returnFailed, setReturnFailed] = useState(false);   // the first load failed (no network): show a retry, not a blank screen
   const [me, setMe] = useState(lastPosition());   // my own position (the same reading sent to the server)
   useEffect(() => onPosition(setMe), []);
 
@@ -49,15 +52,18 @@ export default function JobScreen() {
       setUnsent(waiting.length > 0);
       if (j && waiting.some(w => w.step === 'delivered')) { setDone(j); setJob(null); return; }
       if (j && j.status === 'assigned' && waiting.some(w => w.step === 'picked_up')) { setJob({ ...j, status: 'picked_up', next_step: 'delivered' }); return; }
-      setJob(j);
-    } catch { /* no network: keep what is shown */ }
+      setJob(j); setLoadFailed(false);
+    } catch { setLoadFailed(true); /* no network: keep what is shown */ }
   }, [services]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => services.queue.onEvent(e => {
     services.queue.pending().then(p => setUnsent(p.length > 0));
     if (!e.sent) setMsg({ text: t('step_sync_failed', { err: err(e.error) }), warn: true });
   }) as unknown as () => void, [services]);   // eslint-disable-line react-hooks/exhaustive-deps
   useFocusEffect(useCallback(() => { load(); }, [load]));
-  useNotices(n => { if (n.kind === 'job.cancelled') { setCancelled(true); load(); } else if (n.kind === 'job.updated') load(); });
+  useNotices(n => { if (n.kind === 'job.cancelled') { setCancelled(true); load(); } else if (n.kind === 'job.updated' || n.kind === 'job.recalled') load(); });
+  // A safety net when the live connection drops: re-read the job every 8 s while one is open (or while the first load failed).
+  const open = !!job || job === undefined;
+  useEffect(() => { if (!open) return; const h = setInterval(load, 8000); return () => clearInterval(h); }, [open, load]);
 
   const err = (e: unknown) => {
     if (e instanceof ApiError && e.code === 'CODE_WRONG') return t('err_code_wrong_driver');
@@ -115,6 +121,7 @@ export default function JobScreen() {
     const evidenceId = evidence ? await api.photo('evidence_photo', await photoBlob(evidence)) : undefined;
     const ret = await api.fail(job.id, reason, { evidence_photo: evidenceId, location: await currentPosition() });
     setFailing(false); setReason(null); setEvidence(null); setCode(''); setJob(ret);   // the return leg back to the sender (or nothing, for a failed return)
+    if (!ret && job.leg === 'return') setReturnFailed(true);   // the sender could not be reached either: tell him what to do with the parcel
   });
   const release = () => job && relReason && run('release', async () => {
     if (relReason === 'unsafe_or_prohibited' && !evidence) { setMsg({ text: t('evidence_needed'), warn: true }); return; }
@@ -130,15 +137,23 @@ export default function JobScreen() {
   });
   const maps = (lat: number, lng: number) => Linking.openURL(Platform.OS === 'ios' ? `http://maps.apple.com/?ll=${lat},${lng}&q=${lat},${lng}` : `geo:${lat},${lng}?q=${lat},${lng}`).catch(() => {});
 
-  if (job === undefined) return <Screen testID="screen-job" title="" />;
+  if (job === undefined) return (
+    <Screen testID="screen-job" title={t('menu_deliveries')} onBack={() => router.replace('/home')}>
+      {loadFailed ? (<>
+        <Notice testID="job-load-failed" warn text={t('err_network')} />
+        <Button testID="job-retry" kind="secondary" label={t('try_again')} onPress={load} />
+      </>) : <T kind="muted" testID="job-loading">{t('loading')}</T>}
+    </Screen>
+  );
   if (!job) return (
     <Screen testID="screen-job" title={t('menu_deliveries')} onBack={() => router.replace('/home')}>
       {done ? (<>
         <T kind="title" testID="job-done">{t('job_delivered')}</T>
         {unsent ? <Notice testID="unsent" text={t('sync_pending')} /> : null}
         {msg ? <Notice testID="job-msg" warn={msg.warn} text={msg.text} /> : null}
-        {done.leg === 'delivery' ? <Button testID="rate-sender" kind="secondary" label={t('rate_sender')} onPress={() => router.push({ pathname: '/rate/[id]', params: { id: done.id } })} /> : null}
-      </>) : <Notice testID="job-none" warn={cancelled} text={released ? t('job_released') : cancelled ? t('job_cancelled') : t('no_active_job')} />}
+        {done.leg === 'delivery' && !ratedNow.has(done.id) ? <Button testID="rate-sender" kind="secondary" label={t('rate_sender')} onPress={() => router.push({ pathname: '/rate/[id]', params: { id: done.id } })} /> : null}
+      </>) : returnFailed ? <Notice testID="return-failed" warn text={t('return_failed_help')} />
+        : <Notice testID="job-none" warn={cancelled} text={released ? t('job_released') : cancelled ? t('job_cancelled') : t('no_active_job')} />}
       <Button testID="back-home" label={t('back_home')} onPress={() => router.replace('/home')} />
     </Screen>
   );
@@ -152,7 +167,7 @@ export default function JobScreen() {
   return (
     <View style={s.root} testID="screen-job">
       <View style={s.mapBox}>
-        <AppMap onTouching={setMapTouch} start={target} zoom={14} pins={pins} fit={me ? [me, target] : [target]} pad={{ top: 110, bottom: Dimensions.get('window').height * 0.62 }} />
+        <AppMap onTouching={setMapTouch} start={target} zoom={14} pins={pins} route={job.route ?? null} fit={me ? [me, target] : [target]} pad={{ top: 110, bottom: Dimensions.get('window').height * 0.62 }} />
         <MapOverlay hidden={mapTouch} style={s.top}>
           <View style={s.topRow}>
             <RoundButton testID="back-home-top" icon="arrow-left" label={t('back_home')} onPress={() => router.replace('/home')} />
@@ -224,7 +239,7 @@ export default function JobScreen() {
       </Sheet>
       {!welcomed && job.status === 'assigned' ? (
         <View style={s.chosen} testID="job-chosen" accessibilityViewIsModal accessibilityLiveRegion="assertive">
-          <View style={s.chosenIcon}><Icon name="check" size={56} tint={color.ink} /></View>
+          <View style={s.chosenIcon}><Icon name="check" size={56} tint={color.onBrand} /></View>
           <T style={s.chosenTitle}>{t('chosen_title')}</T>
           <T style={s.chosenPrice} testID="chosen-price">{money(job.locked_da)} {t('da')}</T>
           <T style={s.chosenLine}>{t('chosen_sub')}</T>
@@ -252,13 +267,13 @@ const s = StyleSheet.create({
   mapBox: { flex: 1, minHeight: 0 },
   row: { flexDirection: 'row', gap: space(3), flexWrap: 'wrap', alignItems: 'center' },
   cash: { backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 2, borderColor: color.amber, borderRadius: radius, padding: space(4), marginVertical: space(2) },
-  cashOk: { borderColor: color.lime },
+  cashOk: { borderColor: color.brand },
   cashText: { fontFamily: font.bold, fontSize: 20, lineHeight: 30 },
-  chosen: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: color.lime, alignItems: 'center', justifyContent: 'center', padding: space(6), gap: space(3), zIndex: 50, elevation: 50 },
-  chosenIcon: { width: 104, height: 104, borderRadius: 52, borderWidth: 4, borderColor: color.ink, alignItems: 'center', justifyContent: 'center' },
-  chosenTitle: { fontFamily: font.bold, fontSize: 30, lineHeight: 44, color: color.ink, textAlign: 'center' },
-  chosenPrice: { fontFamily: font.bold, fontSize: 40, lineHeight: 56, color: color.ink, writingDirection: 'ltr' },
-  chosenLine: { fontFamily: font.semibold, fontSize: 18, lineHeight: 28, color: color.ink, textAlign: 'center' },
-  chosenMuted: { fontSize: 16, lineHeight: 24, color: color.ink, textAlign: 'center' },
+  chosen: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: color.brand, alignItems: 'center', justifyContent: 'center', padding: space(6), gap: space(3), zIndex: 50, elevation: 50 },
+  chosenIcon: { width: 104, height: 104, borderRadius: 52, borderWidth: 4, borderColor: color.onBrand, alignItems: 'center', justifyContent: 'center' },
+  chosenTitle: { fontFamily: font.bold, fontSize: 30, lineHeight: 44, color: color.onBrand, textAlign: 'center' },
+  chosenPrice: { fontFamily: font.bold, fontSize: 40, lineHeight: 56, color: color.onBrand, writingDirection: 'ltr' },
+  chosenLine: { fontFamily: font.semibold, fontSize: 18, lineHeight: 28, color: color.onBrand, textAlign: 'center' },
+  chosenMuted: { fontSize: 16, lineHeight: 24, color: color.onBrand, textAlign: 'center' },
   chosenCard: { alignSelf: 'stretch', backgroundColor: 'rgba(14,15,18,0.08)', borderRadius: radius, padding: space(4), gap: space(1) },
 });

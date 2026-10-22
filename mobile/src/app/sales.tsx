@@ -38,7 +38,7 @@ export default function Sales() {
           return (
             <View key={x.order_id} style={[s.card, x.overdue && { borderColor: color.danger }]} testID={'sale-' + x.ref}>
               <View style={s.head}><T style={s.amount}>{money(x.amount_da)} {t('da')}</T><T kind="muted">{x.ref}</T></View>
-              <T style={{ color: x.overdue || x.status === 'disputed' ? color.amber : x.status === 'confirmed' || x.status === 'resolved_paid' ? color.lime : color.text }} testID={'sale-status-' + x.ref}>{status(x)}</T>
+              <T style={{ color: x.overdue || x.status === 'disputed' ? color.amber : x.status === 'confirmed' || x.status === 'resolved_paid' ? color.accent : color.text }} testID={'sale-status-' + x.ref}>{status(x)}</T>
               <T kind="muted">{t('sale_by', { name: x.driver_name })}{x.driver_phone ? ' · ' + x.driver_phone : ''}</T>
               {x.method ? <T kind="muted">{x.method === 'cash' ? t('sale_method_cash') : t('sale_method_baridimob', { r: x.reference ?? '' })} · {x.sent_at ? when(x.sent_at, lang) : ''}</T> : null}
               {x.resolution_note ? <T kind="muted">{x.resolution_note}</T> : null}

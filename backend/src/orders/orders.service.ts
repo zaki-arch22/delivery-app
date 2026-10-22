@@ -3,7 +3,7 @@ import { randomInt } from 'crypto';
 import { Db } from '../db/db.service';
 import { Routing } from '../geo/routing';
 import { Matching } from './matching.service';
-import { priceFor, Size, vehicleFor } from './pricing';
+import { priceFor, Size, SIZE_MAX_KG, vehicleFor } from './pricing';
 import { notify } from '../notify/notify';
 import { inOpenZone } from '../geo/zones';
 import { PHONE, address, bad, fail, isId, isInt, point, uuid } from '../common/errors';
@@ -40,7 +40,7 @@ export class OrdersService {
     if (route.distance_m > price.max_km * 1000) throw fail(422, 'TOO_FAR', `Deliveries go up to ${price.max_km} km`);
     const data = { pickup, dropoff, size: b.size, distance_m: route.distance_m, duration_s: route.duration_s, distance_estimated: route.estimated, line: route.line ?? null, ...price };
     const q = await this.db.one(`INSERT INTO quotes(user_profile_id, data, expires_at) VALUES ($1,$2, now() + interval '5 minutes') RETURNING id, expires_at`, [userId, data]);
-    return { quote_id: q.id, expires_at: q.expires_at, vehicle: price.vehicle, distance_m: route.distance_m, duration_s: route.duration_s, distance_estimated: route.estimated, recommended_da: price.recommended_da, min_da: price.min_da, max_da: price.max_da, route: route.line ?? null };
+    return { quote_id: q.id, expires_at: q.expires_at, vehicle: price.vehicle, max_kg: SIZE_MAX_KG[b.size as Size], distance_m: route.distance_m, duration_s: route.duration_s, distance_estimated: route.estimated, recommended_da: price.recommended_da, min_da: price.min_da, max_da: price.max_da, route: route.line ?? null };
   }
 
   async createOrder(userId: string, key: string | undefined, b: any) {
@@ -256,7 +256,8 @@ export class OrdersService {
          CASE WHEN o.status IN ('assigned','picked_up') THEN ST_Y(dd.last_location::geometry) END driver_lat,
          CASE WHEN o.status IN ('assigned','picked_up') THEN ST_X(dd.last_location::geometry) END driver_lng,
          dd.last_location_at driver_location_at,
-         EXISTS (SELECT 1 FROM ratings r WHERE r.order_id = o.id AND r.rater_profile_id = o.user_profile_id) AS rated
+         EXISTS (SELECT 1 FROM ratings r WHERE r.order_id = o.id AND r.rater_profile_id = o.user_profile_id) AS rated,
+         (SELECT x.id FROM orders x WHERE x.parent_order_id = o.id AND x.leg = 'return' ORDER BY x.created_at DESC LIMIT 1) return_order_id
        FROM orders o LEFT JOIN profiles dp ON dp.id = o.driver_profile_id LEFT JOIN driver_details dd ON dd.profile_id = dp.id
        WHERE o.id=$1 AND o.user_profile_id=$2`, [orderId, userId, cfg.searchWindowS()]);
     if (!o) throw fail(404, 'NOT_FOUND', 'Order not found');

@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { routeFor } from '../lib/push';
 import { router, useFocusEffect } from 'expo-router';
 import { useApp } from '../lib/app';
 import { account, AppNotice } from '../lib/account';
@@ -18,10 +19,12 @@ export default function Notifications() {
     catch { setList(prev => prev ?? []); } finally { setBusy(false); }
   }, [services]);   // eslint-disable-line react-hooks/exhaustive-deps
   useFocusEffect(useCallback(() => { load(); }, [load]));
+  // The same destination as tapping the phone notification (money, wallet, record, order or job), else nothing.
   const open = (n: AppNotice) => {
+    const r = routeFor({ kind: n.type, order_id: n.order_id ?? '' });
+    if (r && r.pathname !== '/home') { router.push(r as any); return; }
     if (!n.order_id) return;
     if (state.active?.type === 'user') router.push({ pathname: '/order/[id]', params: { id: n.order_id } });
-    else router.push('/job');
   };
   return (
     <Screen testID="screen-notifications" title={t('menu_notifications')}>

@@ -41,6 +41,6 @@ export default function Profile() {
   );
 }
 const s = StyleSheet.create({
-  avatar: { width: 112, height: 112, borderRadius: 56, backgroundColor: color.lime, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginTop: space(2) },
-  avatarText: { color: color.ink, fontFamily: font.bold, fontSize: 48 },
+  avatar: { width: 112, height: 112, borderRadius: 56, backgroundColor: color.brand, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginTop: space(2) },
+  avatarText: { color: color.onBrand, fontFamily: font.bold, fontSize: 48 },
 });

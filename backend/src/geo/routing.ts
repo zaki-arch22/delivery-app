@@ -5,19 +5,30 @@ export interface RouteResult { distance_m: number; duration_s: number; estimated
 type P = { lat: number; lng: number };
 
 // The ONLY place that knows how distance is measured.
-// With ROUTING_URL set, it asks our own OSRM server (free, open source, OpenStreetMap roads) for the real road distance.
+// With ROUTING_URL set, it asks an OSRM server (free, open source, OpenStreetMap roads) for the real road distance and the
+// road's shape to draw: our own server at launch, or (test server) the free FOSSGIS service
+// https://routing.openstreetmap.de/routed-car (fair use: the app identifies itself, answers are cached, the route source is
+// credited on the map).
 // If OSRM is not configured, too slow, or finds no road, it falls back to a straight-line estimate marked `estimated`,
 // so a quote never fails or hangs because of routing.
 @Injectable()
 export class Routing {
   private log = new Logger('Routing');
+  // The same trip asked again within 10 minutes (quote, then order, then the courier's screen) is answered from memory.
+  private cache = new Map<string, { at: number; r: RouteResult }>();
 
   // `withLine` also asks for the road's shape ([lng, lat] points) to draw on the map; without OSRM it is null (straight line).
   async route(a: P, b: P, withLine = false): Promise<RouteResult> {
     const base = cfg.routingUrl();
     if (base) {
-      const road = await this.osrm(base, a, b, withLine);
-      if (road) return road;
+      const key = `${a.lat.toFixed(5)},${a.lng.toFixed(5)};${b.lat.toFixed(5)},${b.lng.toFixed(5)}`, hit = this.cache.get(key);
+      if (hit && Date.now() - hit.at < cfg.routeCacheS() * 1000 && (!withLine || hit.r.line)) return withLine ? hit.r : { ...hit.r, line: undefined };
+      const road = await this.osrm(base, a, b, true);
+      if (road) {
+        if (this.cache.size > 2000) this.cache.delete(this.cache.keys().next().value as string);
+        this.cache.set(key, { at: Date.now(), r: road });
+        return withLine ? road : { ...road, line: undefined };
+      }
     }
     return this.estimate(a, b);
   }
@@ -27,7 +38,7 @@ export class Routing {
     const shape = withLine ? 'overview=simplified&geometries=geojson' : 'overview=false';
     const url = `${base.replace(/\/+$/, '')}/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?${shape}&alternatives=false&steps=false`;
     try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(cfg.routingTimeoutMs()), redirect: 'error' });
+      const r = await fetch(url, { signal: AbortSignal.timeout(cfg.routingTimeoutMs()), redirect: 'error', headers: { 'user-agent': cfg.userAgent() } });
       if (!r.ok) { this.log.warn(`OSRM answered ${r.status}; using the estimate`); return null; }
       const text = await r.text();
       if (text.length > 400_000) { this.log.warn('OSRM answer too large; using the estimate'); return null; }

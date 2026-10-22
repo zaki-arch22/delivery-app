@@ -32,9 +32,14 @@ export class Client {
     const isFile = isBytes || (typeof Blob !== 'undefined' && body instanceof Blob);
     // Photos are always JPEG here (the phone re-saves every picture as JPEG); Android often labels the file vaguely.
     const type = isFile ? (!isBytes && /^image\/(jpeg|png|webp)$/.test((body as Blob).type) ? (body as Blob).type : 'image/jpeg') : 'application/json';
+    // Never wait forever (a weak signal, or the test server waking up): 20 s for a request, 60 s for a photo. A request that
+    // times out is treated as "no connection", so job steps fall back to being saved on the phone.
+    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), isFile ? 60_000 : 20_000) : null;
     try {
-      r = await this.fetchFn(this.baseUrl + path, { method: body === undefined ? 'GET' : 'POST', headers: { 'content-type': type, ...(auth && this.access ? { authorization: 'Bearer ' + this.access } : {}), ...(this.device() ? { 'x-device': this.device()! } : {}), ...headers }, body: body === undefined ? undefined : isFile ? (body as any) : JSON.stringify(body) });
+      r = await this.fetchFn(this.baseUrl + path, { signal: ctl?.signal as any, method: body === undefined ? 'GET' : 'POST', headers: { 'content-type': type, ...(auth && this.access ? { authorization: 'Bearer ' + this.access } : {}), ...(this.device() ? { 'x-device': this.device()! } : {}), ...headers }, body: body === undefined ? undefined : isFile ? (body as any) : JSON.stringify(body) });
     } catch { throw new ApiError(0, 'NETWORK', 'No connection'); }
+    finally { if (timer) clearTimeout(timer); }
     const j: any = await r.json().catch(() => ({}));
     if (!r.ok) throw new ApiError(r.status, j.error ?? 'ERROR', j.message ?? '', Number(r.headers.get('retry-after') ?? 0));
     return j;

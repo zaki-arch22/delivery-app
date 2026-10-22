@@ -50,9 +50,10 @@ export default function OrderDetails() {
   const key = useRef(idempotencyKey()).current;   // one key for this one order: a retry can never create a second order
   const err = (e: unknown) => { const m = errorMessage(e); return t(m.key, m.vars); };
 
-  async function getQuote(s: Size) {
+  // keep = the price expired: keep the price the person chose (inside the new range) instead of resetting it.
+  async function getQuote(s: Size, keep = false) {
     setQuoting(true); setMsg(null);
-    try { const q = await api.quote(pickup, dropoff, s); setQuote(q); setPrice(q.recommended_da); return q; }
+    try { const q = await api.quote(pickup, dropoff, s); setQuote(q); setPrice(p => (keep && p ? Math.min(q.max_da, Math.max(q.min_da, p)) : q.recommended_da)); return q; }
     catch (e) { setQuote(null); setMsg(err(e)); return null; }
     finally { setQuoting(false); }
   }
@@ -82,7 +83,7 @@ export default function OrderDetails() {
       await addRecent(services.store, { name: da.street || da.landmark || prm.dname || o.ref, lat: dropoff.lat, lng: dropoff.lng, address: da, recipient_name: rName.trim(), recipient_phone: rPhone });
       router.dismissAll(); router.push({ pathname: '/order/[id]', params: { id: o.id } });
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'QUOTE_EXPIRED') { await getQuote(size); setMsg(t('err_quote_expired')); }   // the person confirms the new price
+      if (e instanceof ApiError && e.code === 'QUOTE_EXPIRED') { await getQuote(size, true); setMsg(t('err_quote_expired')); }   // the person confirms the new price
       else setMsg(err(e));
     } finally { setBusy(false); }
   }
@@ -122,8 +123,9 @@ export default function OrderDetails() {
             const on = z.v === size;
             return (
               <Pressable key={z.v} testID={'size-' + z.v} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={t(`size_${z.v}`)} onPress={() => setSize(z.v)} style={[s.size, on && s.sizeOn]}>
-                <Icon name={z.icon} size={26} tint={on ? color.lime : color.muted} />
-                <T style={[s.sizeText, on && { color: color.lime }]}>{on ? '✓ ' : ''}{t(`size_${z.v}`)}</T>
+                <Icon name={z.icon} size={26} tint={on ? color.accent : color.muted} />
+                <T style={[s.sizeText, on && { color: color.accent }]}>{on ? '✓ ' : ''}{t(`size_${z.v}`)}</T>
+                <T kind="muted" style={{ fontSize: 12, textAlign: 'center' }}>{t(`size_${z.v}_kg`)}</T>
                 <T kind="muted" style={{ fontSize: 12, textAlign: 'center' }}>{t(z.v === 'large' ? 'by_car' : 'by_motorbike')}</T>
               </Pressable>
             );
@@ -131,6 +133,7 @@ export default function OrderDetails() {
         </View>
         <T kind="muted" style={{ marginTop: space(1) }}>{t(`size_${size}_sub`)}</T>
 
+        {!quoting && !quote ? <Button testID="quote-retry" kind="secondary" label={t('try_again')} onPress={() => getQuote(size)} /> : null}
         {quoting || quote ? <View style={s.fare} testID="price-box">
           {quoting && !quote ? <T kind="muted">{t('quote_loading')}</T> : quote ? (<>
             <View style={[s.fareRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
@@ -146,9 +149,9 @@ export default function OrderDetails() {
         </View> : null}
 
         {quote ? <View style={[s.autoRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
-          <Icon name="zap" tint={color.lime} />
+          <Icon name="zap" tint={color.accent} />
           <T style={{ flex: 1 }}>{t('auto_accept', { p: money(price) })}</T>
-          <Switch testID="auto-accept" value={auto} onValueChange={setAuto} trackColor={{ true: color.lime, false: color.card2 }} thumbColor={color.pureWhite} accessibilityLabel={t('auto_accept', { p: money(price) })} />
+          <Switch testID="auto-accept" value={auto} onValueChange={setAuto} trackColor={{ true: color.brand, false: color.card2 }} thumbColor={color.pureWhite} accessibilityLabel={t('auto_accept', { p: money(price) })} />
         </View> : null}
 
         <Gap n={2} />
@@ -193,7 +196,7 @@ const s = StyleSheet.create({
   distKm: { fontFamily: font.bold, fontSize: 18, lineHeight: 26 },
   sizes: { gap: space(2) },
   size: { flex: 1, alignItems: 'center', gap: 2, backgroundColor: color.card2, borderRadius: radius, paddingVertical: space(3), borderWidth: 2, borderColor: 'transparent' },
-  sizeOn: { borderColor: color.lime },
+  sizeOn: { borderColor: color.brand },
   sizeText: { fontFamily: font.bold, textAlign: 'center' },
   fare: { backgroundColor: color.card2, borderRadius: 20, padding: space(3), marginTop: space(3), minHeight: 96, justifyContent: 'center' },
   fareRow: { alignItems: 'center', gap: space(2) },

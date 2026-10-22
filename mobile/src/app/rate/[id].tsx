@@ -4,10 +4,12 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useApp } from '../../lib/app';
 import { errorMessage } from '../../lib/errors';
 import { orders } from '../../lib/orders';
+import { ApiError } from '../../core/api';
+import { ratedNow } from '../../lib/rated';
 import { color, space } from '../../lib/theme';
 import { Button, Field, Notice, Screen, T } from '../../ui/kit';
 
-// Rate a delivered order: 1 to 5 stars and an optional comment that only staff read (contract B: submit_rating).
+// Rate a delivered order: 1 to 5 stars and an optional comment, shown on the public profile without the writer's name (contract B: submit_rating).
 export default function Rate() {
   const { t, services } = useApp();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -16,8 +18,8 @@ export default function Rate() {
   async function send() {
     if (stars < 1) { setMsg(t('choose_stars')); return; }
     setBusy(true); setMsg(null);
-    try { await orders(services.client).rate(id, stars, comment.trim()); router.back(); }
-    catch (e) { const m = errorMessage(e); setMsg(t(m.key, m.vars)); }
+    try { await orders(services.client).rate(id, stars, comment.trim()); ratedNow.add(id); router.back(); }
+    catch (e) { if (e instanceof ApiError && e.code === 'ALREADY_RATED') { ratedNow.add(id); router.back(); return; } const m = errorMessage(e); setMsg(t(m.key, m.vars)); }
     finally { setBusy(false); }
   }
   return (

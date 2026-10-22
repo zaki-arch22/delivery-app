@@ -24,6 +24,6 @@ export function OrderCard({ o, onPress }: { o: Order; onPress: () => void }) {
 const s = StyleSheet.create({
   card: { backgroundColor: color.white, borderRadius: radius, borderWidth: 1, borderColor: color.border, padding: space(4), marginVertical: space(1.5) },
   row: { flexDirection: 'row', alignItems: 'center', gap: space(2) },
-  chip: { backgroundColor: color.soft, color: color.primary, borderRadius: 10, paddingHorizontal: space(2), fontSize: 14, overflow: 'hidden' },
+  chip: { backgroundColor: color.soft, color: color.accent, borderRadius: 10, paddingHorizontal: space(2), fontSize: 14, overflow: 'hidden' },
   chipOff: { backgroundColor: '#EEF1F6', color: color.muted },
 });

@@ -38,7 +38,7 @@ export default function PublicProfileScreen() {
         <T kind="label" style={{ marginTop: space(4) }}>{t('pp_comments')}</T>
         {p.comments.length === 0 ? <T kind="muted" testID="pp-no-comments">{t('pp_no_comments')}</T> : p.comments.map((c, i) => (
           <Card key={i} testID={'pp-comment-' + i}>
-            <T style={{ color: color.lime }}>{stars(c.stars)}</T>
+            <T style={{ color: color.accent }}>{stars(c.stars)}</T>
             <T>{c.comment}</T>
             <T kind="muted" style={{ fontSize: 13 }}>{date(c.at, { day: 'numeric', month: 'short', year: 'numeric' })}</T>
           </Card>
@@ -50,7 +50,7 @@ export default function PublicProfileScreen() {
 
 const s = StyleSheet.create({
   head: { alignItems: 'center', gap: space(1), marginVertical: space(3) },
-  avatar: { width: 88, height: 88, borderRadius: 44, backgroundColor: color.card2, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: color.lime },
+  avatar: { width: 88, height: 88, borderRadius: 44, backgroundColor: color.card2, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: color.brand },
   avatarText: { fontFamily: font.bold, fontSize: 36, lineHeight: 50 },
   stats: { flexDirection: 'row', gap: space(3) },
   stat: { flex: 1, alignItems: 'center' },

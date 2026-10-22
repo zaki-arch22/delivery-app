@@ -3,7 +3,10 @@ import { fail } from '../common/errors';
 
 export type Size = 'small' | 'medium' | 'large';
 // Parcel size decides the vehicle: the user never picks one.
+// Who carries what (owner's decision, Oct 2026): a car takes every size, a motorbike only small and medium.
 export const vehicleFor = (size: Size) => (size === 'large' ? 'car' : 'motorbike');
+// The most a parcel of each size may weigh (shown to senders and couriers; a courier may refuse a parcel that is bigger).
+export const SIZE_MAX_KG: Record<Size, number> = { small: 5, medium: 15, large: 50 };
 const up10 = (n: number) => Math.ceil(n / 10) * 10;
 const down10 = (n: number) => Math.floor(n / 10) * 10;
 

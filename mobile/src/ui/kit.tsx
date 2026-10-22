@@ -41,7 +41,7 @@ export function Header({ title, onBack }: { title: string; onBack?: () => void }
 export function Button({ label, onPress, kind = 'primary', busy = false, disabled = false, testID, sub, a11y, icon, style }:
   { label: string; onPress: () => void; kind?: 'primary' | 'secondary' | 'plain' | 'danger'; busy?: boolean; disabled?: boolean; testID?: string; sub?: string; a11y?: string; icon?: IconName; style?: ViewStyle }) {
   const off = disabled || busy;
-  const fg = kind === 'primary' ? color.ink : kind === 'danger' ? color.danger : kind === 'plain' ? color.lime : color.text;
+  const fg = kind === 'primary' ? color.onBrand : kind === 'danger' ? color.danger : kind === 'plain' ? color.accent : color.text;
   return (
     <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={a11y ?? label} accessibilityState={{ disabled: off, busy }}
       onPress={off ? undefined : onPress} style={({ pressed }) => [s.btn, s[`btn_${kind}`], off && s.btnOff, pressed && !off && s.btnPressed, style]}>
@@ -51,7 +51,7 @@ export function Button({ label, onPress, kind = 'primary', busy = false, disable
             {icon ? <Icon name={icon} size={20} tint={fg} /> : null}
             <Text style={[s.btnText, { color: fg }]}>{label}</Text>
           </View>
-          {sub ? <Text style={[s.btnSub, { color: kind === 'primary' ? color.ink : color.muted }]}>{sub}</Text> : null}
+          {sub ? <Text style={[s.btnSub, { color: kind === 'primary' ? color.onBrand : color.muted }]}>{sub}</Text> : null}
         </View>
       )}
     </Pressable>
@@ -134,7 +134,7 @@ const s = StyleSheet.create({
   error: { color: color.danger, fontSize: 15, lineHeight: 22 },
   label: { fontFamily: font.semibold, fontSize: 15, marginBottom: space(1) },
   btn: { minHeight: minTouch, borderRadius: radius, paddingHorizontal: space(5), paddingVertical: space(3), justifyContent: 'center', marginVertical: space(1.5) },
-  btn_primary: { backgroundColor: color.lime },
+  btn_primary: { backgroundColor: color.brand },
   btn_secondary: { backgroundColor: color.card2 },
   btn_plain: { backgroundColor: 'transparent', minHeight: 44, alignSelf: 'flex-start', paddingHorizontal: 0 },
   btn_danger: { backgroundColor: color.card2 },

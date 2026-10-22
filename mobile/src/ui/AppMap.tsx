@@ -114,7 +114,7 @@ export const AppMap = forwardRef<AppMapRef, {
           <GeoJSONSource id="route" data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: line.coords } }}>
             <Layer id="route-casing" type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }} paint={{ 'line-color': '#000000', 'line-width': 8, 'line-opacity': 0.35 }} />
             <Layer id="route-line" type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-              paint={line.dashed ? { 'line-color': color.lime, 'line-width': 4, 'line-dasharray': [1.5, 1.5] } : { 'line-color': color.lime, 'line-width': 5 }} />
+              paint={line.dashed ? { 'line-color': color.brand, 'line-width': 4, 'line-dasharray': [1.5, 1.5] } : { 'line-color': color.brand, 'line-width': 5 }} />
           </GeoJSONSource>
         ) : null}
         {touching ? null : nearby.map((c, i) => (
@@ -142,7 +142,7 @@ export const AppMap = forwardRef<AppMapRef, {
           <Pulse radius={pulseR} from={pulse.from} ms={pulse.ms} delay={follow && ready ? FOLLOW_IN_MS : 0} />
         </View>
       ) : null}
-      {touching ? null : <Text style={s.credit}>{t('map_credit')}</Text>}
+      {touching ? null : <Text style={s.credit}>{t('map_credit')}{route ? ' · ' + t('route_credit') : ''}</Text>}
     </View>
   );
 });
@@ -152,7 +152,7 @@ export function PinView({ kind, label, vehicle }: { kind: 'pickup' | 'dropoff' |
   if (kind === 'driver') return <View style={s.driver} accessibilityLabel={label}><Text style={s.driverText}>{vehicle === 'car' ? '🚗' : '🛵'}</Text></View>;
   return (
     <View style={s.pinWrap} accessibilityLabel={label}>
-      <View style={[s.pin, kind === 'dropoff' && s.pinB]}><Icon name={kind === 'pickup' ? 'package' : 'flag'} size={20} tint={kind === 'pickup' ? color.ink : color.text} /></View>
+      <View style={[s.pin, kind === 'dropoff' && s.pinB]}><Icon name={kind === 'pickup' ? 'package' : 'flag'} size={20} tint={kind === 'pickup' ? color.onBrand : color.text} /></View>
       <View style={s.stem} />
     </View>
   );
@@ -161,10 +161,10 @@ export function PinView({ kind, label, vehicle }: { kind: 'pickup' | 'dropoff' |
 const s = StyleSheet.create({
   wrap: { flex: 1, overflow: 'hidden', backgroundColor: '#1B1C20' },
   pinWrap: { alignItems: 'center' },
-  pin: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: color.lime, borderWidth: 2, borderColor: color.ink },
-  pinB: { backgroundColor: color.ink, borderColor: color.pureWhite },
+  pin: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: color.brand, borderWidth: 2, borderColor: color.pureWhite },
+  pinB: { backgroundColor: color.black, borderColor: color.pureWhite },
   stem: { width: 3, height: 12, backgroundColor: color.pureWhite, borderBottomLeftRadius: 2, borderBottomRightRadius: 2 },
-  driver: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: color.pureWhite, borderWidth: 3, borderColor: color.lime },
+  driver: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: color.pureWhite, borderWidth: 3, borderColor: color.brand },
   driverText: { fontSize: 20 },
   nearby: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: color.card, borderWidth: 1.5, borderColor: color.line },
   nearbyText: { fontSize: 16 },
@@ -172,7 +172,7 @@ const s = StyleSheet.create({
   centerWrap: { position: 'absolute', left: 0, right: 0, bottom: '50%', alignItems: 'center' },
   bubble: { maxWidth: '70%', backgroundColor: color.pureWhite, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 6,
     elevation: 6, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
-  bubbleText: { color: color.ink, fontFamily: font.semibold, fontSize: 15 },
+  bubbleText: { color: color.black, fontFamily: font.semibold, fontSize: 15 },
   pulseCentre: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   credit: { position: 'absolute', bottom: 2, right: 6, fontSize: 10, color: color.muted, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 4, fontFamily: font.regular },
 });

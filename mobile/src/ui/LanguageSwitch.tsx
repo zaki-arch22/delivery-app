@@ -25,5 +25,5 @@ const s = StyleSheet.create({
   chip: { minHeight: 44, paddingHorizontal: space(4), borderRadius: radius, borderWidth: 2, borderColor: color.border, backgroundColor: color.white, justifyContent: 'center' },
   on: { borderColor: color.primary, backgroundColor: color.soft },
   text: { fontFamily: font.semibold, fontSize: 16, color: color.text },
-  textOn: { color: color.primary },
+  textOn: { color: color.accent },
 });

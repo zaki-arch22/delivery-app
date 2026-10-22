@@ -126,16 +126,18 @@
     return rep;
   }
 
+  var fitted = false;
   function drawMap(box) {
     if (!window.maplibregl || !data) { box.remove(); return; }
     var dest = [data.dropoff.lng, data.dropoff.lat], drv = data.driver && data.driver.location ? [data.driver.location.lng, data.driver.location.lat] : null;
     if (map) { box.replaceWith(map.getContainer()); } else {
       map = new maplibregl.Map({ container: box, style: '/map/style.json', center: drv || dest, zoom: 14, attributionControl: { compact: true, customAttribution: t('map_credit') } });
-      homeMarker = new maplibregl.Marker({ color: '#B4EF2A' }).setLngLat(dest).addTo(map);
+      homeMarker = new maplibregl.Marker({ color: '#2F6FED' }).setLngLat(dest).addTo(map);
     }
     if (drv) { if (!driverMarker) driverMarker = new maplibregl.Marker({ color: '#FFFFFF' }).setLngLat(drv).addTo(map); else driverMarker.setLngLat(drv); }
     else if (driverMarker) { driverMarker.remove(); driverMarker = null; }
-    if (drv) { var b = new maplibregl.LngLatBounds(dest, dest); b.extend(drv); map.fitBounds(b, { padding: 50, maxZoom: 16, duration: 0 }); }
+    // Frame home and courier once; afterwards only when the courier leaves the view (so a person zooming in is not thrown back every 10 s).
+    if (drv && (!fitted || !map.getBounds().contains(drv))) { var b = new maplibregl.LngLatBounds(dest, dest); b.extend(drv); map.fitBounds(b, { padding: 50, maxZoom: 16, duration: 0 }); fitted = true; }
     map.resize();
   }
 

@@ -137,7 +137,7 @@ export function DriverHome() {
           {active && home ? (
             <Pressable testID="online-pill" onPress={job ? undefined : toggle} accessibilityRole="switch" accessibilityState={{ checked: home.online }} style={[s.pill, home.online && s.pillOn]}>
               <View style={[s.dot, home.online && s.dotOn]} />
-              <T style={[s.pillText, home.online && { color: color.ink }]} testID="online-state">{home.online ? t('pill_online') : t('pill_offline')}</T>
+              <T style={[s.pillText, home.online && { color: color.onBrand }]} testID="online-state">{home.online ? t('pill_online') : t('pill_offline')}</T>
             </Pressable>
           ) : null}
         </View>
@@ -209,7 +209,7 @@ function RequestDetail({ r, now, busy, dist, cash, onBid, onSkip, onBack }: { r:
       <T style={s.bigPrice} testID="offer-price">{money(r.price_da)} {t('da')}</T>
       <T>{t('offer_pickup', { d: dist(r.pickup_distance_m) })} · {t('offer_trip', { d: dist(r.trip_distance_m) })} · ~{minutes(r.trip_duration_s)} {t('min')}</T>
       <T testID="offer-cash" style={cash > 0 ? s.cash : undefined}>{cash > 0 ? '💵 ⚠ ' + t('offer_cash', { p: money(cash) }) : t('offer_no_cash')}</T>
-      <T kind="muted">{t(`size_${r.size}` as any)} · {r.sender_rating ? t('offer_sender', { r: r.sender_rating }) : t('offer_sender_new')} · {r.pickup_address.street ?? r.pickup_address.landmark ?? ''}</T>
+      <T kind="muted">{t(`size_${r.size}` as any)} ({t(`size_${r.size}_kg` as any)}) · {r.sender_rating ? t('offer_sender', { r: r.sender_rating }) : t('offer_sender_new')} · {r.pickup_address.street ?? r.pickup_address.landmark ?? ''}</T>
       <Button testID="sender-profile" kind="plain" icon="user" label={t('see_sender_profile')} onPress={() => router.push({ pathname: '/public-profile', params: { offer_id: String(r.offer_id) } })} />
       <Button testID="accept-offer" busy={busy === 'bidown'} label={t('accept_for', { p: money(r.price_da) })} onPress={() => onBid()} />
       {ups.length ? (<>
@@ -236,10 +236,10 @@ const s = StyleSheet.create({
   top: { position: 'absolute', top: 0, left: 0, right: 0 },
   topRow: { alignItems: 'center', gap: space(3), padding: space(4) },
   pill: { flexDirection: 'row', alignItems: 'center', gap: space(2), backgroundColor: color.card, borderRadius: 999, paddingHorizontal: space(5), minHeight: 52 },
-  pillOn: { backgroundColor: color.lime },
+  pillOn: { backgroundColor: color.brand },
   pillText: { fontFamily: font.bold, fontSize: 17 },
   dot: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: color.muted },
-  dotOn: { backgroundColor: color.ink, borderColor: color.ink },
+  dotOn: { backgroundColor: color.onBrand, borderColor: color.onBrand },
   stats: { gap: space(2), marginVertical: space(2) },
   stat: { flex: 1, backgroundColor: color.card2, borderRadius: radius, padding: space(3) },
   statValue: { fontFamily: font.bold, fontSize: 20, lineHeight: 30 },

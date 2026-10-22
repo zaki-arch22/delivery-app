@@ -14,7 +14,7 @@ export interface Order {
   id: string; ref: string; leg: 'delivery' | 'return'; status: Status; size: Size; vehicle: 'motorbike' | 'car'; payer: 'sender' | 'recipient';
   cod_amount_da: number; recommended_da: number; min_da: number; max_da: number; offered_da: number; locked_da: number | null;
   distance_m: number; duration_s: number; delivery_code: string; pickup_address: Address; dropoff_address: Address; recipient_name: string; recipient_phone: string;
-  pickup_lat: number; pickup_lng: number; dropoff_lat: number; dropoff_lng: number; created_at: string; rated: boolean;
+  pickup_lat: number; pickup_lng: number; dropoff_lat: number; dropoff_lng: number; created_at: string; rated: boolean; return_order_id?: string | null;
   driver: null | { name: string; photo_url: string | null; rating: string | null; vehicle: 'motorbike' | 'car'; deliveries: number; location: null | { lat: number; lng: number; at: string } };
   bids: Bid[]; auto_accept: boolean; search_ends_at: string | null; search_started_at: string;
   couriers_notified: number; eta_s: number | null; eta_estimated: boolean; route: [number, number][] | null; cancel_reason: string | null;

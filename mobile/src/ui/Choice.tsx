@@ -22,5 +22,5 @@ export function Choice<V extends string>({ value, options, onChange, testID }: {
 const s = StyleSheet.create({
   opt: { minHeight: minTouch, borderRadius: radius, borderWidth: 2, borderColor: color.border, backgroundColor: color.white, paddingHorizontal: space(4), paddingVertical: space(2), justifyContent: 'center' },
   on: { borderColor: color.primary, backgroundColor: color.soft },
-  textOn: { color: color.primary },
+  textOn: { color: color.accent },
 });

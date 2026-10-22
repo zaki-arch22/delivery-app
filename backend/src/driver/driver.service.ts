@@ -158,7 +158,7 @@ export class DriverService {
       `SELECT o.id, o.ref, o.leg, o.status, o.size, o.vehicle, o.payer, o.cod_amount_da, o.locked_da, o.distance_m, o.recipient_name, o.recipient_phone,
          o.pickup_address, o.dropoff_address, o.inspection, o.recipient_expecting_at, (o.pickup_code IS NOT NULL) needs_pickup_code, ST_Y(o.pickup_point::geometry) pickup_lat, ST_X(o.pickup_point::geometry) pickup_lng,
          ST_Y(o.dropoff_point::geometry) dropoff_lat, ST_X(o.dropoff_point::geometry) dropoff_lng,
-         sp.display_name sender_name, sa.phone sender_phone
+         sp.display_name sender_name, sa.phone sender_phone, o.route_line route
        FROM orders o JOIN profiles sp ON sp.id=o.user_profile_id JOIN accounts sa ON sa.id=sp.account_id
        WHERE o.driver_profile_id=$1 AND ${orderId ? 'o.id=$2' : `o.status IN ('assigned','picked_up')`} ORDER BY o.created_at DESC LIMIT 1`,
       orderId ? [driverId, orderId] : [driverId]);

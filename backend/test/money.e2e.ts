@@ -216,6 +216,7 @@ const cashHeld = async (pid: string) => (await pool.query(`SELECT COALESCE(sum(a
   const dash = (await S('/get_dashboard')).b;
   ok('M10 the dashboard counts orders, people and money', dash.orders.delivered_total === 2 && dash.people.drivers >= 2 && dash.money.commission_30d_da === (await pool.query(`SELECT COALESCE(sum(commission_da),0)::int n FROM orders`)).rows[0].n
     && dash.week.length === 7 && dash.week[0].delivered === 2 && dash.wallet_active === true && typeof dash.cases.problems_open === 'number', dash);
+  ok('M10 the dashboard shows whether phone push is on (the test stand-in here) and the 24 h counts', dash.push?.active === true && dash.push.project === 'test' && dash.push.problem === null && typeof dash.push.sent === 'number' && typeof dash.push.phones === 'number', dash.push);
   // Alerts: only the important things, and opening them marks them seen (for this staff member).
   let al = (await S('/get_staff_alerts')).b;
   ok('M10 alerts: money disputes and late payments are urgent, top-ups are work to do', al.alerts.some((a: any) => a.kind === 'money' && a.level === 'danger' && a.reason === 'cod_not_received')

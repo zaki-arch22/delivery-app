@@ -8,7 +8,7 @@ What you get: one web address, for example `https://delivery-api-xxxx.onrender.c
 - the staff console opens at the same address + `/staff/` (for approving drivers, opening zones, setting prices).
 
 Free limits: after 15 minutes with nobody using it the server sleeps; the next person waits about 1 minute while it wakes.
-The database holds up to about 1 GB. Road distances use the straight-line estimate (no OSRM on the free plan).
+The database holds up to about 1 GB. Road routes (the line on the map, km and minutes) come from the free public OSRM service of FOSSGIS (`ROUTING_URL`, set by `render.yaml`; fair use, fine for testing). If it is slow or down, quotes fall back to the straight-line estimate. If your service was created before Oct 2026, add in Render → Environment: `ROUTING_URL` = `https://routing.openstreetmap.de/routed-car` and `ROUTING_TIMEOUT_MS` = `3000`.
 
 ## 1. Neon: the database (about 3 minutes)
 1. Go to https://neon.com and sign up (the "Continue with Google" or "Continue with GitHub" button is easiest).
@@ -33,7 +33,7 @@ The database holds up to about 1 GB. Road distances use the straight-line estima
    - `GOOGLE_CLIENT_IDS`: the Web client ID from step 2.
    - `FIRST_ADMIN_EMAIL`: your email (your staff login).
    - `FIRST_ADMIN_PASSWORD`: a NEW password of at least 12 characters, only for the staff console. Write it down.
-   - `FIREBASE_SERVICE_ACCOUNT_JSON`: leave empty for now (phone notifications come later).
+   - `FIREBASE_SERVICE_ACCOUNT_JSON`: leave empty for now (phone notifications: section 4).
    Press **Apply**. The first build takes about 5 minutes.
 4. When the service shows **Live**: open it, then **Logs**. Find the box `FIRST STAFF ACCOUNT CREATED`. Open the free
    **Google Authenticator** app on your phone, tap **+ -> Enter a setup key**, and type the secret shown in the box.
@@ -43,6 +43,23 @@ The database holds up to about 1 GB. Road distances use the straight-line estima
    `FIRST_ADMIN_PASSWORD` = a NEW password (12+ characters), save, wait for **Live**, then search the log for
    `STAFF ACCOUNT RESET`. Then delete both settings. (Each reset happens once per new password.)
 6. Copy the address shown at the top of the service page (`https://....onrender.com`) and send it to Claude.
+
+## 4. Phone notifications (about 5 minutes, free)
+Notifications reach phones through Firebase Cloud Messaging (free, no card). The server needs ONE private key from Firebase.
+1. https://console.firebase.google.com -> your project -> gear icon -> **Project settings -> Service accounts**.
+2. Press **Generate new private key** -> **Generate key**. A small `.json` file downloads. It is SECRET (it lets anyone send
+   notifications as your app): never send it in a chat or e-mail, and never put it on GitHub.
+3. Open the file with Notepad, select everything (Ctrl+A) and copy it (Ctrl+C).
+4. Render -> your service -> **Environment** -> `FIREBASE_SERVICE_ACCOUNT_JSON` -> **Edit** -> paste the whole text -> **Save,
+   rebuild and deploy**. (Pasting it exactly as it is in the file is fine.)
+5. When the service is **Live**, open the staff console: the dashboard shows a green line "Phone notifications are ON"
+   with your Firebase project name. A red line means the key is missing or was not pasted completely: paste it again.
+6. On the phone: install the newest APK and press **Allow** when the app asks to send notifications (or Android Settings
+   -> Apps -> Delivery -> Notifications -> on). Log in once: the app then registers the phone.
+7. Test with two phones: phone A orders a delivery, then CLOSES the app; phone B (a courier, online, app open nearby)
+   makes an offer or accepts. Phone A rings with a notification, and tapping it opens the order. (A courier must keep
+   the app open while working, because the app sends his position only while it is open.)
+iPhone later: Apple's push needs the Apple developer account ($99 per year) and an Apple push key added in Firebase.
 
 ## What Claude does next
 Puts the address and the Google settings into the app, builds a new APK, and tells you how to open the first zone and set

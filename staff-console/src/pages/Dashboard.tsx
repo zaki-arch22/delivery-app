@@ -35,6 +35,9 @@ export function Dashboard({ nav }: { nav: Nav }) {
         <span className="muted">{t('dash.updated')}: {fmtDate(dash.at)} <button type="button" className="link" aria-label={t('common.refresh')} onClick={refreshDash}>↻</button></span>
       </div>
       {!dash.wallet_active && <p className="help">{t('dash.walletOff')}</p>}
+      {dash.push && (dash.push.active
+        ? <p className="ok-msg" role="status">🔔 {t('push.on', { project: dash.push.project ?? '' })} · {t('push.stats', { sent: dash.push.sent, failed: dash.push.failed, phones: dash.push.phones })}{dash.push.last_error ? ` · ${t('push.lastError')}: ${dash.push.last_error}` : ''}</p>
+        : <p className="error" role="status">🔕 {t(dash.push.problem === 'invalid_key' ? 'push.invalid' : 'push.off')}</p>)}
 
       <section className="card" aria-label={t('todo.title')}>
         <h2>{t('todo.title')}</h2>

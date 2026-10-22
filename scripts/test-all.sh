@@ -66,10 +66,15 @@ start_server 3399 orders RATE_LIMIT_DISABLED=1 BID_TTL_S=4 SEARCH_WINDOW_S=15 SE
 run "backend: orders, matching, cash, ratings" orders "$B" env $T npx ts-node test/orders.e2e.ts
 wipe; run "backend: accounts and profiles" auth "$B" env $T npx ts-node test/auth.e2e.ts
 wipe; run "backend: rules and sanctions" trust "$B" env $T npx ts-node test/trust.e2e.ts
+# 2a. A request shown to ONE courier at a time: a courier who went silent frees his place for the next one.
+start_server 3399 room RATE_LIMIT_DISABLED=1 BROADCAST_MAX=1 SEARCH_START_M=3000
+wipe; run "backend: matching places (silent couriers)" room "$B" env $T npx ts-node test/matching-room.e2e.ts
 
 # 2b. The money system (seller payments, courier wallet; the platform account is set, the watchdog runs every half second).
 start_server 3399 money RATE_LIMIT_DISABLED=1 WATCH_MS=500 SEARCH_START_M=3000 SEARCH_STEP_M=2000 SEARCH_STEP_S=60 PLATFORM_RIP=00799999009999999999 "PLATFORM_HOLDER=Test Platform"
 wipe; run "backend: money (seller payments, wallet, commission)" money "$B" env $T TEST_APP_DATABASE_URL="$TEST_APP_URL" PLATFORM_RIP=00799999009999999999 npx ts-node test/money.e2e.ts
+
+run "backend: Firebase key reading" push-key "$B" npx ts-node test/push-key.ts
 
 # 3. Notifications.
 start_server 3399 notify RATE_LIMIT_DISABLED=1 BID_TTL_S=3 SEARCH_WINDOW_S=60 SEARCH_START_M=3000 SEARCH_STEP_M=2000 SEARCH_STEP_S=30
@@ -83,7 +88,7 @@ if [ ! -f "$OD/grid.osrm.hsgr" ] || [ "$B/test/fixtures/test-grid.osm" -nt "$OD/
 fi
 "$OSRM_BIN/osrm-routed" --ip 127.0.0.1 -p 5055 "$OD/grid.osrm" >"$LOG/osrm.log" 2>&1 & HELPER_PID=$!
 for _ in $(seq 1 20); do curl -s -m 1 -o /dev/null "http://127.0.0.1:5055/route/v1/driving/3.04,36.74;3.05,36.74" && break; sleep 0.5; done
-start_server 3399 routing RATE_LIMIT_DISABLED=1 ROUTING_URL=http://127.0.0.1:5055 ROUTING_TIMEOUT_MS=1500
+start_server 3399 routing RATE_LIMIT_DISABLED=1 ROUTING_URL=http://127.0.0.1:5055 ROUTING_TIMEOUT_MS=1500 ROUTE_CACHE_S=0
 run "backend: road distances (OSRM up)" routing "$B" env $T MODE=osrm npx ts-node test/routing.e2e.ts
 stop_helper; wipe
 run "backend: road distances (OSRM down)" routing-down "$B" env $T MODE=down npx ts-node test/routing.e2e.ts

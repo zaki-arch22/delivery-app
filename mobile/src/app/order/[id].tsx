@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Dimensions, Image, Linking, Pressable, ScrollView, Share, StyleSheet, Switch, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { ratedNow } from '../../lib/rated';
 import { useApp, useNotices } from '../../lib/app';
 import { errorMessage } from '../../lib/errors';
 import { ACTIVE, addressLine, Bid, km, minutes, money, Order, orders, RecallReason, when, whatsappUrl } from '../../lib/orders';
@@ -43,10 +44,11 @@ export default function OrderScreen() {
     return { center: { lat: o.pickup_lat, lng: o.pickup_lng }, from: ZOOM_FROM - (ZOOM_FROM - ZOOM_TO) * share, to: ZOOM_TO, ms: Math.round((1 - share) * ZOOM_SPAN_MS), share };
   }, [o?.id, o?.status, o?.search_started_at]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const load = useCallback(() => api.get(id).then(x => { setO(x); setWant(w => (w > x.offered_da ? w : x.offered_da)); }).catch(() => {}), [id]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const [loadFailed, setLoadFailed] = useState(false);   // the first load failed (no network): retry instead of a blank screen
+  const load = useCallback(() => api.get(id).then(x => { setO(x); setLoadFailed(false); setWant(w => (w > x.offered_da ? w : x.offered_da)); }).catch(() => setLoadFailed(true)), [id]);   // eslint-disable-line react-hooks/exhaustive-deps
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useNotices(n => { if (n.order_id === id) load(); });
-  useEffect(() => { if (!o || !ACTIVE.includes(o.status)) return; const h = setInterval(load, POLL_MS); return () => clearInterval(h); }, [o?.status, load]);
+  useEffect(() => { if (o && !ACTIVE.includes(o.status)) return; const h = setInterval(load, POLL_MS); return () => clearInterval(h); }, [o?.status, load]);   // also keeps retrying while the first load fails
   useEffect(() => { if (!o || o.status !== 'searching') return; const h = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(h); }, [o?.status]);
   useEffect(() => {
     if (!o || o.status !== 'searching') { setNear(null); return; }
@@ -67,7 +69,14 @@ export default function OrderScreen() {
   const whatsapp = () => { if (o && shareText) Linking.openURL(whatsappUrl(o.recipient_phone, shareText)).catch(share); };
   const photoSrc = (doc: string) => ({ uri: `${services.client.baseUrl}/get_order_photo?order_id=${o!.id}&id=${doc}`, headers: { Authorization: 'Bearer ' + (services.client.token ?? '') } });
 
-  if (!o) return <Screen testID="screen-order" title="" />;
+  if (!o) return (
+    <Screen testID="screen-order" title="">
+      {loadFailed ? (<>
+        <Notice testID="order-load-failed" warn text={t('err_network')} />
+        <Button testID="order-retry" kind="secondary" label={t('try_again')} onPress={load} />
+      </>) : <T kind="muted" testID="order-loading">{t('loading')}</T>}
+    </Screen>
+  );
   const A = { lat: o.pickup_lat, lng: o.pickup_lng }, B = { lat: o.dropoff_lat, lng: o.dropoff_lng };
   const pins: Pin[] = [{ id: 'A', at: A, kind: 'pickup', label: t('pickup') }, { id: 'B', at: B, kind: 'dropoff', label: t('dropoff') }];
   if (o.driver?.location) pins.push({ id: 'driver', at: o.driver.location, kind: 'driver', label: t('driver'), vehicle: o.driver.vehicle });
@@ -168,12 +177,13 @@ export default function OrderScreen() {
         ) : null}
 
         {msg ? <Notice testID="order-msg" warn={msg.warn} text={msg.text} /> : null}
+        {o.return_order_id ? <Button testID="open-return" icon="corner-up-left" label={t('open_return')} onPress={() => router.push({ pathname: '/order/[id]', params: { id: o.return_order_id! } })} /> : null}
         {o.status === 'picked_up' && o.leg === 'delivery' ? (recalling ? (<>
           <T kind="label">{t('recall_title')}</T>
           <Choice testID="recall" value={recallReason} onChange={setRecallReason} options={(['buyer_cancelled', 'wrong_parcel', 'wrong_address', 'other'] as RecallReason[]).map(v => ({ v, label: t(`recall_${v}`) }))} />
           <Button testID="recall-confirm" kind="danger" busy={busy === 'recall'} disabled={!recallReason} label={t('recall_confirm')} onPress={recall} />
         </>) : <Button testID="recall" kind="plain" label={t('recall_btn')} onPress={() => setRecalling(true)} />) : null}
-        {o.status === 'delivered' && o.leg === 'delivery' ? (o.rated ? <Notice text={t('rated_thanks')} /> : <Button testID="rate" label={t('rate_driver')} onPress={() => router.push({ pathname: '/rate/[id]', params: { id: o.id } })} />) : null}
+        {o.status === 'delivered' && o.leg === 'delivery' ? (o.rated || ratedNow.has(o.id) ? <Notice text={t('rated_thanks')} /> : <Button testID="rate" label={t('rate_driver')} onPress={() => router.push({ pathname: '/rate/[id]', params: { id: o.id } })} />) : null}
         {['expired', 'cancelled'].includes(o.status) ? <Button testID="send-again" label={t('send_again')} onPress={() => router.replace('/home')} /> : null}
         {['searching', 'assigned'].includes(o.status) ? <Button testID="cancel-order" kind="danger" icon="x" busy={busy === 'cancel'} label={t(o.status === 'assigned' ? 'cancel_order' : 'cancel_request')} onPress={cancel} /> : null}
         {!['searching', 'expired', 'cancelled'].includes(o.status) ? <Button testID="report-problem" kind="plain" label={t('report_problem')} onPress={() => router.push({ pathname: '/problem/[id]', params: { id: o.id } })} /> : null}
@@ -190,9 +200,9 @@ export default function OrderScreen() {
 function AutoAccept({ o, busy, onChange, t, rtl }: { o: Order; busy: boolean; onChange: (v: boolean) => void; t: (k: Key, v?: Record<string, string | number>) => string; rtl: boolean }) {
   return (
     <View style={[s.autoRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
-      <Icon name="zap" tint={color.lime} />
+      <Icon name="zap" tint={color.accent} />
       <T style={{ flex: 1 }}>{t('auto_accept', { p: money(o.offered_da) })}</T>
-      <Switch testID="auto-accept" disabled={busy} value={o.auto_accept} onValueChange={onChange} trackColor={{ true: color.lime, false: color.card2 }} thumbColor={color.pureWhite} accessibilityLabel={t('auto_accept', { p: money(o.offered_da) })} />
+      <Switch testID="auto-accept" disabled={busy} value={o.auto_accept} onValueChange={onChange} trackColor={{ true: color.brand, false: color.card2 }} thumbColor={color.pureWhite} accessibilityLabel={t('auto_accept', { p: money(o.offered_da) })} />
     </View>
   );
 }
@@ -261,12 +271,12 @@ const s = StyleSheet.create({
   fare: { fontFamily: font.bold, fontSize: 28, lineHeight: 40, textAlign: 'center' },
   autoRow: { alignItems: 'center', gap: space(3), paddingVertical: space(3) },
   drvRow: { alignItems: 'center', gap: space(3) },
-  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: color.lime, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: color.ink, fontFamily: font.bold, fontSize: 20, textAlign: 'center' },
+  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: color.brand, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: color.onBrand, fontFamily: font.bold, fontSize: 20, textAlign: 'center' },
   strong: { fontFamily: font.semibold },
-  eta: { fontFamily: font.bold, fontSize: 20, color: color.lime, marginTop: space(2) },
-  codeBox: { backgroundColor: color.card2, borderWidth: 2, borderColor: color.lime },
-  code: { fontFamily: font.bold, fontSize: 40, lineHeight: 56, letterSpacing: 8, color: color.lime, textAlign: 'center', writingDirection: 'ltr' },
+  eta: { fontFamily: font.bold, fontSize: 20, color: color.accent, marginTop: space(2) },
+  codeBox: { backgroundColor: color.card2, borderWidth: 2, borderColor: color.brand },
+  code: { fontFamily: font.bold, fontSize: 40, lineHeight: 56, letterSpacing: 8, color: color.accent, textAlign: 'center', writingDirection: 'ltr' },
   photo: { width: '100%', height: 220, borderRadius: radius, marginVertical: space(2), backgroundColor: color.card },
   offers: { marginHorizontal: space(3) },
   offersTitle: { fontFamily: font.bold, fontSize: 24, lineHeight: 34, marginBottom: space(2), textShadowColor: '#000', textShadowRadius: 6 },

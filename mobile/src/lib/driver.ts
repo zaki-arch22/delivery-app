@@ -12,6 +12,7 @@ export interface Job {
   pickup_address: Address; dropoff_address: Address; pickup_lat: number; pickup_lng: number; dropoff_lat: number; dropoff_lng: number;
   sender_name: string; sender_phone: string; cash_to_collect_da: number; next_step: 'picked_up' | 'delivered' | null;
   inspection: 'outside' | 'open'; recipient_expecting_at: string | null; needs_pickup_code: boolean;
+  route?: [number, number][] | null;   // the road from the pickup to the drop-off (null when only an estimate was possible)
 }
 export type FailReason = 'no_answer' | 'wrong_address' | 'refused_damaged' | 'refused_wrong_item' | 'refused_not_ordered' | 'refused_changed_mind' | 'refused_cannot_pay';
 export const FAIL_REASONS: FailReason[] = ['no_answer', 'wrong_address', 'refused_damaged', 'refused_wrong_item', 'refused_not_ordered', 'refused_changed_mind', 'refused_cannot_pay'];

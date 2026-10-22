@@ -39,4 +39,4 @@ export class NotifyController {
 // Signals for the screens only (a request withdrawn, a price updated...), never shown in the list.
 const INTERNAL = ['offer.withdrawn', 'offer.updated', 'order.bid_withdrawn', 'bid.expired', 'job.updated'];
 // A delivery code is never listed (it was shown once, where it belongs); only harmless fields go out.
-const pick = (d: any) => Object.fromEntries(Object.entries(d ?? {}).filter(([k]) => ['ref', 'price_da', 'reason', 'name', 'amount_da', 'receipt', 'offer_id'].includes(k)));
+const pick = (d: any) => Object.fromEntries(Object.entries(d ?? {}).filter(([k]) => ['ref', 'price_da', 'reason', 'name', 'amount_da', 'receipt', 'offer_id', 'last4', 'points', 'outcome', 'method', 'rule'].includes(k)));

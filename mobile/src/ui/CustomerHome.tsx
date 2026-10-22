@@ -87,13 +87,6 @@ export function CustomerHome() {
           ) : null}
           <View style={[s.topRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]} pointerEvents="box-none">
             <RoundButton testID="open-menu" icon="menu" label={t('menu')} onPress={() => setMenu(true)} />
-            <Pressable testID="pickup-card" onPress={() => search && setSearching(true)} style={s.pickupCard} accessibilityRole="button" accessibilityLabel={t('pickup_point')}>
-              <View style={{ flex: 1 }}>
-                <T kind="muted" style={{ fontSize: 13 }}>{t('pickup_point')}</T>
-                <T style={s.pickupName} numberOfLines={1}>{place ?? t('pickup_move_map')}</T>
-              </View>
-              {search ? <Icon name="search" size={18} tint={color.muted} /> : null}
-            </Pressable>
           </View>
         </MapOverlay>
       </View>
@@ -106,6 +99,12 @@ export function CustomerHome() {
           <Button kind="plain" label={t('close')} onPress={() => setSearching(false)} />
         </>) : (<>
           <T kind="muted" testID="home-hello">{t('home_hello', { name: state.active?.display_name ?? '' })}</T>
+          {/* The pickup is the point under the pin (its street shows above it); a typed search is one tap away here. */}
+          <View style={[s.pickupRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]} testID="pickup-row">
+            <Icon name="map-pin" size={18} tint={color.accent} />
+            <T style={s.pickupName} numberOfLines={1}>{place ?? t('pickup_move_map')}</T>
+            {search ? <Pressable testID="pickup-search-open" onPress={() => setSearching(true)} accessibilityRole="button" accessibilityLabel={t('search_pickup')} hitSlop={10}><T style={s.link}>{t('search_pickup_short')}</T></Pressable> : null}
+          </View>
           {state.notice?.code === 'NO_PROFILE_FOR_PATH' ? <Notice testID="notice-no-profile" text={t(state.notice.missing === 'driver' ? 'notice_no_profile_driver' : 'notice_no_profile_user')} /> : null}
           {incoming.map(i => (
             <View key={i.order_id} style={s.incoming} testID={'incoming-' + i.ref}>
@@ -115,7 +114,7 @@ export function CustomerHome() {
           ))}
           {active.map(o => (
             <Pressable key={o.id} testID={'order-' + o.ref} onPress={() => router.push({ pathname: '/order/[id]', params: { id: o.id } })} style={[s.active, { flexDirection: rtl ? 'row-reverse' : 'row' }]} accessibilityRole="button">
-              <Icon name="package" tint={color.lime} />
+              <Icon name="package" tint={color.accent} />
               <View style={{ flex: 1 }}><T style={s.strong}>{t(('st_' + o.status) as Key, { name: o.recipient_name })}</T><T kind="muted" numberOfLines={1}>{o.ref} · {o.recipient_name}</T></View>
               <Icon name="chevron-right" tint={color.muted} />
             </Pressable>
@@ -141,16 +140,17 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.page },
   top: { position: 'absolute', top: 0, left: 0, right: 0 },
   banner: { backgroundColor: color.amber, paddingVertical: space(3), paddingHorizontal: space(4), alignItems: 'center' },
-  bannerTitle: { color: color.ink, fontFamily: font.bold, textAlign: 'center' },
-  bannerSub: { color: color.ink, textAlign: 'center' },
+  bannerTitle: { color: color.onBrand, fontFamily: font.bold, textAlign: 'center' },
+  bannerSub: { color: color.onBrand, textAlign: 'center' },
   topRow: { alignItems: 'center', gap: space(3), padding: space(4) },
-  pickupCard: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space(2), backgroundColor: color.card, borderRadius: radius, paddingHorizontal: space(4), paddingVertical: space(2) },
-  pickupName: { fontFamily: font.bold, fontSize: 17 },
+  pickupRow: { alignItems: 'center', gap: space(2), marginTop: space(1), marginBottom: space(1) },
+  pickupName: { fontFamily: font.bold, fontSize: 17, flex: 1 },
+  link: { color: color.accent, fontFamily: font.semibold },
   where: { alignItems: 'center', gap: space(3), backgroundColor: color.card2, borderRadius: 18, paddingHorizontal: space(4), minHeight: 64, marginVertical: space(2) },
   whereText: { fontFamily: font.bold, fontSize: 20, flex: 1 },
   recent: { alignItems: 'center', gap: space(4), paddingVertical: space(3) },
   strong: { fontFamily: font.semibold },
   active: { alignItems: 'center', gap: space(3), backgroundColor: color.card2, borderRadius: radius, padding: space(3), marginVertical: space(1) },
-  incoming: { borderWidth: 2, borderColor: color.lime, borderRadius: radius, padding: space(3), marginVertical: space(1) },
+  incoming: { borderWidth: 2, borderColor: color.brand, borderRadius: radius, padding: space(3), marginVertical: space(1) },
   row2: { gap: space(3) },
 });

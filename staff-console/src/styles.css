@@ -177,7 +177,7 @@ code { font-size: 12px; background: #EEF1F6; border-radius: 6px; padding: 1px 5p
 .map-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; color: var(--muted); }
 .map-dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .25); vertical-align: middle; }
 .map-dot.o-searching { background: #F59E0B; } .map-dot.o-assigned { background: #3B82F6; } .map-dot.o-picked_up { background: #16A34A; }
-.map-dot.c-free { background: #B4EF2A; width: 12px; height: 12px; border-radius: 3px; } .map-dot.c-busy { background: #0B2A6B; width: 12px; height: 12px; border-radius: 3px; }
+.map-dot.c-free { background: #7AB0FF; width: 12px; height: 12px; border-radius: 3px; } .map-dot.c-busy { background: #0B2A6B; width: 12px; height: 12px; border-radius: 3px; }
 .plain-list { list-style: none; margin: 0; padding: 0; }
 .plain-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .days { display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow-y: auto; }

@@ -58,7 +58,7 @@ export default function NewOrder() {
             <RoundButton testID="back" icon="arrow-left" label={t('back')} onPress={() => (step === 'dropoff' && !given ? setPickup(null) : router.back())} />
             {pickup ? (
               <View style={[s.card, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
-                <Icon name="package" tint={color.lime} size={18} />
+                <Icon name="package" tint={color.accent} size={18} />
                 <T style={s.cardText} numberOfLines={1}>{pname || t('pickup')}</T>
               </View>
             ) : null}

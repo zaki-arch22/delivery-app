@@ -20,6 +20,9 @@ export const cfg = {
   fallbackKmh: () => n('FALLBACK_KMH', 20),       // fallback only: city speed
   routingUrl: () => process.env.ROUTING_URL ?? '', // our own OSRM server (road distances); empty = estimate only
   routingTimeoutMs: () => n('ROUTING_TIMEOUT_MS', 1500), // slower than this -> estimate, so quotes never hang
+  routeCacheS: () => n('ROUTE_CACHE_S', 600),        // a road route is reused this long (fewer calls to the routing service); 0 = off
+  // How this server introduces itself to free public services (routing, place search): their fair-use rules require it.
+  userAgent: () => process.env.SERVICE_USER_AGENT ?? 'DeliveryAlgiers/1.0 (parcel delivery app; contact via the app)',
   proofRadiusM: () => n('PROOF_RADIUS_M', 300),   // pickup/delivery confirmed farther than this from the point = a case for staff
   lateCancelS: () => n('LATE_CANCEL_S', 180),     // a sender cancel later than this after a driver accepted counts as "late"
   trackingHours: () => n('TRACKING_HOURS', 24),   // the receiver's tracking link works until this long after the order ends

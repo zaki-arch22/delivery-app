@@ -4,6 +4,7 @@ import { Q, notify } from '../notify/notify';
 import { bad, fail, isId, isInt, nat, text, uuid } from '../common/errors';
 import { cfg, walletOn } from '../common/config';
 import { CASH_LIMIT_SQL } from '../orders/matching.service';
+import { PushService } from '../notify/push.service';
 
 const audit = (q: Q, staff: string, action: string, type: string, id: string, data: any = {}) =>
   q(`INSERT INTO staff_audit(staff_id, action, target_type, target_id, data) VALUES ($1,$2,$3,$4,$5)`, [staff, action, type, id, data]);
@@ -14,7 +15,7 @@ const DAY = `(date_trunc('day', now() AT TIME ZONE 'Africa/Algiers') AT TIME ZON
 // Staff: the money pages (seller payments, courier wallets, cash limits), the dashboard and the audit log.
 @Injectable()
 export class StaffMoneyService {
-  constructor(private db: Db) {}
+  constructor(private db: Db, private pushes: PushService) {}
 
   // ---------- goods money owed by couriers to sellers ----------
   async listSettlements(f: any) {
@@ -174,7 +175,10 @@ export class StaffMoneyService {
                      LEFT JOIN orders o ON (o.created_at AT TIME ZONE 'Africa/Algiers')::date = d
                      GROUP BY d ORDER BY d DESC`),
     ]);
-    return { at: new Date().toISOString(), wallet_active: walletOn(), orders, people, money, cases, week: days };
+    // Phone push: on or off (and why), and how it went in the last 24 hours.
+    const [pc] = await this.db.query(`SELECT count(*) FILTER (WHERE push_state='sent')::int sent, count(*) FILTER (WHERE push_state='failed')::int failed,
+        (SELECT count(*) FROM device_tokens)::int phones FROM notifications WHERE created_at > now() - interval '24 hours'`);
+    return { at: new Date().toISOString(), wallet_active: walletOn(), push: { ...this.pushes.status(), ...pc }, orders, people, money, cases, week: days };
   }
 
   // ---------- audit: every staff action, forever ----------

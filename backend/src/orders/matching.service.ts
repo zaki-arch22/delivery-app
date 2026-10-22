@@ -101,7 +101,13 @@ export class Matching implements OnModuleInit, OnModuleDestroy {
         await notify(q, { profile: o.user_profile_id, kind: 'order.expired', order: orderId, data: { ref: o.ref }, dedupe: `order:${orderId}:expired` });
         return;
       }
-      const [{ live }] = await q(`SELECT count(*)::int live FROM offers WHERE order_id=$1 AND status IN ('offered','bid')`, [orderId]);
+      // The places taken: couriers who made an offer, and couriers who were told and are still online, free and sending their
+      // position. A courier who went offline or silent no longer blocks a place, so the request reaches someone who can take it.
+      const [{ live }] = await q(
+        `SELECT count(*)::int live FROM offers f JOIN driver_details d ON d.profile_id = f.driver_profile_id
+          WHERE f.order_id=$1 AND (f.status = 'bid' OR (f.status = 'offered' AND d.is_online
+            AND d.last_location_at > now() - make_interval(secs => ${cfg.locationFreshS()})
+            AND NOT EXISTS (SELECT 1 FROM orders j WHERE j.driver_profile_id = f.driver_profile_id AND j.status IN ('assigned','picked_up'))))`, [orderId]);
       const room = cfg.broadcastMax() - live;
       if (room <= 0) return;
       const radius = searchRadiusM(Number(o.age));

@@ -15,5 +15,5 @@ export default function Start() {
     done.current = true;
     router.replace(destination(state));
   }, [ready, state]);
-  return <View style={{ flex: 1, justifyContent: 'center', backgroundColor: color.page }}><ActivityIndicator color={color.primary} size="large" /></View>;
+  return <View style={{ flex: 1, justifyContent: 'center', backgroundColor: color.page }}><ActivityIndicator color={color.accent} size="large" /></View>;
 }
