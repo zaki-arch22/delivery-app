@@ -42,6 +42,7 @@ test('registered for the active profile and language; language change and profil
 
   // A driver profile on the same number: after switching, this phone's pushes belong to the driver profile only.
   const up = async (kind: string) => (await (await nodeFetch(API + '/upload_document?kind=' + kind, { method: 'POST', headers: { authorization: 'Bearer ' + s.client.token, 'content-type': 'image/jpeg' }, body: require('fs').readFileSync(require('path').join(__dirname, '../../backend/test/fixtures/photo.jpg')) })).json() as any).document_id;
+  await s.client.call('/set_payout_account', { rip: '00799999001234567890', holder_name: 'Hana Driver' });
   await act(async () => { await s.session.addProfile('driver', 'Hana Driver', true, { vehicle: 'motorbike', first_name: 'Karim', last_name: 'Test', birth_date: '1995-04-12', vehicle_color: 'Blue', plate_number: '12345 113 16', ownership_photo: await up('ownership_photo'), id_photo: await up('id_photo'), licence_photo: await up('licence_photo'), vehicle_photo: await up('vehicle_photo') }, '100000000002'); });
   await waitFor(async () => expect(await device()).toEqual([{ type: 'driver', language: 'en' }]));
   await act(async () => { await s.session.switchProfile('user'); });

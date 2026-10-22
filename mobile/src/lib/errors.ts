@@ -28,6 +28,16 @@ export function errorMessage(e: unknown): { key: Key; vars?: Record<string, numb
     case 'ACTIVE_ORDER': return { key: 'err_delete_active_order' };
     case 'ACTIVE_JOB': return { key: 'err_delete_active_job' };
     case 'CASH_HELD': return { key: 'err_delete_cash' };
+    case 'PAYOUT_ACCOUNT_REQUIRED': return { key: 'err_payout_required' };
+    case 'BAD_RIP': return { key: 'payout_invalid' };
+    case 'COD_TOO_HIGH': return { key: 'err_cod_too_high' };
+    case 'REFERENCE_USED': return { key: 'err_reference_used' };
+    case 'BAD_REFERENCE': return { key: 'settle_ref_invalid' };
+    case 'PAYMENTS_OPEN': return { key: 'err_payments_open' };
+    case 'CANNOT_DISPUTE': return { key: 'err_cannot_dispute' };
+    case 'WALLET_NOT_OPEN': return { key: 'err_wallet_closed' };
+    case 'ALREADY_SENT': case 'ALREADY_CLOSED': return { key: 'err_already_done' };
+    case 'BAD_AMOUNT': return { key: 'wallet_amount_invalid' };
     case 'PRICING_NOT_SET': return { key: 'err_not_ready' };
     case 'CANNOT_CANCEL': return { key: 'err_cannot_cancel' };
     case 'PRICE_LOCKED': return { key: 'err_price_locked' };

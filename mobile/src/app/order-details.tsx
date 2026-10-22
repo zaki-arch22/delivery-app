@@ -13,6 +13,7 @@ import { Sheet } from '../ui/Sheet';
 import { MapOverlay, Button, Field, Gap, Notice, RoundButton, T } from '../ui/kit';
 import { Choice } from '../ui/Choice';
 import { Icon, IconName } from '../ui/Icon';
+import { PayoutFields, usePayoutForm } from '../ui/PayoutFields';
 
 const SIZES: { v: Size; icon: IconName }[] = [{ v: 'small', icon: 'mail' }, { v: 'medium', icon: 'package' }, { v: 'large', icon: 'archive' }];
 
@@ -31,6 +32,8 @@ export default function OrderDetails() {
   const [size, setSize] = useState<Size>('small');
   const [payer, setPayer] = useState<'sender' | 'recipient'>('sender');
   const [cod, setCod] = useState('');
+  const payout = usePayoutForm();   // cash on delivery: where the courier sends the seller's money
+  const codOn = /^\d+$/.test(cod.trim()) && Number(cod.trim()) > 0;
   const [inspection, setInspection] = useState<'outside' | 'open'>('outside');
   const [auto, setAuto] = useState(false);
   const [hist, setHist] = useState<RecipientHistory | null>(null);
@@ -62,8 +65,10 @@ export default function OrderDetails() {
     if (rName.trim().length < 2 || rName.trim().length > 60) e.rName = t('recipient_invalid');
     if (!toInternational(rPhone)) e.rPhone = t('phone_invalid');
     if (cod.trim() && !/^\d{1,9}$/.test(cod.trim())) e.cod = t('cod_invalid');
+    else if (codOn && Number(cod.trim()) > 30000) e.cod = t('err_cod_too_high');
     setErrs(e);
-    return Object.values(e).every(v => !v);
+    const payoutOk = !codOn || payout.validate(t);
+    return Object.values(e).every(v => !v) && payoutOk;
   }
 
   async function submit() {
@@ -72,6 +77,7 @@ export default function OrderDetails() {
     setBusy(true); setMsg(null);
     const body = (q: Quote) => ({ auto_accept: auto, quote_id: q.quote_id, offered_da: Math.min(q.max_da, Math.max(q.min_da, price)), pickup_address: pa, dropoff_address: da, recipient_name: rName.trim(), recipient_phone: toInternational(rPhone)!, payer, cod_amount_da: cod.trim() ? Number(cod.trim()) : 0, inspection });
     try {
+      if (codOn) await payout.save();   // saved (or unchanged) before the order, which copies it
       const o = await api.create(key, body(quote));
       await addRecent(services.store, { name: da.street || da.landmark || prm.dname || o.ref, lat: dropoff.lat, lng: dropoff.lng, address: da, recipient_name: rName.trim(), recipient_phone: rPhone });
       router.dismissAll(); router.push({ pathname: '/order/[id]', params: { id: o.id } });
@@ -168,6 +174,8 @@ export default function OrderDetails() {
         <T kind="label">{t('payer_label')}</T>
         <Choice testID="payer" value={payer} onChange={setPayer} options={[{ v: 'sender', label: t('payer_sender') }, { v: 'recipient', label: t('payer_recipient') }]} />
         <Field testID="cod" label={t('cod_label')} hint={t('cod_hint')} value={cod} onChangeText={v => setCod(v.replace(/[^\d]/g, ''))} error={errs.cod} keyboardType="number-pad" maxLength={9} />
+        {codOn && payout.saved !== undefined && (!payout.saved || payout.changed) ? <PayoutFields form={payout} intro={t('payout_needed_cod')} /> : null}
+        {codOn && payout.saved && !payout.changed ? <T kind="muted" testID="cod-payout">{t('payout_title')}: {payout.holder} · {payout.rip}</T> : null}
         <T kind="label">{t('inspection_label')}</T>
         <Choice testID="inspection" value={inspection} onChange={setInspection} options={[{ v: 'outside', label: t('insp_outside'), sub: t('insp_outside_sub') }, { v: 'open', label: t('insp_open'), sub: t('insp_open_sub') }]} />
       </Sheet>

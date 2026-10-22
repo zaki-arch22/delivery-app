@@ -24,7 +24,7 @@ for p in backend staff-console mobile; do [ -d "$ROOT/$p/node_modules" ] || (ech
 (cd "$ROOT/backend" && OWNER_DATABASE_URL="$TEST_OWNER_URL" APP_DB_PASSWORD="$APP_PW" npx ts-node src/scripts/migrate.ts >"$LOG/migrate.log" 2>&1) || { echo "migration failed, see $LOG/migrate.log"; exit 1; }
 
 psql_owner() { psql "$TEST_OWNER_URL" -v ON_ERROR_STOP=0 "$@"; }
-wipe() { psql_owner -q -c "TRUNCATE otp_codes, sessions, quotes, offers, order_events, ratings, cash_ledger, problem_reports, notifications, device_tokens, orders, driver_details, document_files, documents, profiles, accounts, zones, pricing_rules, staff_audit, staff_users, security_events RESTART IDENTITY CASCADE" >/dev/null; }
+wipe() { psql_owner -q -c "TRUNCATE otp_codes, sessions, quotes, offers, order_events, ratings, cash_ledger, wallet_ledger, wallet_topups, cod_settlements, payout_accounts, problem_reports, notifications, device_tokens, orders, driver_details, document_files, documents, profiles, accounts, zones, pricing_rules, staff_audit, staff_users, security_events RESTART IDENTITY CASCADE" >/dev/null; }
 
 port_busy() { curl -s -m 1 -o /dev/null "http://127.0.0.1:$1/" ; }
 # The server runs in its own process group, so stopping it stops EVERY process it started (npx, ts-node, node).
@@ -66,6 +66,10 @@ start_server 3399 orders RATE_LIMIT_DISABLED=1 BID_TTL_S=4 SEARCH_WINDOW_S=15 SE
 run "backend: orders, matching, cash, ratings" orders "$B" env $T npx ts-node test/orders.e2e.ts
 wipe; run "backend: accounts and profiles" auth "$B" env $T npx ts-node test/auth.e2e.ts
 wipe; run "backend: rules and sanctions" trust "$B" env $T npx ts-node test/trust.e2e.ts
+
+# 2b. The money system (seller payments, courier wallet; the platform account is set, the watchdog runs every half second).
+start_server 3399 money RATE_LIMIT_DISABLED=1 WATCH_MS=500 SEARCH_START_M=3000 SEARCH_STEP_M=2000 SEARCH_STEP_S=60 PLATFORM_RIP=00799999009999999999 "PLATFORM_HOLDER=Test Platform"
+wipe; run "backend: money (seller payments, wallet, commission)" money "$B" env $T TEST_APP_DATABASE_URL="$TEST_APP_URL" PLATFORM_RIP=00799999009999999999 npx ts-node test/money.e2e.ts
 
 # 3. Notifications.
 start_server 3399 notify RATE_LIMIT_DISABLED=1 BID_TTL_S=3 SEARCH_WINDOW_S=60 SEARCH_START_M=3000 SEARCH_STEP_M=2000 SEARCH_STEP_S=30

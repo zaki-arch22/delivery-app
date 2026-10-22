@@ -31,7 +31,7 @@ function Pending() {
           <thead><tr><th>{t('col.name')}</th><th>{t('col.phone')}</th><th>{t('col.vehicle')}</th><th>{t('col.docs')}</th><th>{t('col.created')}</th><th>{t('col.actions')}</th></tr></thead>
           <tbody>{data.drivers.map(d => (
             <tr key={d.id}><td><strong>{d.display_name}</strong>
-                {d.first_name ? <div className="muted">{d.first_name} {d.last_name} · {t('drivers.born')} {d.birth_date} · ID …{d.national_id_last3}</div> : null}</td><td>{d.phone}</td>
+                {d.first_name ? <div className="muted">{d.first_name} {d.last_name} · {t('drivers.born')} {d.birth_date} · ID …{d.national_id_last3}</div> : null}</td><td>{d.phone}<div className="muted">{t('drivers.payout')}: {d.payout_rip ? <span className="num">{d.payout_rip} · {d.payout_holder}</span> : t('drivers.noPayout')}</div></td>
               <td>{tx('vehicle.' + d.vehicle)}{d.plate_number ? <div className="muted">{d.vehicle_color} · <strong>{d.plate_number}</strong></div> : null}</td>
               <td><div className="docs">{(['id_photo', 'licence_photo', 'ownership_photo'] as const).filter(k => d.documents?.[k]).map(k => <DocPhoto key={k} id={d.documents?.[k]} label={tx('doc.' + k)} />)}
                 {(d.documents?.vehicle_photos?.length ? d.documents.vehicle_photos : [d.documents?.vehicle_photo]).filter(Boolean).map((v: string, i: number) => <DocPhoto key={v} id={v} label={`${tx('doc.vehicle_photo')} ${i + 1}`} />)}</div></td><td className="num">{fmtDate(d.created_at)}</td>
@@ -84,7 +84,8 @@ function All({ nav }: { nav: Nav }) {
                 <td><div className="row">
                   {d.status === 'active' && <button type="button" onClick={() => setAct({ d, suspend: true })}>{t('drivers.suspend')}</button>}
                   {d.status === 'suspended' && <button type="button" onClick={() => setAct({ d, suspend: false })}>{t('drivers.unsuspend')}</button>}
-                  <button type="button" onClick={() => nav.go('cash', { driverId: d.id })}>{t('drivers.cashPage')}</button></div></td></tr>))}</tbody>
+                  <button type="button" onClick={() => nav.go('cash', { driverId: d.id })}>{t('drivers.cashPage')}</button>
+                  <button type="button" onClick={() => nav.go('wallets', { driverId: d.id })}>{t('drivers.walletPage')}</button></div></td></tr>))}</tbody>
           </table></div>)}
         {data && <Pager page={page} count={data.drivers.length} onPage={setPage} />}
       </div>

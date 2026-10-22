@@ -61,6 +61,12 @@ test('new driver: name, vehicle, three photos, send for approval -> waiting for 
   expect(await screen.findByTestId('signup-error')).toHaveTextContent(/number written on your national ID card/);
   await fireEvent.changeText(screen.getByTestId('nid-input'), '1099 8877 6655 4433');      // only digits are kept
   await fireEvent.press(screen.getByTestId('submit-driver'));
+  expect(await screen.findByTestId('signup-error')).toHaveTextContent(/add your own account \(RIP\)/);    // couriers need a BaridiMob account
+  expect(screen.getByTestId('payout-rip-error')).toHaveTextContent(/20 digits starting with 007 99999/);
+  await fireEvent.changeText(screen.getByTestId('payout-rip'), '00799999 0011223344 55');
+  expect(screen.getByTestId('payout-rip').props.value).toBe('007 99999 0011223344 55');                   // shown in groups, easy to check
+  await fireEvent.changeText(screen.getByTestId('payout-holder'), 'Yacine Rider');
+  await fireEvent.press(screen.getByTestId('submit-driver'));
   expect(await screen.findByTestId('signup-error')).toHaveTextContent(/Accept the platform rules/);
   await fireEvent.press(screen.getByTestId('accept-rules'));
 
@@ -70,6 +76,7 @@ test('new driver: name, vehicle, three photos, send for approval -> waiting for 
   const row = await db.query(`SELECT p.status, p.display_name, d.vehicle, d.first_name, d.last_name, to_char(d.birth_date,'YYYY-MM-DD') birth, d.vehicle_color, d.plate_number, (SELECT count(*)::int FROM documents x WHERE x.profile_id=p.id) docs
     FROM profiles p JOIN driver_details d ON d.profile_id=p.id JOIN accounts a ON a.id=p.account_id WHERE a.phone='+213554000001'`);
   expect(row.rows).toEqual([{ status: 'pending_approval', display_name: 'Yacine Rider', vehicle: 'motorbike', first_name: 'Yacine', last_name: 'Rider', birth: '1995-04-12', vehicle_color: 'Red', plate_number: '0123 4116 16', docs: 5 }]);
+  expect((await db.query(`SELECT pa.rip, pa.holder_name FROM payout_accounts pa JOIN accounts a ON a.id=pa.account_id WHERE a.phone='+213554000001'`)).rows).toEqual([{ rip: '00799999001122334455', holder_name: 'Yacine Rider' }]);
   expect((await db.query(`SELECT d.national_id_last3, p.rules_version FROM driver_details d JOIN profiles p ON p.id=d.profile_id JOIN accounts a ON a.id=p.account_id WHERE a.phone='+213554000001'`)).rows).toEqual([{ national_id_last3: '433', rules_version: 1 }]);
 });
 
@@ -93,6 +100,8 @@ test('a sender adds a driver profile from Settings (same photos flow), and keeps
   for (const k of ['id_photo', 'licence_photo', 'ownership_photo', 'vehicle_photo']) await addPhoto(k);
   expect(await screen.findAllByText(/✓ Photo received/)).toHaveLength(4);
   await fireEvent.changeText(screen.getByTestId('nid-input'), '109988776655');
+  await fireEvent.changeText(screen.getByTestId('payout-rip'), '00799999002233445566');
+  await fireEvent.changeText(screen.getByTestId('payout-holder'), 'Sara Seller');
   await fireEvent.press(screen.getByTestId('accept-rules'));
   await act(async () => { await fireEvent.press(screen.getByTestId('submit-driver')); });
   expect(await screen.findByTestId('driver-status')).toHaveTextContent(/waiting for approval/);

@@ -1,8 +1,8 @@
 import { Client } from 'pg';
 // The app connects as a LIMITED database role. Even if the app were fully taken over, the database itself refuses to:
 // edit or delete history (cash ledger, order events, ratings, audit trail, security log), change staff passwords or add staff,
-// drop or alter tables, switch off the rules (triggers), or truncate anything.
-const APPEND_ONLY = ['order_events', 'cash_ledger', 'ratings', 'staff_audit', 'security_events'];
+// delete seller payments or top-ups, drop or alter tables, switch off the rules (triggers), or truncate anything.
+const APPEND_ONLY = ['order_events', 'cash_ledger', 'wallet_ledger', 'ratings', 'staff_audit', 'security_events'];
 export async function applyGrants(c: Client, role: string, password?: string) {
   const q = async (sql: string, p: any[] = []) => (await c.query(sql, p)).rows;
   const exists = (await q(`SELECT 1 FROM pg_roles WHERE rolname=$1`, [role])).length > 0;
@@ -24,6 +24,8 @@ export async function applyGrants(c: Client, role: string, password?: string) {
   await c.query(`REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ${R}`);
   await c.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${R}`);
   await c.query(`REVOKE UPDATE, DELETE, TRUNCATE ON ${APPEND_ONLY.map(I).join(', ')} FROM ${R}`);
+  // Money records are never deleted (a seller payment, a top-up): they are only moved forward by their own rules.
+  await c.query(`REVOKE DELETE, TRUNCATE ON cod_settlements, wallet_topups FROM ${R}`);
   await c.query(`REVOKE ALL ON staff_users FROM ${R}`);
   await c.query(`GRANT SELECT ON staff_users TO ${R}`);
   await c.query(`GRANT UPDATE (failed_attempts, locked_until, totp_last_step, token_version) ON staff_users TO ${R}`);

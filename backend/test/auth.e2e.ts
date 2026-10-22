@@ -1,4 +1,4 @@
-const B = 'http://localhost:3399';
+const B = process.env.API ?? 'http://localhost:3399';
 let pass = 0, fail = 0;
 const ok = (name: string, cond: boolean, extra = '') => { cond ? pass++ : fail++; console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : '  ' + extra}`); };
 async function api(path: string, body?: any, token?: string, method = body ? 'POST' : 'GET') {
@@ -11,7 +11,7 @@ async function login(phone: string, path: 'user' | 'driver') {
   return api('/verify_code', { phone, code: b.code, path });
 }
 import { Pool } from 'pg';
-import { DRIVER_INFO, driverDocs, upload, PHOTO } from './docs';
+import { DRIVER_INFO, driverDocs, upload, PHOTO, setPayout } from './docs';
 import { googleToken } from './google';
 if (!process.env.TEST_DATABASE_URL || /\/delivery$/.test(process.env.TEST_DATABASE_URL)) throw new Error('Tests need TEST_DATABASE_URL pointing to a separate test database, never the real one');
 const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL! });
@@ -99,6 +99,7 @@ const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL! });
     const all = await pool.query(`SELECT id, kind FROM documents WHERE account_id=(SELECT id FROM accounts WHERE phone=$1)`, [P1]);
     for (const row of all.rows) mine[row.kind] = row.id;
     const other = await driverDocs(B, t2);
+    await setPayout(B, t1);   // couriers need a BaridiMob account to sign up
     r = await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Thief Driver', documents: { ...mine, id_photo: other.id_photo } }, t1);
     ok('U4 someone else\'s photo cannot be used', r.b.error === 'BAD_DOCUMENT', JSON.stringify(r.b));
     r = await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Mixed Driver', documents: { ...mine, id_photo: mine.licence_photo, licence_photo: mine.id_photo } }, t1);
@@ -122,7 +123,7 @@ const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL! });
     ok('U5 the five photos are now tied to that driver profile', linked.rows[0].n === 5);
     const dd = (await pool.query(`SELECT first_name, last_name, to_char(birth_date,'YYYY-MM-DD') b, vehicle_color, plate_number FROM driver_details WHERE profile_id=$1`, [r.b.active_profile.id])).rows[0];
     ok('U5 identity and vehicle are stored as typed (plate written the same way every time)', dd.first_name === 'Karim' && dd.last_name === 'Test' && dd.b === '1995-04-12' && dd.vehicle_color === 'Blue' && dd.plate_number === '12345 113 16', dd);
-    const t3 = (await login('+213660000303', 'driver')).b.token;
+    const t3 = (await login('+213660000303', 'driver')).b.token; await setPayout(B, t3);
     r = await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Copy Driver', documents: mine }, t3);
     ok('U6 photos already used by a driver cannot be reused', r.b.error === 'BAD_DOCUMENT');
     let refused = 0; try { await pool.query(`DELETE FROM documents WHERE id=$1`, [mine.id_photo]); } catch { refused++; }

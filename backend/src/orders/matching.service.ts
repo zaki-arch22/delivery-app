@@ -1,21 +1,33 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Db } from '../db/db.service';
-import { cfg, searchRadiusM } from '../common/config';
+import { cfg, searchRadiusM, walletOn } from '../common/config';
 import { notify, Q } from '../notify/notify';
 import { NOT_BLOCKED_SQL } from '../trust/rules';
 import { fail } from '../common/errors';
 
+// A courier's cash limit right now: it starts small and grows with delivered orders, under the ceiling staff set.
+export const CASH_LIMIT_SQL = (p: string) => `LEAST(d.cash_limit_da, ${cfg.codLimitCap()}, ${cfg.codLimitStart()} + ${cfg.codLimitStep()} *
+  ((SELECT count(*) FROM orders x WHERE x.driver_profile_id = ${p}.id AND x.status = 'delivered' AND x.leg = 'delivery') / 10))::int`;
+// Goods money he owes a seller and has not sent in time, or that a seller says never arrived: no new work until it is settled.
+export const OWES_SELLER_SQL = (p: string) => `EXISTS (SELECT 1 FROM cod_settlements s WHERE s.driver_profile_id = ${p}.id
+  AND ((s.status = 'pending' AND s.due_at < now()) OR s.status = 'disputed'))`;
+// Commission owed to the platform beyond the allowed credit (only once the platform's account is set).
+export const WALLET_OK_SQL = (p: string) => !walletOn() ? 'true'
+  : `COALESCE((SELECT sum(amount_da) FROM wallet_ledger w WHERE w.driver_profile_id = ${p}.id), 0) > -${cfg.walletCreditDa()}`;
+
 // Who may see a request (all must be true): online with a fresh position, a vehicle that fits (a car takes any parcel, a
-// motorbike only small and medium ones), near the pickup, not the
-// sender's own account, no job in hand, not blocked, and (for cash-on-delivery) inside his cash limit.
+// motorbike only small and medium ones), near the pickup, not the sender's own account, no job in hand, not blocked, no
+// goods money overdue to a seller, commission paid (within the credit), and (for cash-on-delivery) inside his cash limit.
 export const ELIGIBLE_SQL = (p: string, o: string) => `
   d.is_online AND (d.vehicle = ${o}.vehicle OR d.vehicle = 'car') AND ${p}.type='driver' AND ${p}.status='active'
   AND d.last_location_at > now() - make_interval(secs => ${cfg.locationFreshS()})
   AND ${p}.account_id <> (SELECT account_id FROM profiles WHERE id = ${o}.user_profile_id)
   AND NOT EXISTS (SELECT 1 FROM orders j WHERE j.driver_profile_id = ${p}.id AND j.status IN ('assigned','picked_up'))
   AND ${NOT_BLOCKED_SQL(`${p}.id`)}
+  AND NOT ${OWES_SELLER_SQL(p)}
+  AND ${WALLET_OK_SQL(p)}
   AND (${o}.cod_amount_da = 0 OR (d.cash_limit_da IS NOT NULL AND
-       COALESCE((SELECT sum(amount_da) FROM cash_ledger c WHERE c.driver_profile_id = ${p}.id), 0) + ${o}.cod_amount_da <= d.cash_limit_da))`;
+       COALESCE((SELECT sum(amount_da) FROM cash_ledger c WHERE c.driver_profile_id = ${p}.id), 0) + ${o}.cod_amount_da <= ${CASH_LIMIT_SQL(p)}))`;
 
 // Gives the order to one courier at the given price, in the caller's transaction. Used when the customer chooses a
 // courier's offer, and when "auto-accept" is on and a courier accepts the customer's price. The price locks here.

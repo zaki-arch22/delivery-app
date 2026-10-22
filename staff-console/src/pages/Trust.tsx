@@ -11,10 +11,10 @@ const STAFF_RULES = ['far_confirmation', 'wrong_item', 'damaged_by_driver', 'beh
 const FIXED: Record<string, number> = { far_confirmation: 3, wrong_item: 4, damaged_by_driver: 4, prohibited_goods: 6 };
 const TONE: Record<string, 'good' | 'bad' | 'warn' | 'info' | 'muted'> = { active: 'warn', appealed: 'info', upheld: 'bad', cancelled: 'muted' };
 
-export function Trust({ nav }: { nav: Nav }) {
+export function Trust({ nav, profileId }: { nav: Nav; profileId?: string }) {
   useLang();
   const [tab, setTab] = useState<'appeals' | 'all' | 'sanctions'>('appeals'), [page, setPage] = useState(1);
-  const [record, setRecord] = useState<string | null>(null), [lookup, setLookup] = useState('');
+  const [record, setRecord] = useState<string | null>(profileId ?? null), [lookup, setLookup] = useState('');
   const [deciding, setDeciding] = useState<{ v: any; decision: 'uphold' | 'cancel' } | null>(null), [lifting, setLifting] = useState<any>(null);
   const v = useLoad(() => tab === 'sanctions' ? Promise.resolve(null) : api<{ violations: any[] }>('/list_violations' + qs({ status: tab === 'appeals' ? 'appealed' : undefined, page })), [tab, page]);
   const s = useLoad(() => tab !== 'sanctions' ? Promise.resolve(null) : api<{ sanctions: any[] }>('/list_sanctions' + qs({ active: 'true', page })), [tab, page]);

@@ -18,7 +18,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 const PHOTO = readFileSync(resolve(process.cwd(), '../backend/test/fixtures/photo.jpg'));   // made-up test picture
 const upload = async (kind: string, tok: string) => (await (await fetch(API + '/upload_document?kind=' + kind, { method: 'POST', headers: { authorization: 'Bearer ' + tok, 'content-type': 'image/jpeg' }, body: PHOTO })).json() as any).document_id as string;
-const driverDocs = async (tok: string) => ({ vehicle: 'motorbike', first_name: 'Karim', last_name: 'Test', birth_date: '1995-04-12', vehicle_color: 'Blue', plate_number: '12345 113 16', id_photo: await upload('id_photo', tok), licence_photo: await upload('licence_photo', tok), ownership_photo: await upload('ownership_photo', tok), vehicle_photo: await upload('vehicle_photo', tok) });
+const driverDocs = async (tok: string) => (await call('/set_payout_account', { rip: '00799999001234567890', holder_name: 'Test Holder' }, tok), { vehicle: 'motorbike', first_name: 'Karim', last_name: 'Test', birth_date: '1995-04-12', vehicle_color: 'Blue', plate_number: '12345 113 16', id_photo: await upload('id_photo', tok), licence_photo: await upload('licence_photo', tok), ownership_photo: await upload('ownership_photo', tok), vehicle_photo: await upload('vehicle_photo', tok) });
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const nav = () => within(screen.getByRole('navigation', { name: 'Main' }));
 const dialog = () => screen.findByRole('dialog');
@@ -27,7 +27,7 @@ let user: any, driver: any, orderId = '', ref = '';
 const u = userEvent.setup();
 
 beforeAll(async () => {
-  await db.query(`TRUNCATE otp_codes, sessions, quotes, offers, order_events, ratings, cash_ledger, problem_reports, notifications, device_tokens, orders, driver_details, documents, profiles, accounts, zones, pricing_rules, staff_audit, staff_users, security_events RESTART IDENTITY CASCADE`);
+  await db.query(`TRUNCATE otp_codes, sessions, quotes, offers, order_events, ratings, cash_ledger, wallet_ledger, wallet_topups, cod_settlements, payout_accounts, problem_reports, notifications, device_tokens, orders, driver_details, documents, profiles, accounts, zones, pricing_rules, staff_audit, staff_users, security_events RESTART IDENTITY CASCADE`);
   await db.query(`INSERT INTO staff_users(email,name,password_hash,totp_secret_sealed) VALUES ($1,'Console Tester',$2,$3)`, [EMAIL, hashPassword(PW), seal(SECRET, 'totp')]);
   setLang('en'); render(<App />);
 });
@@ -45,6 +45,8 @@ test('2. login needs the authenticator code; a wrong code is refused with a clea
   expect(screen.getByLabelText('Password')).toHaveValue(PW);                            // the password stays typed after a failed code
   await u.type(screen.getByLabelText(/^Authenticator code/), codeAt(SECRET, stepNow()));
   await u.click(screen.getByRole('button', { name: 'Log in' }));
+  expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();         // the console opens on the dashboard
+  await u.click(nav().getByRole('button', { name: 'Orders' }));
   expect(await screen.findByRole('heading', { name: 'Orders' })).toBeInTheDocument();
   expect(await screen.findByText('Nothing here yet.')).toBeInTheDocument();          // empty database: designed empty state, no mock data
   expect(localStorage.length + sessionStorage.length).toBe(0);                        // the token is never stored in the browser
@@ -149,6 +151,66 @@ test('9. ratings page shows its empty state', async () => {
   await u.click(nav().getByRole('button', { name: 'Ratings' }));
   expect(await screen.findByRole('heading', { name: 'Ratings and comments' })).toBeInTheDocument();
   expect(await screen.findByText('Nothing here yet.')).toBeInTheDocument();
+});
+
+test('9b. money and overview: dashboard, a disputed seller payment decided, a top-up approved, customers, audit log, live alerts', async () => {
+  const drv = driver.active_profile.id, usr = user.active_profile.id;
+  await db.query(`INSERT INTO cod_settlements(order_id, driver_profile_id, seller_profile_id, amount_da, seller_rip, seller_holder, status, due_at, dispute_note, disputed_at)
+                  VALUES ($1,$2,$3,2500,'00799999001234567890','Seller Test','disputed', now() - interval '1 hour','Nothing arrived', now())`, [orderId, drv, usr]);
+  await db.query(`INSERT INTO cash_ledger(driver_profile_id, order_id, type, amount_da) VALUES ($1,$2,'cod_collected',2500)`, [drv, orderId]);
+  const doc = await upload('transfer_receipt', driver.token); await db.query(`UPDATE documents SET profile_id=$2 WHERE id=$1`, [doc, drv]);
+  await db.query(`INSERT INTO wallet_topups(driver_profile_id, amount_da, reference, receipt_doc) VALUES ($1, 1000, 'BM-TOPUP-1', $2)`, [drv, doc]);
+
+  await u.click(nav().getByRole('button', { name: 'Dashboard' }));
+  expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+  const disputed = await screen.findByRole('button', { name: /Disputed by sellers/ });
+  await waitFor(() => expect(within(disputed).getByText('1')).toBeInTheDocument());
+  expect(screen.getByText(/Commission is not charged yet/)).toBeInTheDocument();                   // no platform account on the test server
+  await waitFor(() => expect(nav().getByRole('button', { name: 'Seller payments' })).toHaveAttribute('title', 'Seller payments: 1'));   // waiting work counted in the menu
+  expect(screen.getByRole('img', { name: 'Delivered orders, last 14 days' })).toBeInTheDocument();
+
+  await u.click(disputed);                                                                         // a tile opens its page
+  expect(await screen.findByRole('heading', { name: 'Seller payments (cash on delivery)' })).toBeInTheDocument();
+  const row = (await screen.findByText(ref)).closest('tr')!;
+  expect(within(row).getByText('Disputed')).toBeInTheDocument();
+  await u.click(within(row).getByRole('button', { name: 'View' }));
+  let d = await dialog(); expect(within(d).getByText('007 99999 0012345678 90')).toBeInTheDocument(); expect(within(d).getByText(/Nothing arrived/)).toBeInTheDocument();
+  await u.click(within(d).getByRole('button', { name: 'Close' }));
+  await u.click(within((await screen.findByText(ref)).closest('tr')!).getByRole('button', { name: 'Decide' }));
+  d = await dialog(); await u.type(within(d).getByLabelText(/^Decision/), 'Courier showed the transfer');
+  await u.click(within(d).getByRole('button', { name: 'Confirm' }));
+  expect(await within(d).findByRole('alert')).toHaveTextContent('Choose an outcome.');             // an outcome is required
+  await u.click(within(d).getByLabelText(/The seller was paid/)); await u.click(within(d).getByRole('button', { name: 'Confirm' }));
+  await waitFor(async () => expect((await db.query(`SELECT status FROM cod_settlements WHERE order_id=$1`, [orderId])).rows[0].status).toBe('resolved_paid'));
+  expect((await db.query(`SELECT amount_da FROM cash_ledger WHERE type='paid_to_seller'`)).rows).toEqual([{ amount_da: -2500 }]);
+
+  await u.click(nav().getByRole('button', { name: 'Wallets & top-ups' }));
+  expect(await screen.findByText(/Not set yet\. The owner adds PLATFORM_RIP/)).toBeInTheDocument();
+  expect(await screen.findByText('BM-TOPUP-1')).toBeInTheDocument();
+  await u.click(screen.getByRole('button', { name: 'Approve' }));
+  d = await dialog(); await u.click(within(d).getByRole('button', { name: 'Confirm' }));
+  await waitFor(async () => expect((await db.query(`SELECT type, amount_da FROM wallet_ledger`)).rows).toEqual([{ type: 'topup', amount_da: 1000 }]));
+  await u.click(screen.getByRole('tab', { name: 'Approved' }));                                  // it left the waiting list
+  await u.click(await screen.findByRole('button', { name: 'Driver Console' }));
+  await u.click(await screen.findByRole('button', { name: 'Change the ceiling' }));
+  d = await dialog(); const lim = within(d).getByLabelText(/^Cash limit/); await u.clear(lim); await u.type(lim, '20000'); await u.click(within(d).getByRole('button', { name: 'Confirm' }));
+  await waitFor(async () => expect((await db.query(`SELECT cash_limit_da FROM driver_details WHERE profile_id=$1`, [drv])).rows[0].cash_limit_da).toBe(20000));
+  expect((await screen.findAllByText('1,000 DA')).length).toBeGreaterThan(0);                         // the wallet balance after the top-up
+
+  await u.click(nav().getByRole('button', { name: 'Customers' }));
+  expect(await screen.findByRole('heading', { name: 'Customers' })).toBeInTheDocument();
+  expect(await screen.findByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();             // names are shown as text, never as HTML
+  expect(document.querySelector('img[src="x"]')).toBeNull();
+
+  await u.click(nav().getByRole('button', { name: 'Audit log' }));
+  expect(await screen.findByText('approve_topup')).toBeInTheDocument();
+  expect(screen.getByText('resolve_settlement')).toBeInTheDocument();
+  expect(screen.getByText('set_cash_limit')).toBeInTheDocument();
+
+  expect(screen.getByRole('button', { name: /^Alerts: \d+$/ })).toBeInTheDocument();                // the bell with the live alerts
+  await u.click(screen.getByRole('button', { name: /^Alerts/ }));
+  expect(await screen.findByRole('dialog', { name: 'Live activity' })).toBeInTheDocument();
+  await u.click(screen.getByRole('button', { name: /^Alerts/ }));
 });
 
 test('10. language: Arabic switches the whole console to right-to-left, French works too', async () => {

@@ -41,3 +41,8 @@ services:
         sync: false
       - key: FIREBASE_SERVICE_ACCOUNT_JSON
         sync: false
+      # The platform's Algérie Poste account for courier wallet top-ups (commission). Empty = no commission yet.
+      - key: PLATFORM_RIP
+        sync: false
+      - key: PLATFORM_HOLDER
+        sync: false

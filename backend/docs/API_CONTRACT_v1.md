@@ -85,9 +85,25 @@ Live updates: see section G (one WebSocket per logged-in profile). Driver locati
 | Home | submit_selfie | document_id (kind `selfie_photo`) | ok. Going online without a selfie from the last 7 days: SELFIE_REQUIRED (428) |
 | Active job | release_job | order id, reason (`vehicle_problem`\|`emergency`\|`sender_unreachable`\|`parcel_not_ready`\|`parcel_too_big`\|`unsafe_or_prohibited` (+ evidence_photo)\|`other`), note? | job null (only before pickup; the order searches again at the same price, never offered to him again) |
 | Earnings | list_jobs | page | jobs[] |
-| Cash | get_cash_balance | - | balance_da, entries[] |
+| Cash | get_cash_balance | - | balance_da, entries[] (`cod_collected`, `paid_to_seller`, `handover`, `adjustment`) |
 | Rate | submit_rating | same function as above, used by the driver on the user | ok |
 Live updates: see section G.
+
+## K. Money (owner's decisions, Oct 2026; the platform never holds customers' money)
+Delivery fee: cash to the courier. Goods money (cash on delivery, at most 30 000 DA per order: COD_TOO_HIGH): courier -> seller's Algérie Poste account (BaridiMob) or by hand, within 24 hours; the seller confirms. Commission: 10% of the fee (per price version) from the courier's prepaid wallet, only once the platform account is set on the server (PLATFORM_RIP, PLATFORM_HOLDER).
+| Who | Function | Request | Answer |
+|---|---|---|---|
+| any login | get_payout_account / set_payout_account | - / rip (20 digits starting 00799999; spaces ignored), holder_name (3-80) | payout {rip, holder_name, updated_at} or null. BAD_RIP. 5 changes a day; a change notifies every profile (`payout.changed`, last 4 digits) and is logged. Required for courier sign-up and for cash-on-delivery orders (PAYOUT_ACCOUNT_REQUIRED, 428); the order keeps a copy |
+| user | list_sales | - | waiting_da, received_da, sales[] (order, amount, status, due_at, overdue, method, reference, has_receipt, courier name and phone) |
+| user | confirm_settlement | order_id | "I received it" (from pending, sent or disputed): closes the debt. ALREADY_CLOSED |
+| user | dispute_settlement | order_id, note (3-500) | only after "sent" or after the 24 hours (CANNOT_DISPUTE); staff get a case; the courier gets no new requests until it is settled |
+| driver | list_settlements | - | to_send_da, waiting_confirmation_da, settlements[] with the seller's RIP, holder, name, phone |
+| driver | mark_settlement_sent | order_id, method (`baridimob`\|`cash`), reference (4-40 letters/digits/space - / .) + receipt_photo (document kind `transfer_receipt`) for baridimob | the list. ALREADY_SENT, PHOTO_REQUIRED, BAD_DOCUMENT, BAD_REFERENCE |
+| both | get_settlement_receipt | order_id | the receipt photo (image/jpeg), only for that payment's seller and courier |
+| driver | get_wallet | - | active, balance_da, credit_da, commission_percent, platform_account, cash_held_da, cash_limit_da (current), entries[], topups[] |
+| driver | request_topup | amount_da (100-200000), reference, receipt_photo (kind `transfer_receipt`) | the wallet. WALLET_NOT_OPEN, REFERENCE_USED (one transfer = one top-up), TOO_MANY_PENDING (3) |
+Rules: a courier with goods money late (> 24 h) or disputed, or owing more commission than WALLET_CREDIT_DA (1000), gets no new requests. Late = rule `cod_late` (3 points, once per order) + a staff case. Cash limit = min(staff ceiling, 30 000, 5 000 + 1 000 per 10 delivered orders). Account deletion is refused while a payment is open (PAYMENTS_OPEN) or goods money is held (CASH_HELD).
+Notifications: settlement.due / settlement.overdue / settlement.confirmed / settlement.disputed / settlement.resolved (courier), sale.collected / sale.sent / sale.overdue / settlement.resolved (seller), wallet.topup_approved / wallet.topup_rejected / wallet.adjusted (courier), payout.changed (every profile of the account). All with push.
 
 ## D. Staff functions (built and tested)
 Staff use a separate login (email and password, created with `npm run create-admin`). A staff token works ONLY on staff functions and a user or driver token never does. 5 wrong passwords lock the account for 15 minutes; deactivating a staff member ends their access at once. Every staff action is saved in a permanent audit trail (who, what, when) that can never be edited or deleted. Every id returned is a real number or text id, never a number in quotes.
@@ -118,9 +134,18 @@ Staff use a separate login (email and password, created with `npm run create-adm
 | ban_account | profile_id, reason (10+) | sessions_ended. A person's decision: all profiles stop, every session ends, the Google account, devices, driver ID number and verified phone cannot open a new account |
 | get_profile_record | profile_id | profile, points_90d, active_block, devices, linked_profiles (other accounts that used the same phone), violations, sanctions |
 | create_zone / list_zones / set_zone_open | name + GeoJSON polygon / - / zone_id, open | zones start CLOSED; opening is a separate step |
-| get_pricing / create_pricing_version | - / base_da, per_km_da, medium_extra_da, large_extra_da, car_extra_da, min_percent, max_percent, max_km (longest trip allowed, 1-1000 km, default 50: BAD_MAX_KM) | a new version replaces the active one; existing orders keep theirs |
+| get_pricing / create_pricing_version | - / base_da, per_km_da, medium_extra_da, large_extra_da, car_extra_da, min_percent, max_percent, max_km (longest trip allowed, 1-1000 km, default 50: BAD_MAX_KM), commission_percent (0-50, default 10: BAD_COMMISSION) | a new version replaces the active one; existing orders keep theirs |
+| list_settlements_staff | status? (`open`\|`overdue`\|`pending`\|`sent`\|`disputed`\|`confirmed`\|`resolved_paid`\|`resolved_unpaid`), q? (reference or phone), page | seller payments (disputed and late first) with both people, the seller's RIP, proof (method, reference, receipt_doc), and totals |
+| resolve_settlement | order_id, outcome (`paid`\|`unpaid`), note | paid: the debt closes (cash ledger `paid_to_seller`); unpaid: it stays on the courier. Both are told; the related cases close. The platform never pays itself. ALREADY_CLOSED |
+| list_topups / decide_topup | status? (default `pending`), page / id, decision (`approve`\|`reject`), reason (reject) | courier top-ups with receipt_doc and balance, plus the platform account; approve adds a wallet entry once. ALREADY_DECIDED |
+| get_driver_wallet / add_wallet_adjustment | profile_id / driver_profile_id, amount_da (non-zero, at most 200000), note | wallet balance, credit, cash-limit ceiling and current limit, entries / a correction as a NEW entry |
+| set_cash_limit | driver_profile_id, cash_limit_da (0 or more) | the ceiling of the courier's cash limit (the limit grows by itself below it) |
+| get_dashboard | - | orders (today, now, averages), people, money (cash held, seller payments, top-ups, commission), cases (problems, appeals, SOS, locked codes), days[14] |
+| get_staff_feed | since? (ISO time; default 24 h ago) | now, items[] {key, at, kind, order_id, ref, data, level `info`\|`warn`\|`danger`}: orders, SOS, checks, seller payments, problems, sign-ups, top-ups, appeals. The console asks every 8 s with the last `now` |
+| list_audit_log | action?, target?, page | every staff action (who, what, target, details), 100 per page |
+| list_users | q? (name or phone), page | customers with orders, delivered, rating, sales money on its way, has_payout |
 
-Not built (decided): two-person approval for large cash adjustments (needs a team to exist), a staff audit viewer (the audit trail is stored; reading it is done by the owner with the database for now).
+Not built (decided): two-person approval for large cash adjustments (needs a team to exist).
 
 ## E. Order status rules (the only allowed moves)
 (created) -> searching (couriers are searched at once)

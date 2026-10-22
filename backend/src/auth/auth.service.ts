@@ -178,7 +178,8 @@ export class AuthService {
   async getMe(accountId: string, activeId: string | null) {
     const acc = await this.db.one(`SELECT id, phone, phone_verified, google_sub IS NOT NULL AS google FROM accounts WHERE id=$1`, [accountId]);
     const profiles = await this.profiles(accountId);
-    return { account: acc, profiles, active_profile: profiles.find(p => p.id === activeId) ?? null };
+    const payout = await this.db.one(`SELECT rip, holder_name, updated_at FROM payout_accounts WHERE account_id=$1`, [accountId]);
+    return { account: acc, payout: payout ?? null, profiles, active_profile: profiles.find(p => p.id === activeId) ?? null };
   }
 
   async addProfile(accountId: string, sid: string, activeProfileId: string | null, type: PType, displayName: string, docs?: any, acceptRules?: any, nationalId?: any) {
@@ -203,6 +204,9 @@ export class AuthService {
     // Drivers and senders call each other, so every profile needs a contact number first (set_phone for Google accounts).
     const own = await this.db.one(`SELECT phone FROM accounts WHERE id=$1`, [accountId]);
     if (!own?.phone) throw bad('PHONE_REQUIRED', 'Add your phone number first');
+    // Couriers send sellers their goods money by BaridiMob, and receive money the same way: the account is required to sign up.
+    if (type === 'driver' && !(await this.db.one(`SELECT 1 FROM payout_accounts WHERE account_id=$1`, [accountId])))
+      throw new HttpException({ error: 'PAYOUT_ACCOUNT_REQUIRED', message: 'Add your BaridiMob (RIP) account first' }, 428);
     const have = await this.db.one(`SELECT count(*)::int n FROM profiles WHERE account_id=$1`, [accountId]);
     if (have.n > 0 && !activeProfileId) throw new ForbiddenException({ error: 'USE_SETTINGS', message: 'Log in to your profile and add the second one from Settings' });
     const client = await this.db.pool.connect();
@@ -262,7 +266,9 @@ export class AuthService {
         if ((await q(`SELECT 1 FROM orders WHERE driver_profile_id = ANY($1::uuid[]) AND status IN ('assigned','picked_up') LIMIT 1`, [pids])).length)
           throw new ConflictException({ error: 'ACTIVE_JOB', message: 'Finish your current delivery first.' });
         const [c] = await q(`SELECT COALESCE(sum(amount_da),0)::int held FROM cash_ledger WHERE driver_profile_id = ANY($1::uuid[])`, [pids]);
-        if (c.held !== 0) throw new ConflictException({ error: 'CASH_HELD', message: 'Hand over the cash you hold to our team first.' });
+        if (c.held !== 0) throw new ConflictException({ error: 'CASH_HELD', message: 'Send the goods money you hold to the sellers first.' });
+        if ((await q(`SELECT 1 FROM cod_settlements WHERE (seller_profile_id = ANY($1::uuid[]) OR driver_profile_id = ANY($1::uuid[])) AND status IN ('pending','sent','disputed') LIMIT 1`, [pids])).length)
+          throw new ConflictException({ error: 'PAYMENTS_OPEN', message: 'A cash-on-delivery payment is still open. Wait until it is confirmed.' });
       }
       const s = await q(`UPDATE sessions SET revoked=true WHERE account_id=$1 AND NOT revoked RETURNING id`, [accountId]);
       await q(`DELETE FROM device_tokens WHERE profile_id = ANY($1::uuid[])`, [pids]);
@@ -274,6 +280,7 @@ export class AuthService {
       await q(`DELETE FROM documents WHERE account_id=$1 AND profile_id IS NULL`, [accountId]);
       await q(`UPDATE profiles SET display_name='Deleted', photo_url=NULL, status='deleted' WHERE account_id=$1`, [accountId]);
       await q(`DELETE FROM account_devices WHERE account_id=$1`, [accountId]);
+      await q(`DELETE FROM payout_accounts WHERE account_id=$1`, [accountId]);
       await q(`UPDATE accounts SET google_sub=NULL, phone=NULL, phone_verified=false, deleted_at=now() WHERE id=$1`, [accountId]);
       return s.map((r: any) => r.id as string);
     });

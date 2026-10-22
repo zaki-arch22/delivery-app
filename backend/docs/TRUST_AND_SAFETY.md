@@ -64,6 +64,7 @@ Points count for 90 days, per profile (a sender profile and a driver profile are
 | Parcel damaged by the driver, confirmed by staff | 4 | staff |
 | Rude, threatening or unsafe behaviour, confirmed by staff | 3-6 | staff |
 | Prohibited goods sent | 6 | staff |
+| Courier sends a seller's goods money later than 24 hours | 3 | automatic (and no new requests until it is settled) |
 | Cash kept / parcel stolen, confirmed by staff | ban | staff (person) |
 
 What points do (automatically):

@@ -69,6 +69,7 @@ test('4. a second profile from Settings, and switching between the two', async (
   expect(await app.session.uploadDocument('id_photo', asBytes)).toMatch(/^[0-9a-f-]{36}$/);
   const docs = { vehicle: 'motorbike', first_name: 'Karim', last_name: 'Test', birth_date: '1995-04-12', vehicle_color: 'Blue', plate_number: '12345 113 16', ownership_photo: await app.session.uploadDocument('ownership_photo', photo()), id_photo: await app.session.uploadDocument('id_photo', photo()), licence_photo: await app.session.uploadDocument('licence_photo', photo()), vehicle_photo: await app.session.uploadDocument('vehicle_photo', photo()) };
   expect(docs.id_photo).toMatch(/^[0-9a-f-]{36}$/);
+  await app.client.call('/set_payout_account', { rip: '00799999001234567890', holder_name: 'Karim Driver' });   // couriers need a BaridiMob account
   await app.session.addProfile('driver', 'Karim Driver', true, docs, '100000000001');
   expect(app.session.state.active?.type).toBe('driver'); expect(app.session.state.profiles.length).toBe(2);
   await app.session.switchProfile('user');

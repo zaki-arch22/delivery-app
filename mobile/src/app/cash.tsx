@@ -12,7 +12,7 @@ export default function Cash() {
   const { t, lang, services } = useApp();
   const [data, setData] = useState<{ balance_da: number; entries: CashEntry[] } | null>(null);
   useFocusEffect(useCallback(() => { driver(services.client).cash().then(setData).catch(() => {}); }, [services]));
-  const label = (e: CashEntry) => e.type === 'handover' ? t('cash_handover', { n: e.id }) : e.type === 'adjustment' ? t('cash_adjustment') : t('cash_cod_collected');
+  const label = (e: CashEntry) => e.type === 'paid_to_seller' ? t('cash_paid_to_seller') : e.type === 'handover' ? t('cash_handover', { n: e.id }) : e.type === 'adjustment' ? t('cash_adjustment') : t('cash_cod_collected');
   return (
     <Screen testID="screen-cash" title={t('my_cash')}>
       {data ? (<>

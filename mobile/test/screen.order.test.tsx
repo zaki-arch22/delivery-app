@@ -89,6 +89,7 @@ test('new sender: "My parcels" starts empty with a clear message', async () => {
   expect(await screen.findByTestId('orders-empty')).toHaveTextContent(/No orders yet/);
 });
 
+let courierToken = '';
 test('a full order: route, fare, distance, couriers offer, choose one, delivered, rating, problem report', async () => {
   const s = svc(kept);
   await open(s);
@@ -139,12 +140,18 @@ test('a full order: route, fare, distance, couriers offer, choose one, delivered
   await fireEvent.press(screen.getByTestId('payer-recipient'));
   await fireEvent.changeText(screen.getByTestId('cod'), '2500');
   await act(async () => { await fireEvent.press(screen.getByTestId('confirm-order')); });
+  // Cash on delivery: the seller's BaridiMob account is asked once (the courier sends the goods money there within 24 h).
+  expect(await screen.findByTestId('payout-rip-error')).toBeTruthy();
+  await fireEvent.changeText(screen.getByTestId('payout-rip'), '00799999 0099887766 55');
+  await fireEvent.changeText(screen.getByTestId('payout-holder'), 'Nora Sender');
+  await act(async () => { await fireEvent.press(screen.getByTestId('confirm-order')); });
 
   // The search starts at once (no waiting for the receiver); the link goes out by WhatsApp.
   expect(await screen.findByTestId('order-status')).toHaveTextContent(/Looking for a courier/);
   const [o] = (await db.query(`SELECT id, ref, status, offered_da, payer, cod_amount_da, recipient_phone, pickup_address, dropoff_address, delivery_code, pickup_code, inspection, auto_accept FROM orders`)).rows;
   expect(o).toMatchObject({ status: 'searching', offered_da: rec + 10, payer: 'recipient', cod_amount_da: 2500, recipient_phone: '+213770112233', inspection: 'open', auto_accept: false });
   expect(o.dropoff_address).toEqual({ landmark: 'Next to the Grande Poste' });
+  expect((await db.query(`SELECT cod_rip, cod_holder FROM orders WHERE id=$1`, [o.id])).rows[0]).toEqual({ cod_rip: '00799999009988776655', cod_holder: 'Nora Sender' });   // copied onto the order
   const wa = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as any);
   await fireEvent.press(screen.getByTestId('share-whatsapp'));
   const url = wa.mock.calls[0][0] as string; wa.mockRestore();
@@ -162,7 +169,7 @@ test('a full order: route, fare, distance, couriers offer, choose one, delivered
   await waitFor(async () => expect((await db.query(`SELECT offered_da FROM orders WHERE id=$1`, [o.id])).rows[0].offered_da).toBe(rec + 60));
 
   // Two couriers nearby answer: one accepts the price, one asks for more. Both offers appear; the customer picks one.
-  const d1 = await driverOnline('+213555000009', { lat: 36.7545, lng: 3.0590 });
+  const d1 = await driverOnline('+213555000009', { lat: 36.7545, lng: 3.0590 }); courierToken = d1;
   const d2 = await driverOnline('+213555000010', { lat: 36.7550, lng: 3.0595 }, 'Yacine Fast');
   const r1 = await requestsOf(d1, o.ref), r2 = await requestsOf(d2, o.ref);
   expect(r1?.price_da).toBe(rec + 60);                                                  // the raised price reached the couriers
@@ -249,6 +256,40 @@ test('the last destination is remembered in "recent" places, with the receiver',
   await fireEvent.press(screen.getByTestId('share-tracking'));
   expect((shared.mock.calls[0][0] as any).message).toMatch(new RegExp(`${API}/t/[A-Za-z0-9_-]{32}`));
   shared.mockRestore();
+});
+
+test('money from my sales: the courier sends it, the seller sees it and confirms; her BaridiMob account in Settings', async () => {
+  await open(svc(kept));
+  await screen.findByTestId('send-parcel');
+  const [o] = (await db.query(`SELECT id, ref FROM orders WHERE cod_amount_da=2500`)).rows;
+  await menu('menu-sales');
+  expect(await screen.findByTestId('sales-waiting')).toHaveTextContent(/2\s500 DA on the way/);
+  expect(screen.getByTestId('sale-status-' + o.ref)).toHaveTextContent(/The courier sends it before/);
+  expect(screen.queryByTestId('dispute-' + o.ref)).toBeNull();                               // he still has 24 hours
+  await pressBack();
+  expect((await call('/mark_settlement_sent', { order_id: o.id, method: 'cash' }, courierToken)).settlements).toBeTruthy();   // he gives it by hand
+  await menu('menu-sales');
+  await waitFor(() => expect(screen.getByTestId('sale-status-' + o.ref)).toHaveTextContent(/Sent: check your account/));
+  expect(screen.getByTestId('sale-' + o.ref)).toHaveTextContent(/Given by hand/);
+  expect(screen.getByTestId('dispute-' + o.ref)).toBeTruthy();
+  const ask = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => { buttons?.find(b => b.style !== 'cancel')?.onPress?.(); });
+  await act(async () => { await fireEvent.press(screen.getByTestId('confirm-' + o.ref)); });
+  ask.mockRestore();
+  await waitFor(() => expect(screen.getByTestId('sale-status-' + o.ref)).toHaveTextContent(/Received/));
+  expect(screen.getByTestId('sales-waiting')).toHaveTextContent(/0 DA on the way/);
+  expect((await db.query(`SELECT status FROM cod_settlements WHERE order_id=$1`, [o.id])).rows[0].status).toBe('confirmed');
+  await pressBack();
+  await menu('menu-settings');
+  await fireEvent.press(await screen.findByTestId('open-payout'));
+  await screen.findByTestId('screen-payout');
+  await waitFor(() => expect(screen.getByTestId('payout-rip').props.value).toBe('007 99999 0099887766 55'));
+  await fireEvent.changeText(screen.getByTestId('payout-rip'), '1234');
+  await fireEvent.press(screen.getByTestId('payout-save'));
+  expect(await screen.findByTestId('payout-rip-error')).toHaveTextContent(/20 digits/);
+  await fireEvent.changeText(screen.getByTestId('payout-rip'), '00799999 0011112222 33');
+  await act(async () => { await fireEvent.press(screen.getByTestId('payout-save')); });
+  expect(await screen.findByTestId('payout-msg')).toHaveTextContent('Saved.');
+  expect((await db.query(`SELECT rip FROM payout_accounts pa JOIN accounts a ON a.id=pa.account_id WHERE a.phone='+213555000001'`)).rows[0]?.rip).toBe('00799999001111222233');
 });
 
 test('cancel while searching; the order list shows the orders', async () => {

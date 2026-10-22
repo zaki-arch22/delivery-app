@@ -8,6 +8,7 @@ import { notify, Q } from '../notify/notify';
 export const RULES_VERSION = 1;
 export const RULE_POINTS: Record<string, number> = {
   driver_released: 1, late_cancel: 1, not_ordered_refusal: 2, far_confirmation: 3, wrong_item: 4, damaged_by_driver: 4, behaviour: 3, prohibited_goods: 6, other: 1,
+  cod_late: 3,   // goods money not sent to the seller within 24 hours
 };
 export const STAFF_RULES = ['far_confirmation', 'wrong_item', 'damaged_by_driver', 'behaviour', 'prohibited_goods', 'other'];
 export const LEVELS = [

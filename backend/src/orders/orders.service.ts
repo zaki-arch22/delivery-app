@@ -60,6 +60,10 @@ export class OrdersService {
     if (!['sender', 'recipient'].includes(b?.payer)) throw bad('BAD_PAYER', 'payer must be sender or recipient');
     const cod = b?.cod_amount_da ?? 0;
     if (!isInt(cod) || cod < 0 || cod > 2_000_000_000) throw bad('BAD_COD', 'cod_amount_da must be a whole number of dinars, 0 or more');
+    if (cod > cfg.maxCodDa()) throw bad('COD_TOO_HIGH', `Cash on delivery is limited to ${cfg.maxCodDa()} DA per order`);
+    // Goods money goes straight to the seller's Algérie Poste account: it must be known before the order (copied onto it).
+    const payout = cod > 0 ? await this.db.one(`SELECT pa.rip, pa.holder_name FROM payout_accounts pa JOIN profiles p ON p.account_id=pa.account_id WHERE p.id=$1`, [userId]) : null;
+    if (cod > 0 && !payout) throw fail(428, 'PAYOUT_ACCOUNT_REQUIRED', 'Add your BaridiMob (RIP) account in Settings to receive cash-on-delivery money');
     const inspection = b?.inspection ?? 'outside';
     if (!['outside', 'open'].includes(inspection)) throw bad('BAD_INSPECTION', 'inspection must be outside or open');
     const autoAccept = b?.auto_accept ?? false;
@@ -74,12 +78,12 @@ export class OrdersService {
         const [o] = await q(
           `INSERT INTO orders(user_profile_id, pickup_point, pickup_address, dropoff_point, dropoff_address, recipient_name, recipient_phone,
              size, vehicle, payer, cod_amount_da, pricing_version, distance_m, duration_s, recommended_da, min_da, max_da, offered_da, delivery_code, idempotency_key,
-             pickup_code, inspection, status, auto_accept, route_line)
+             pickup_code, inspection, status, auto_accept, route_line, cod_rip, cod_holder)
            VALUES ($1, ST_SetSRID(ST_MakePoint($2,$3),4326)::geography, $4, ST_SetSRID(ST_MakePoint($5,$6),4326)::geography, $7, $8,$9,
-             $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'searching',$25,$26) RETURNING id, ref`,
+             $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'searching',$25,$26,$27,$28) RETURNING id, ref`,
           [userId, d.pickup.lng, d.pickup.lat, pickup_address, d.dropoff.lng, d.dropoff.lat, dropoff_address, name, b.recipient_phone,
            d.size, vehicleFor(d.size), b.payer, cod, d.pricing_version, d.distance_m, d.duration_s, d.recommended_da, d.min_da, d.max_da, b.offered_da, code, key,
-           pickupCode, inspection, autoAccept, d.line ? JSON.stringify(d.line) : null]);
+           pickupCode, inspection, autoAccept, d.line ? JSON.stringify(d.line) : null, payout?.rip ?? null, payout?.holder_name ?? null]);
         await q(`UPDATE orders SET tracking_hash=$2 WHERE id=$1`, [o.id, trackingHash(trackingToken(o.id))]);
         await q(`INSERT INTO order_events(order_id, type, actor_profile_id, data) VALUES ($1,'created',$2,$3)`, [o.id, userId, { offered_da: b.offered_da, inspection, auto_accept: autoAccept }]);
         // No SMS from us. If the receiver's number is the VERIFIED number of a registered user, that user gets a PUSH with the

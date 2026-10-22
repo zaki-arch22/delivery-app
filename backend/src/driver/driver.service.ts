@@ -9,6 +9,7 @@ import { assign, ELIGIBLE_SQL, Matching } from '../orders/matching.service';
 import { Routing } from '../geo/routing';
 import { cfg } from '../common/config';
 import { assertCanWork, recordViolation } from '../trust/rules';
+import { onDelivered } from '../money/money.service';
 
 // Why a parcel could not be delivered. "refused_*" = the receiver refused it at the door (TRUST_AND_SAFETY.md, step 6).
 export const FAIL_REASONS = ['no_answer', 'wrong_address', 'refused_damaged', 'refused_wrong_item', 'refused_not_ordered', 'refused_changed_mind', 'refused_cannot_pay'];
@@ -125,7 +126,7 @@ export class DriverService {
       if (!o || o.status !== 'searching' || !f || !['offered', 'bid'].includes(f.status)) throw fail(409, 'OFFER_GONE', 'This request is no longer available');
       if (price < o.offered_da || price > o.max_da) throw bad('PRICE_NOT_ALLOWED', `Price must be between ${o.offered_da} and ${o.max_da}`);
       const [ok] = await q(`SELECT 1 FROM driver_details d JOIN profiles p ON p.id=d.profile_id JOIN orders o ON o.id=$2 WHERE d.profile_id=$1 AND ${ELIGIBLE_SQL('p', 'o')}`, [driverId, o.id]);
-      if (!ok) throw fail(409, 'NOT_ELIGIBLE', 'You cannot take this request now (offline, busy or over your cash limit)');
+      if (!ok) throw fail(409, 'NOT_ELIGIBLE', 'You cannot take this request now (offline, busy, over your cash limit, money owed to a seller or commission unpaid)');
       if (o.auto_accept && price === o.offered_da) {
         await assign(q, o.id, f.id, driverId, price);
         return { job_order_id: o.id as string };
@@ -204,8 +205,9 @@ export class DriverService {
       if (!isInt(got) || got !== expected) throw bad('CASH_MISMATCH', `Cash to collect is ${expected} DA`);
       const m = await this.distanceCheck(q, o, 'dropoff', loc);
       await q(`UPDATE orders SET status='delivered', delivered_at=now(), delivery_distance_m=$2 WHERE id=$1`, [o.id, m]);
-      // Only the goods money (cash on delivery) goes into the driver's cash ledger. Delivery-fee handling is a finance rule, parked.
+      // The goods money (cash on delivery) goes into the courier's cash ledger until the seller confirms he received it.
       if (o.leg === 'delivery' && o.cod_amount_da > 0) await q(`INSERT INTO cash_ledger(driver_profile_id, order_id, type, amount_da) VALUES ($1,$2,'cod_collected',$3)`, [driverId, o.id, o.cod_amount_da]);
+      await onDelivered(q, o, driverId);   // commission from the wallet; the goods money becomes a 24-hour debt to the seller
       await q(`INSERT INTO order_events(order_id,type,actor_profile_id,data) VALUES ($1,'delivered',$2,$3)`, [o.id, driverId, { cash_collected_da: got, distance_m: m, method: b.method === 'qr' ? 'qr' : 'code' }]);
       await notify(q, { profile: o.user_profile_id, kind: o.leg === 'return' ? 'return.delivered' : 'order.delivered', order: o.id, dedupe: `order:${o.id}:delivered`, data: { ref: o.ref } });
       return { again: false };

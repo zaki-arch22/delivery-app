@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { Db } from '../db/db.service';
 import { cfg } from '../common/config';
 import { notify } from '../notify/notify';
+import { flagOverdue } from '../money/money.service';
 
 // Safety nets (TRUST_AND_SAFETY.md, step 4): every minute, open a staff case (once per order) when
 //  - a driver carrying a parcel has sent no position for a while (phone off? stopped?): the sender is told we are checking;
@@ -33,6 +34,7 @@ export class Watchdog implements OnModuleInit, OnModuleDestroy {
           if (reason === 'check:driver_silent') await notify(q, { profile: o.user_profile_id, kind: 'order.checking', order: o.id, dedupe: `order:${o.id}:checking`, data: { ref: o.ref } });
         });
       }
+      await flagOverdue(this.db);   // goods money not sent to a seller within 24 hours
     } finally { await this.db.query(`SELECT pg_advisory_unlock(727002)`); }
   }
 }

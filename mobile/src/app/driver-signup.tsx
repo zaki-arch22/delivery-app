@@ -6,6 +6,7 @@ import { errorMessage } from '../lib/errors';
 import { photoBlob, pickPhoto } from '../lib/photos';
 import { color, font, minTouch, radius, space } from '../lib/theme';
 import { RulesAccept } from '../ui/RulesAccept';
+import { PayoutFields, usePayoutForm } from '../ui/PayoutFields';
 import { Button, Card, Field, Gap, Notice, Screen, T } from '../ui/kit';
 import type { Key } from '../i18n';
 
@@ -40,6 +41,7 @@ export default function DriverSignup() {
   const [extra, setExtra] = useState<Slot[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const payout = usePayoutForm();   // couriers send sellers' money by BaridiMob, and need their own account (RIP)
   const set = (k: Kind, s: Slot) => setSlots(prev => ({ ...prev, [k]: s }));
   const msg = (e: unknown) => { const m = errorMessage(e); return t(m.key, m.vars); };
 
@@ -63,9 +65,11 @@ export default function DriverSignup() {
     if (plate.replace(/[^0-9A-Za-z]/g, '').length < 5) { setError(t('plate_invalid')); return; }
     if (!KINDS.every(k => slots[k].id) || extra.some(x => x.busy)) { setError(t('photos_missing')); return; }
     if (!/^\d{9,18}$/.test(nid)) { setError(t('nid_invalid')); return; }
+    if (!payout.validate(t)) { setError(t('payout_needed_driver')); return; }
     if (!rules) { setError(t('rules_needed')); return; }
     setBusy(true); setError(null);
     try {
+      await payout.save();
       const docs: Record<string, any> = { vehicle, first_name: f, last_name: l, birth_date: dob, vehicle_color: colour.trim(), plate_number: plate.trim() };
       for (const k of KINDS) docs[k] = slots[k].id;
       const more = extra.map(x => x.id).filter(Boolean);
@@ -123,6 +127,11 @@ export default function DriverSignup() {
         <Field testID="colour-input" label={t('vehicle_colour')} value={colour} onChangeText={v => { setColour(v); setError(null); }} maxLength={30} />
         <Field testID="plate-input" label={t('plate_number')} hint={t('plate_hint')} value={plate} autoCapitalize="characters" maxLength={20}
           onChangeText={v => { setPlate(v.toUpperCase().replace(/[^0-9A-Z -]/g, '')); setError(null); }} />
+      </Card>
+
+      <Card testID="signup-payout">
+        <T kind="label">{t('payout_title')}</T>
+        {payout.saved === undefined ? null : <PayoutFields form={payout} intro={t('payout_needed_driver')} />}
       </Card>
 
       <T kind="label" style={{ marginTop: space(3) }}>{t('signup_documents')}</T>

@@ -3,7 +3,7 @@ import { api, errText } from '../api';
 import { fmtDate, fmtNum, t, useLang, Key } from '../i18n';
 import { Empty, ErrorBox, Field, Loading, useLoad } from '../ui';
 
-const FIELDS = ['base_da', 'per_km_da', 'medium_extra_da', 'large_extra_da', 'car_extra_da', 'min_percent', 'max_percent', 'max_km'] as const;
+const FIELDS = ['base_da', 'per_km_da', 'medium_extra_da', 'large_extra_da', 'car_extra_da', 'min_percent', 'max_percent', 'max_km', 'commission_percent'] as const;
 type F = Record<(typeof FIELDS)[number], string>;
 const up10 = (n: number) => Math.ceil(n / 10) * 10, down10 = (n: number) => Math.floor(n / 10) * 10;
 // Same formula as the server, shown only as an illustration.
@@ -15,7 +15,7 @@ export function example(f: Record<string, number>, km: number) {
 export function Prices() {
   useLang();
   const { data, error, loading, reload } = useLoad(() => api<{ active: any; history: any[] }>('/get_pricing'), []);
-  const empty: F = { base_da: '', per_km_da: '', medium_extra_da: '0', large_extra_da: '0', car_extra_da: '0', min_percent: '80', max_percent: '150', max_km: '50' };
+  const empty: F = { base_da: '', per_km_da: '', medium_extra_da: '0', large_extra_da: '0', car_extra_da: '0', min_percent: '80', max_percent: '150', max_km: '50', commission_percent: '10' };
   const [f, setF] = useState<F>(empty), [km, setKm] = useState('3'), [err, setErr] = useState<string | null>(null), [msg, setMsg] = useState<string | null>(null);
   useEffect(() => { if (data?.active) setF(Object.fromEntries(FIELDS.map(k => [k, String(data.active[k])])) as F); }, [data]);
   const nums = Object.fromEntries(FIELDS.map(k => [k, Number(f[k])])) as Record<string, number>;

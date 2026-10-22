@@ -31,7 +31,20 @@ export const cfg = {
   geocoderUrl: () => process.env.GEOCODER_URL ?? '',  // place search (Photon-compatible API); empty = search off
   geocoderTimeoutMs: () => n('GEOCODER_TIMEOUT_MS', 2500),
   selfieDays: () => n('SELFIE_DAYS', 7),          // a driver takes a new selfie before going online at least this often (0 = off)
+  // Money (owner's decisions, Oct 2026). The platform never holds customers' money.
+  codSettleHours: () => n('COD_SETTLE_HOURS', 24),  // the courier sends the goods money to the seller within this time
+  maxCodDa: () => n('MAX_COD_DA', 30000),           // the most goods money one order may carry
+  // A courier's cash limit grows with experience: START, plus STEP for every 10 delivered orders, never above CAP, and never
+  // above the ceiling staff set at approval (0 = no cash-on-delivery orders at all).
+  codLimitStart: () => n('COD_LIMIT_START', 5000),
+  codLimitStep: () => n('COD_LIMIT_STEP', 1000),
+  codLimitCap: () => n('COD_LIMIT_CAP', 30000),
+  walletCreditDa: () => n('WALLET_CREDIT_DA', 1000),  // a courier may owe the platform up to this much commission before new requests stop
+  // The platform's own Algérie Poste account for courier top-ups. Until it is set, commission is not charged at all.
+  platformRip: () => (process.env.PLATFORM_RIP ?? '').replace(/\s/g, ''),
+  platformHolder: () => process.env.PLATFORM_HOLDER ?? '',
 };
+export const walletOn = () => /^00799999[0-9]{12}$/.test(cfg.platformRip());
 export const cfgN = {
   pushTickMs: () => n('PUSH_TICK_MS', 1000),
   retryBaseS: () => n('RETRY_BASE_S', 2),   // retry delay doubles each attempt

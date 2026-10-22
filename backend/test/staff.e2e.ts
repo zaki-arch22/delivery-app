@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { driverDocs, upload, PHOTO } from './docs';
+import { driverDocs, upload, PHOTO, setPayout } from './docs';
 import { proof } from './proof';
 import { hashPassword } from '../src/auth/password';
 import { seal } from '../src/security/crypto';
@@ -21,7 +21,7 @@ class Sock {
   kind(k: string, ms = 4000, pred: (m: any) => boolean = () => true) { return until(() => this.msgs.find(m => m.kind === k && pred(m)), ms); }
 }
 async function login(phone: string, path: 'user' | 'driver') { await api('/send_code', { phone }); const c = (await api('/dev/last_code?phone=' + encodeURIComponent(phone))).b.code; return (await api('/verify_code', { phone, code: c, path })).b; }
-async function makeUser(phone: string, name: string) { const l = await login(phone, 'user'); const r = await api('/add_profile', { accept_rules: true, type: 'user', display_name: name }, l.token); return { token: r.b.token as string, id: r.b.active_profile.id as string }; }
+async function makeUser(phone: string, name: string) { const l = await login(phone, 'user'); const r = await api('/add_profile', { accept_rules: true, type: 'user', display_name: name }, l.token); await setPayout(HTTP, r.b.token); return { token: r.b.token as string, id: r.b.active_profile.id as string }; }
 async function makeDriver(phone: string, name: string) { const l = await login(phone, 'driver'); const r = await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: name, documents: await driverDocs(HTTP, l.token) }, l.token); return { token: r.b.token as string, id: r.b.active_profile.id as string }; }
 const P = { lat: 36.7538, lng: 3.0588 }, D = { lat: 36.765, lng: 3.07 }, adr = { street: 'Rue Didouche Mourad' };
 async function order(tok: string, key: string, extra: any = {}) {

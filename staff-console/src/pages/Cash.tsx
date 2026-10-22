@@ -56,7 +56,7 @@ function DriverCash({ id, onChange }: { id: string; onChange: () => void }) {
         {!data.entries.length ? <Empty /> : <div className="table-wrap"><table>
           <thead><tr><th>{t('col.created')}</th><th>{t('col.type')}</th><th>{t('col.amount')}</th><th>{t('col.ref')}</th><th>{t('common.note')}</th><th>{t('col.by')}</th><th /></tr></thead>
           <tbody>{data.entries.map((e: any) => (
-            <tr key={e.id}><td className="num">{fmtDate(e.created_at)}</td><td>{tx(e.type === 'handover' ? 'cash.handover_t' : 'cash.' + e.type)} <span className="muted">#{e.id}</span></td>
+            <tr key={e.id}><td className="num">{fmtDate(e.created_at)}</td><td>{tx(e.type === 'handover' ? 'cash.handover_t' : 'cash.' + e.type, e.type)} <span className="muted">#{e.id}</span></td>
               <td className="num"><strong>{e.amount_da > 0 ? '+' : ''}{fmtNum(e.amount_da)}</strong></td><td>{e.ref ?? ''}</td><td className="wrap-text">{e.note}</td><td>{e.staff ?? ''}</td>
               <td>{reversed.has(e.id) ? <span className="muted">{t('cash.reversed')}</span> : !e.reverses_id && <button type="button" onClick={() => setRev(e)}>{t('cash.reverse')}</button>}</td></tr>))}</tbody>
         </table></div>}

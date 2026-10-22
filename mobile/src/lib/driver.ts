@@ -20,7 +20,7 @@ export type ReleaseReason = 'vehicle_problem' | 'emergency' | 'sender_unreachabl
 export const RELEASE_REASONS: ReleaseReason[] = ['vehicle_problem', 'emergency', 'sender_unreachable', 'parcel_not_ready', 'parcel_too_big', 'unsafe_or_prohibited', 'other'];
 type Pt = { lat: number; lng: number };
 export interface JobRow { id: string; ref: string; leg: 'delivery' | 'return'; status: Job['status']; locked_da: number | null; cod_amount_da: number; delivered_at: string | null; created_at: string }
-export interface CashEntry { id: number; type: 'cod_collected' | 'handover' | 'adjustment'; amount_da: number; order_id: string | null; note: string | null; created_at: string }
+export interface CashEntry { id: number; type: 'cod_collected' | 'paid_to_seller' | 'handover' | 'adjustment'; amount_da: number; order_id: string | null; note: string | null; created_at: string }
 
 export const driver = (c: Client) => ({
   home: () => c.call<DriverHome>('/get_driver_home'),

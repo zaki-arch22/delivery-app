@@ -55,4 +55,5 @@ the first prices in the staff console (until a zone is open, orders are refused:
   the owner's address removed from its environment. Restarts are safe (tested on a database whose owner is not a superuser, like Neon).
 - Neon's pooled address (`-pooler`) is replaced by the direct one automatically: live notifications need LISTEN.
 - Photos are in the database (no disk on Render's free plan). Push stays off until `FIREBASE_SERVICE_ACCOUNT_JSON` is set.
+- Commission (10%) and courier wallet top-ups stay off until `PLATFORM_RIP` (the platform's 20-digit Algérie Poste RIP, starting 00799999) and `PLATFORM_HOLDER` (the account holder's name) are set in Environment. Seller payments (cash on delivery) work without them.
 - `TRUST_PROXY=1`: check on the live server that rate limits see the real client address (security log `ip` values).

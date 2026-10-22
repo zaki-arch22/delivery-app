@@ -49,11 +49,11 @@ export class StaffService {
   pendingDrivers() {
     // Everything a person needs to decide: identity and vehicle as typed, and every photo (ID card, licence, ownership,
     // all vehicle photos, the latest selfie). Nothing is approved automatically.
-    return this.db.query(`SELECT p.id, p.display_name, a.phone, d.vehicle, d.first_name, d.last_name, to_char(d.birth_date, 'YYYY-MM-DD') birth_date, d.vehicle_color, d.plate_number, d.national_id_last3,
+    return this.db.query(`SELECT p.id, p.display_name, a.phone, d.vehicle, d.first_name, d.last_name, to_char(d.birth_date, 'YYYY-MM-DD') birth_date, d.vehicle_color, d.plate_number, d.national_id_last3, pa.rip payout_rip, pa.holder_name payout_holder,
       json_build_object('id_photo', d.id_photo_doc, 'licence_photo', d.licence_photo_doc, 'ownership_photo', d.ownership_photo_doc, 'vehicle_photo', d.vehicle_photo_doc,
         'vehicle_photos', (SELECT COALESCE(json_agg(v.id ORDER BY v.created_at), '[]') FROM documents v WHERE v.profile_id=p.id AND v.kind='vehicle_photo'),
         'selfie', (SELECT s.id FROM documents s WHERE s.profile_id=p.id AND s.kind='selfie_photo' ORDER BY s.created_at DESC LIMIT 1)) AS documents, p.created_at
-      FROM profiles p JOIN accounts a ON a.id=p.account_id JOIN driver_details d ON d.profile_id=p.id WHERE p.type='driver' AND p.status='pending_approval' ORDER BY p.created_at`).then(drivers => ({ drivers }));
+      FROM profiles p JOIN accounts a ON a.id=p.account_id JOIN driver_details d ON d.profile_id=p.id LEFT JOIN payout_accounts pa ON pa.account_id=a.id WHERE p.type='driver' AND p.status='pending_approval' ORDER BY p.created_at`).then(drivers => ({ drivers }));
   }
 
   async approveDriver(staff: string, b: any) {
@@ -323,11 +323,13 @@ export class StaffService {
     if (!isInt(b?.max_percent) || b.max_percent < 100) throw bad('BAD_PERCENT', 'max_percent must be 100 or more');
     const maxKm = b?.max_km ?? 50;
     if (!isInt(maxKm) || maxKm < 1 || maxKm > 1000) throw bad('BAD_MAX_KM', 'max_km must be 1 to 1000');
+    const commission = b?.commission_percent ?? 10;
+    if (!isInt(commission) || commission < 0 || commission > 50) throw bad('BAD_COMMISSION', 'commission_percent must be 0 to 50');
     return this.db.tx(async q => {
       await q(`UPDATE pricing_rules SET active=false WHERE active`);   // only one price table is active; old orders keep their own version
-      const [r] = await q(`INSERT INTO pricing_rules(base_da, per_km_da, medium_extra_da, large_extra_da, car_extra_da, min_percent, max_percent, max_km, active, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9) RETURNING version`,
-        [v.base_da, v.per_km_da, v.medium_extra_da, v.large_extra_da, v.car_extra_da, b.min_percent, b.max_percent, maxKm, staff]);
-      await audit(q, staff, 'create_pricing', 'pricing', String(r.version), { ...v, min_percent: b.min_percent, max_percent: b.max_percent, max_km: maxKm }); return { version: r.version };
+      const [r] = await q(`INSERT INTO pricing_rules(base_da, per_km_da, medium_extra_da, large_extra_da, car_extra_da, min_percent, max_percent, max_km, commission_percent, active, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,$10) RETURNING version`,
+        [v.base_da, v.per_km_da, v.medium_extra_da, v.large_extra_da, v.car_extra_da, b.min_percent, b.max_percent, maxKm, commission, staff]);
+      await audit(q, staff, 'create_pricing', 'pricing', String(r.version), { ...v, min_percent: b.min_percent, max_percent: b.max_percent, max_km: maxKm, commission_percent: commission }); return { version: r.version };
     });
   }
 }

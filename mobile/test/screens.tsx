@@ -37,6 +37,10 @@ import Safety from '../src/app/safety';
 import Help from '../src/app/help';
 import AddCustomer from '../src/app/add-customer';
 import PublicProfileScreen from '../src/app/public-profile';
+import PayoutScreen from '../src/app/payout';
+import Sales from '../src/app/sales';
+import SettlementsScreen from '../src/app/settlements';
+import WalletScreen from '../src/app/wallet';
 
 import { AppFrame } from '../src/ui/Frame';
 export const API = process.env.API_URL!;
@@ -65,7 +69,7 @@ export function routes(services: Services) {
       <AppProvider services={services}><PushBridge /><AppFrame><Stack screenOptions={{ headerShown: false }} /></AppFrame></AppProvider>
     </SafeAreaProvider>
   );
-  return { _layout: Layout, index: Start, welcome: Welcome, login: Login, 'contact-phone': ContactPhone, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup, 'new-order': NewOrder, 'order-details': OrderDetails, 'order/[id]': OrderScreen, orders: Orders, 'rate/[id]': Rate, 'problem/[id]': Problem, job: JobScreen, jobs: Jobs, cash: Cash, rules: Rules, record: RecordScreen, profile: Profile, notifications: Notifications, safety: Safety, help: Help, 'add-customer': AddCustomer, 'public-profile': PublicProfileScreen };
+  return { _layout: Layout, index: Start, welcome: Welcome, login: Login, 'contact-phone': ContactPhone, phone: Phone, code: Code, 'new-profile': NewProfile, home: Home, settings: Settings, 'driver-signup': DriverSignup, 'new-order': NewOrder, 'order-details': OrderDetails, 'order/[id]': OrderScreen, orders: Orders, 'rate/[id]': Rate, 'problem/[id]': Problem, job: JobScreen, jobs: Jobs, cash: Cash, rules: Rules, record: RecordScreen, profile: Profile, notifications: Notifications, safety: Safety, help: Help, 'add-customer': AddCustomer, 'public-profile': PublicProfileScreen, payout: PayoutScreen, sales: Sales, settlements: SettlementsScreen, wallet: WalletScreen };
 }
 export async function open(services: Services) {
   const r = await renderRouter(routes(services), { initialUrl: '/' });
@@ -74,7 +78,13 @@ export async function open(services: Services) {
   return r;
 }
 export const PHOTO = require('fs').readFileSync(require('path').join(__dirname, '../../backend/test/fixtures/photo.jpg'));
+export const RIP = '00799999001234567890';
+export async function setPayout(token: string) {
+  await nodeFetch(API + '/set_payout_account', { method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' }, body: JSON.stringify({ rip: RIP, holder_name: 'Test Holder' }) });
+}
+// Courier sign-up through the server (couriers need a BaridiMob account first).
 export async function uploadDocs(token: string) {
+  await setPayout(token);
   const out: Record<string, string> = { vehicle: 'motorbike', first_name: 'Karim', last_name: 'Test', birth_date: '1995-04-12', vehicle_color: 'Blue', plate_number: '12345 113 16' };
   for (const k of ['id_photo', 'licence_photo', 'ownership_photo', 'vehicle_photo']) out[k] = ((await (await nodeFetch(API + '/upload_document?kind=' + k, { method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'image/jpeg' }, body: PHOTO })).json()) as any).document_id;
   return out;

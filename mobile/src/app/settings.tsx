@@ -56,6 +56,7 @@ export default function Settings() {
         : <Button testID="add-user" kind="secondary" label={t('add_user_profile')} onPress={() => setAdding(true)} />}
       {msg ? <Notice text={msg.text} warn={msg.warn} /> : null}
       <Gap n={6} />
+      <Button testID="open-payout" kind="secondary" icon="credit-card" label={t('payout_title')} onPress={() => router.push('/payout')} />
       {active ? <Button testID="open-record" kind="secondary" label={t('record_title')} onPress={() => router.push('/record')} /> : null}
       <Button testID="open-rules" kind="plain" label={t('rules_title')} onPress={() => router.push('/rules')} />
       <Button testID="open-privacy" kind="plain" label={t('privacy_policy')} onPress={() => Linking.openURL(apiUrl() + '/privacy')} />

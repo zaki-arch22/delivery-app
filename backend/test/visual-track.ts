@@ -1,6 +1,6 @@
 // Manual visual check (not part of test-all): makes one order on the TEST server and prints its tracking link.
 import { Pool } from 'pg';
-import { driverDocs, upload } from './docs';
+import { driverDocs, upload, setPayout } from './docs';
 const B = 'http://localhost:3399';
 const api = async (p: string, body?: any, tok?: string, h: any = {}) => { const r = await fetch(B + p, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json', ...(tok ? { authorization: 'Bearer ' + tok } : {}), ...h }, body: body ? JSON.stringify(body) : undefined }); return r.json() as any; };
 const login = async (phone: string, path: string) => { await api('/send_code', { phone }); const c = (await api('/dev/last_code?phone=' + encodeURIComponent(phone))).code; return api('/verify_code', { phone, code: c, path }); };
@@ -10,7 +10,7 @@ const login = async (phone: string, path: string) => { await api('/send_code', {
   await pool.query(`TRUNCATE otp_codes, sessions, quotes, offers, order_events, ratings, cash_ledger, problem_reports, notifications, device_tokens, orders, driver_details, document_files, documents, profiles, accounts, zones, pricing_rules, security_events RESTART IDENTITY CASCADE`);
   await pool.query(`INSERT INTO zones(name, area, is_open) VALUES ('test', ST_Multi(ST_GeomFromText('POLYGON((2.9 36.6, 3.3 36.6, 3.3 36.9, 2.9 36.9, 2.9 36.6))', 4326))::geography, true)`);
   await pool.query(`INSERT INTO pricing_rules(base_da, per_km_da, min_percent, max_percent, active) VALUES (200, 50, 80, 200, true)`);
-  const u = await login('+213550123001', 'user'); const ut = (await api('/add_profile', { accept_rules: true, type: 'user', display_name: 'Amina Boutique' }, u.token)).token;
+  const u = await login('+213550123001', 'user'); const ut = (await api('/add_profile', { accept_rules: true, type: 'user', display_name: 'Amina Boutique' }, u.token)).token; await setPayout(B, ut);
   const d = await login('+213550123002', 'driver'); const dr = await api('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Yacine Driver', documents: await driverDocs(B, d.token) }, d.token);
   await pool.query(`UPDATE profiles SET status='active' WHERE id=$1`, [dr.active_profile.id]); await pool.query(`UPDATE driver_details SET cash_limit_da=50000 WHERE profile_id=$1`, [dr.active_profile.id]);
   await api('/set_online', { online: true }, dr.token); await api('/update_location', { lat: 36.7600, lng: 3.0500 }, dr.token);

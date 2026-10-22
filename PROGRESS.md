@@ -64,52 +64,32 @@ Branch: `claude/wizardly-mayer-zl48ge` (continues `claude/optimistic-cannon-iw9r
 
 - No automatic end of a request (2026-10-21, owner): SEARCH_WINDOW_S defaults to 0 = never expires (searches until a courier takes it or the customer cancels); offers stay a day in couriers' lists (OFFER_OPEN_S); search countdown and progress bar removed from the app; zoom-out/pulse span fixed at 10 minutes.
 
+- Money system + professional staff console (2026-10-22, owner's decisions): SERVER migrations 022-023: payout accounts (BaridiMob RIP, mandatory for courier sign-up and COD orders, copied onto each order), cod_settlements (courier -> seller within 24 h: BaridiMob reference + receipt photo or by hand; seller confirms or disputes; watchdog marks late payments: rule cod_late 3 points + case; late/disputed = no new requests; staff decide paid/unpaid), cash ledger `paid_to_seller`, courier prepaid wallet (append-only wallet_ledger, 10% commission per price version at delivery, top-ups with receipt approved by staff, 1 000 DA credit; all off until PLATFORM_RIP is set), cash limit 5 000 DA +1 000 per 10 deliveries up to 30 000 under the staff ceiling, max COD 30 000 DA; staff dashboard, live feed, audit log, customers. 102 money tests (M1-M11 incl. attacks on the database role). APP: My BaridiMob account (Settings), RIP in courier sign-up and COD orders, Money from my sales (seller confirm/dispute, receipt photo), Sellers' money (courier sends with reference + receipt), Wallet (balance, platform account, top-up). CONSOLE: grouped menu with counters, live alerts bell + pop-ups for SOS/disputes/late payments, Dashboard (KPIs + 14-day chart + live feed), Seller payments, Wallets & top-ups, Customers, Audit log, payout in driver approval, commission in prices.
+
 ## In progress
 - (none)
 
-## Next, in order (matches CLAUDE.md section 9)
-1. Owner creates Neon + Firebase + Render (backend/deploy/render.md) and sends: the Render address + the content of google-services.json.
-2. Then the new APK (server + Google login), first zone and prices in the staff console, phone push.
-3. Before launch list (CLAUDE.md section 9).
-
 ## Exact next action
-1. Wait for the owner's feedback on the "fixes after review" update (sent over the air to the preview APK). Fix what he reports first.
-2. If place search does not work on the phone: check Render's GEOCODER_URL (render.yaml sets https://photon.komoot.io; a Blueprint that does not sync needs it added by hand in Environment).
-3. Owner actions still open: SHA-1 fingerprint in Firebase (Google login), delete FIRST_ADMIN_RESET/PASSWORD on Render.
-4. Then: phone push (Firebase service key into Render FIREBASE_SERVICE_ACCOUNT_JSON), TRUST_PROXY check, before-launch list (CLAUDE.md section 9: own Photon + OSRM server for Algiers).
+1. Wait for the owner's test of the money system (app: Settings → My BaridiMob account, courier sign-up, cash-on-delivery order, Menu → Money from my sales / Sellers' money / Wallet) and of the new staff console (Dashboard, Seller payments, Wallets & top-ups, Customers, Audit log, live alerts bell). Fix what he reports first.
+2. When the owner gives the platform CCP account: set PLATFORM_RIP and PLATFORM_HOLDER on Render (commission starts; top-ups open).
+3. Check the searching zoom-out on the owner's phone (asked for a screen recording if it still does not move).
+4. When the Firebase key is on Render: check the Render log has no "No push provider configured" line; send a test order and confirm a push arrives with the app closed.
+5. Then the before-launch list (CLAUDE.md section 9): own Photon + OSRM for Algiers on a real server, traffic-flood filter, native-speaker text review, app name and logo, Play listing (privacy URL = <server>/privacy, deletion URL = <server>/delete-account).
 
 ## Dev notes
 - Screen tests: `test/screens.tsx` (helpers, all routes), `test/http.ts` (test HTTP client; jest-expo replaces fetch). `renderRouter` turns on fake clocks: `open()` switches back to real ones. Test DB access goes through `psql` (pg stalls in that environment). Use `await fireEvent...` (testing library v14 is async); `toHaveTextContent('x')` is an EXACT match, use a regex; NEVER put `findBy...` inside `act(...)` (act holds updates back: deadlock); prices use non-breaking spaces (match with \s).
-- Visual check (screenshots): a TEMPORARY mobile/metro.config.js that, when VISUAL_WEB=1, resolves `@maplibre/maplibre-react-native` to test/mocks/maplibre.tsx and `expo-secure-store` to test/mocks/securestore-web.js (getDefaultConfig + resolver.resolveRequest); run `VISUAL_WEB=1 EXPO_OFFLINE=1 CI=1 EXPO_PUBLIC_API_URL=http://localhost:3399 npx expo start --web --port 8083` (the static `expo export --dev` reloads in a loop; CI=1 means no file watching: restart after edits), a small proxy on :3399 adding CORS in front of the test server, then the global playwright (`$(npm root -g)/playwright`, executablePath /opt/pw-browsers/chromium). Delete metro.config.js afterwards. Never `pkill -f` a pattern that is in your own command line (it kills the shell): kill by pid.
+- Couriers need a BaridiMob account before add_profile (tests: `setPayout` helpers in backend/test/docs.ts and mobile/test/screens.tsx); cash-on-delivery orders need the seller's account.
+- The money test server runs with PLATFORM_RIP set and WATCH_MS=500 (scripts/test-all.sh step 2b); other servers have no platform account (wallet off).
+- Visual check (screenshots): a TEMPORARY mobile/metro.config.js that, when VISUAL_WEB=1, resolves `@maplibre/maplibre-react-native` to test/mocks/maplibre.tsx and `expo-secure-store` to test/mocks/securestore-web.js (getDefaultConfig + resolver.resolveRequest); run `VISUAL_WEB=1 EXPO_OFFLINE=1 CI=1 EXPO_PUBLIC_API_URL=http://localhost:3399 npx expo start --web --port 8083`, a small proxy on :3399 adding CORS in front of the test server, then the global playwright (`$(npm root -g)/playwright`, executablePath /opt/pw-browsers/chromium). Delete metro.config.js afterwards. Never `pkill -f` a pattern that is in your own command line (it kills the shell): kill by pid. Never edit scripts/test-all.sh while it runs (bash reads it as it goes).
 - Before an over-the-air update: `npx expo export --platform android` in mobile/ must build (checks fonts/icons resolve as on the phone).
 
-## Owner answers (asked at the "push and build prep" milestone)
-- Phone build: YES, the owner is creating the Expo account, EXPO_TOKEN and network allowance (expo.dev, api.expo.dev, exp.host, storage.googleapis.com). Settings reach NEW sessions.
-- Firebase push: AFTER the first build (then guide the owner step by step).
-- App name: not yet; keep the working name.
-- Real map data: YES, allowing download.geofabrik.de and tiles.openfreemap.org.
+## Owner answers
+- Phone build: YES (Expo account, EXPO_TOKEN, network allowance). Firebase push: after the first build. App name: not yet. Real map data: YES.
+- Money (2026-10-22): plan 1 (fee in cash to the courier; goods money courier -> seller within 24 h, both confirm; commission from a prepaid courier wallet); commission 10%; BaridiMob mandatory for senders using COD and couriers; platform does not compensate; cash limit 5 000 DA growing with deliveries; max 30 000 DA COD per order; platform CCP account given later.
 
 ## Pending questions / owner actions
-- Owner: Firebase server key into Render (FIREBASE_SERVICE_ACCOUNT_JSON) = phone push notifications when the app is closed (steps sent 2026-10-21).
-- Owner: a contact email for the privacy page and Google Play listing (the page says "Menu → Help" until then).
-- Owner (money, later): Google Play developer account ($25 once) to publish; a lawyer's review of /privacy before launch (section 8).
-- Owner: delete FIRST_ADMIN_RESET and FIRST_ADMIN_PASSWORD in Render Environment (if not done).
-## Exact next action
-1. Wait for the owner's phone test of: "Pick up here" button, address bubble over the pin, panels, too-far message, delete account. Fix what he reports first.
-2. When the Firebase key is on Render: check the Render log has no "No push provider configured" line; send a test order and confirm a push arrives with the app closed.
-3. Then the before-launch list (CLAUDE.md section 9): own Photon + OSRM for Algiers on a real server, traffic-flood filter, native-speaker text review, app name and logo, Play listing (privacy URL = <server>/privacy, deletion URL = <server>/delete-account).
-
-## Dev notes
-- Screen tests: `test/screens.tsx` (helpers, all routes), `test/http.ts` (test HTTP client; jest-expo replaces fetch). `renderRouter` turns on fake clocks: `open()` switches back to real ones. Test DB access goes through `psql` (pg stalls in that environment). Use `await fireEvent...` (testing library v14 is async); `toHaveTextContent('x')` is an EXACT match, use a regex; NEVER put `findBy...` inside `act(...)` (act holds updates back: deadlock); prices use non-breaking spaces (match with \s).
-- Visual check (screenshots): a TEMPORARY mobile/metro.config.js that, when VISUAL_WEB=1, resolves `@maplibre/maplibre-react-native` to test/mocks/maplibre.tsx and `expo-secure-store` to test/mocks/securestore-web.js (getDefaultConfig + resolver.resolveRequest); run `VISUAL_WEB=1 EXPO_OFFLINE=1 CI=1 EXPO_PUBLIC_API_URL=http://localhost:3399 npx expo start --web --port 8083` (the static `expo export --dev` reloads in a loop; CI=1 means no file watching: restart after edits), a small proxy on :3399 adding CORS in front of the test server, then the global playwright (`$(npm root -g)/playwright`, executablePath /opt/pw-browsers/chromium). Delete metro.config.js afterwards. Never `pkill -f` a pattern that is in your own command line (it kills the shell): kill by pid.
-- Before an over-the-air update: `npx expo export --platform android` in mobile/ must build (checks fonts/icons resolve as on the phone).
-
-## Owner answers (asked at the "push and build prep" milestone)
-- Phone build: YES, the owner is creating the Expo account, EXPO_TOKEN and network allowance (expo.dev, api.expo.dev, exp.host, storage.googleapis.com). Settings reach NEW sessions.
-- Firebase push: AFTER the first build (then guide the owner step by step).
-- App name: not yet; keep the working name.
-- Real map data: YES, allowing download.geofabrik.de and tiles.openfreemap.org.
-
-## Pending questions / owner actions
-- Owner: add the SHA-1 fingerprint in Firebase (Google login on the phone fails without it).
-- Owner: delete FIRST_ADMIN_RESET and FIRST_ADMIN_PASSWORD in Render Environment (if not done).
+- Owner: the platform's CCP/BaridiMob account (RIP + holder name) -> PLATFORM_RIP / PLATFORM_HOLDER on Render.
+- Owner: Firebase server key into Render (FIREBASE_SERVICE_ACCOUNT_JSON) = push notifications when the app is closed.
+- Owner: a contact email for the privacy page and Google Play listing.
+- Owner (money, later): Google Play developer account ($25 once); a lawyer's review of /privacy and of the money rules before launch (section 8).
+- Owner: add the SHA-1 fingerprint in Firebase if Google login fails; delete FIRST_ADMIN_RESET / FIRST_ADMIN_PASSWORD in Render Environment (if not done).

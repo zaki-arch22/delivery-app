@@ -7,9 +7,9 @@ import { bad, fail, UUID } from '../common/errors';
 
 export const KINDS = ['id_photo', 'licence_photo', 'ownership_photo', 'vehicle_photo'] as const;   // driver sign-up (all required; up to 3 more vehicle photos)
 export type Kind = typeof KINDS[number];
-export const ORDER_KINDS = ['parcel_photo', 'evidence_photo'] as const;         // tied to an order: parcel at pickup, evidence of a refusal or problem
+export const ORDER_KINDS = ['parcel_photo', 'evidence_photo', 'transfer_receipt'] as const;       // tied to an order: parcel at pickup, evidence of a refusal or problem
 export type OrderKind = typeof ORDER_KINDS[number];
-const ALL_KINDS: readonly string[] = [...KINDS, ...ORDER_KINDS, 'selfie_photo'];
+const ALL_KINDS: readonly string[] = [...KINDS, ...ORDER_KINDS, 'selfie_photo'];   // transfer_receipt = a BaridiMob receipt (seller payment or wallet top-up)
 export const MAX_UPLOAD_BYTES = 6 * 1024 * 1024;   // a phone photo; the server shrinks it anyway
 const MAX_UNUSED = 10;          // uploaded but not yet used by a driver profile, per account (stops storage filling)
 const MAX_SIDE = 2000;          // stored size: enough to read an ID card, small to store
@@ -32,7 +32,7 @@ export class Documents {
   constructor(private db: Db, private sec: SecurityLog) {}
 
   async upload(accountId: string, ip: string, kind: any, body: any) {
-    if (!ALL_KINDS.includes(kind)) throw bad('BAD_KIND', 'kind must be id_photo, licence_photo, ownership_photo, vehicle_photo, parcel_photo, evidence_photo or selfie_photo');
+    if (!ALL_KINDS.includes(kind)) throw bad('BAD_KIND', 'kind must be id_photo, licence_photo, ownership_photo, vehicle_photo, parcel_photo, evidence_photo, selfie_photo or transfer_receipt');
     if (!Buffer.isBuffer(body) || body.length === 0) throw fail(415, 'IMAGE_ONLY', 'Send a JPEG, PNG or WebP photo');
     if (!sniff(body)) { this.sec.event('upload_not_image', ip, { kind }, { account: accountId }); throw fail(415, 'IMAGE_ONLY', 'Send a JPEG, PNG or WebP photo'); }
     const unused = await this.db.one(`SELECT count(*)::int n FROM documents WHERE account_id=$1 AND profile_id IS NULL AND order_id IS NULL`, [accountId]);

@@ -4,7 +4,7 @@
 // Only the phone's GPS, the map drawing and the phone dialer are replaced.
 import { Linking } from 'react-native';
 import { screen, fireEvent, act, waitFor } from 'expo-router/testing-library';
-import { API, db, open, svc, loginThroughScreens, uploadDocs, devCode, pressBack, menu, openRequest } from './screens';
+import { API, db, open, svc, loginThroughScreens, uploadDocs, devCode, pressBack, menu, openRequest, setPayout } from './screens';
 import { nodeFetch } from './http';
 import { money } from '../src/lib/orders';
 
@@ -64,6 +64,7 @@ beforeAll(async () => {
   await db.query(`INSERT INTO pricing_rules(base_da, per_km_da, medium_extra_da, large_extra_da, car_extra_da, min_percent, max_percent, active) VALUES (100, 30, 50, 150, 100, 80, 150, true)`); // TEST numbers only
   const u = await login('+213556000001', 'user');
   sender = (await call('/add_profile', { accept_rules: true, type: 'user', display_name: 'Leila Sender' }, u.token)).token;
+  await setPayout(sender);   // she sells with cash on delivery: couriers send her money to this account
   const d = await login('+213556000002', 'driver');
   const p = await call('/add_profile', { accept_rules: true, national_id: String(1e11 + Math.floor(Math.random() * 9e11)), type: 'driver', display_name: 'Karim Rider', documents: await uploadDocs(d.token) }, d.token);
   await db.query(`UPDATE profiles SET status='active' WHERE id=$1`, [p.active_profile.id]);
@@ -147,6 +148,29 @@ test('online, offer with cash, accept, pickup, wrong code, cash check, delivered
   await menu('menu-cash');
   expect(await screen.findByTestId('cash-balance')).toHaveTextContent(/You hold 1\s500 DA/);
   expect(screen.getByText('Collected')).toBeTruthy();
+  await pressBack();
+  // The goods money goes to the seller within 24 hours: BaridiMob transfer to her account, reference + receipt photo.
+  await menu('menu-settlements');
+  expect(await screen.findByTestId('settle-to-send')).toHaveTextContent(/1\s500 DA to send/);
+  expect(screen.getByTestId('settle-rip-' + ref)).toHaveTextContent('007 99999 0012345678 90');
+  expect(screen.getByTestId('settle-status-' + ref)).toHaveTextContent(/Send before/);
+  await fireEvent.press(screen.getByTestId('send-bm-' + ref));
+  await fireEvent.press(screen.getByTestId('settle-send'));
+  expect(await screen.findByTestId('settle-msg')).toHaveTextContent(/Type the transfer reference/);
+  await fireEvent.changeText(screen.getByTestId('settle-ref'), 'BM-778899');
+  await fireEvent.press(screen.getByTestId('settle-send'));
+  expect(await screen.findByTestId('settle-msg')).toHaveTextContent(/photo of the receipt/);
+  await act(async () => { await fireEvent.press(screen.getByTestId('settle-photo')); });
+  await waitFor(() => expect(screen.getByTestId('settle-photo')).toHaveTextContent(/✓/));
+  await act(async () => { await fireEvent.press(screen.getByTestId('settle-send')); });
+  await waitFor(() => expect(screen.getByTestId('settle-status-' + ref)).toHaveTextContent(/Sent: check your account/));
+  expect((await db.query(`SELECT status, method, reference, receipt_doc IS NOT NULL AS receipt FROM cod_settlements WHERE order_id=$1`, [o.id])).rows[0]).toEqual({ status: 'sent', method: 'baridimob', reference: 'BM-778899', receipt: true });
+  expect(screen.getByTestId('settle-to-send')).toHaveTextContent(/0 DA to send/);
+  await call('/confirm_settlement', { order_id: o.id }, sender);                         // the seller confirms in her app
+  await pressBack();
+  await menu('menu-wallet');
+  expect(await screen.findByTestId('wallet-off')).toHaveTextContent(/Commission is not charged yet/);   // no platform account on this test server
+  expect(screen.getByTestId('wallet-cash')).toHaveTextContent(/Goods money you hold: 0 DA/);          // confirmed: it left his cash account
   await pressBack();
   await menu('menu-jobs');
   expect(await screen.findByTestId('job-' + o.ref)).toHaveTextContent(/Delivered/);

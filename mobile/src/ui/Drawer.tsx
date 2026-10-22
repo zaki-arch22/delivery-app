@@ -13,6 +13,7 @@ type Item = { icon: IconName; key: Key; to: string; testID: string };
 // What each mode offers (every item opens a real screen backed by a server function).
 const CUSTOMER: Item[] = [
   { icon: 'package', key: 'menu_parcels', to: '/orders', testID: 'menu-orders' },
+  { icon: 'dollar-sign', key: 'menu_sales', to: '/sales', testID: 'menu-sales' },
   { icon: 'bell', key: 'menu_notifications', to: '/notifications', testID: 'menu-notifications' },
   { icon: 'shield', key: 'menu_safety', to: '/safety', testID: 'menu-safety' },
   { icon: 'settings', key: 'settings', to: '/settings', testID: 'menu-settings' },
@@ -20,6 +21,8 @@ const CUSTOMER: Item[] = [
 ];
 const COURIER: Item[] = [
   { icon: 'clock', key: 'menu_deliveries', to: '/jobs', testID: 'menu-jobs' },
+  { icon: 'send', key: 'menu_settlements', to: '/settlements', testID: 'menu-settlements' },
+  { icon: 'credit-card', key: 'menu_wallet', to: '/wallet', testID: 'menu-wallet' },
   { icon: 'dollar-sign', key: 'menu_cash', to: '/cash', testID: 'menu-cash' },
   { icon: 'bell', key: 'menu_notifications', to: '/notifications', testID: 'menu-notifications' },
   { icon: 'shield', key: 'menu_safety', to: '/safety', testID: 'menu-safety' },
